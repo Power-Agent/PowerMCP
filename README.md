@@ -105,7 +105,7 @@ Check out these helpful tutorials to get started with MCP:
 
 - [**Getting Started with MCP**](https://modelcontextprotocol.io/introduction): Official introduction to the Model Context Protocol fundamentals.
 - [**Core Architecture**](https://modelcontextprotocol.io/docs/concepts/architecture): Detailed explanation of MCP's client-server architecture.
-- [**Building Your First MCP Server**](https://modelcontextprotocol.io/build/server): Step-by-step guide to creating a basic MCP server.
+- [**Building Your First MCP Server**](https://modelcontextprotocol.io/docs/develop/build-server): Step-by-step guide to creating a basic MCP server.
 - [**Anthropic MCP Tutorial**](https://docs.anthropic.com/claude/docs/model-context-protocol): Learn how to use MCP with Claude models.
 - [**Cursor MCP Tutorial**](https://docs.cursor.com/context/model-context-protocol): Learn how to use MCP with Cursor.
 - [**Other Protocol**](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf): Open AI Function Calling Tool
