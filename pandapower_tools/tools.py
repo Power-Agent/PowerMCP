@@ -6,6 +6,7 @@ Provides power system analysis tools using pandapower.
 from typing import Dict, List, Optional, Any
 import json
 import inspect
+import copy
 
 try:
     import pandapower as pp
@@ -96,8 +97,7 @@ def _get_network():
 def _set_network(net):
     """Set the current pandapower network instance."""
     global _current_net
-    _current_net = net
-
+    _current_net = copy.deepcopy(net)
 
 def create_empty_network() -> Dict[str, Any]:
     """Create an empty pandapower network.
@@ -599,11 +599,11 @@ def run_contingency_analysis(contingency_type: str = "line",
             base_case_converged = False
         
         # Store original state
-        orig_net = net.deepcopy()
+        orig_net = copy.deepcopy(net)
         
         # Run contingency for each element
         for idx in indices:
-            contingency_net = orig_net.deepcopy()
+            contingency_net = copy.deepcopy(orig_net)
             
             try:
                 contingency_net[contingency_type].at[idx, 'in_service'] = False
@@ -636,7 +636,7 @@ def run_contingency_analysis(contingency_type: str = "line",
                 })
         
         # Restore original network
-        pp.runpp(net)
+        pp.runpp(orig_net)
         
         return {
             "status": "success",
