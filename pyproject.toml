@@ -1,0 +1,145 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powermcp"
+version = "0.1.0"
+description = "Open-source collection of MCP servers for power system software"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Qian Zhang"},
+    {name = "Muhy Eddin Za'ter"},
+    {name = "Stephen Jenkins"},
+    {name = "Maanas Goel"},
+]
+keywords = ["mcp", "power-systems", "simulation", "ai", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "fastmcp>=2.0.1",
+    "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+# Individual power system tools
+andes = [
+    "andes>=1.9.0",
+]
+egret = [
+    "egret",
+]
+opendss = [
+    "opendssdirect.py>=0.8.0",
+]
+pandapower = [
+    "pandapower>=2.13.0",
+]
+powerworld = [
+    "pywin32>=306; sys_platform == 'win32'",
+]
+pslf = [
+    # PSLF requires proprietary installation
+]
+psse = [
+    # PSSE requires proprietary installation
+]
+pypsa = [
+    "pypsa>=0.25.0",
+    "highspy>=1.5.0",
+    "networkx>=3.0",
+    "cartopy>=0.21.0",
+]
+pyltspice = [
+    "PyLTSpice>=1.0.0",
+    "matplotlib>=3.5.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "pytest-timeout>=2.1.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+    "pylint>=2.17.0",
+    "isort>=5.12.0",
+]
+
+# Testing dependencies
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "mock>=5.0.0",
+]
+
+# Install all open-source tools
+all-opensource = [
+    "andes>=1.9.0",
+    "egret>=0.0.2",
+    "opendssdirect.py>=0.8.0",
+    "pandapower>=2.13.0",
+    "pypsa>=0.25.0",
+    "highspy>=1.5.0",
+    "networkx>=3.0",
+    "PyLTSpice>=1.0.0",
+    "matplotlib>=3.5.0",
+]
+
+# Install everything including dev tools
+all = [
+    "powermcp[all-opensource,dev,test]",
+]
+
+[project.urls]
+Homepage = "https://github.com/Power-Agent/PowerMCP"
+Documentation = "https://power-agent.github.io/"
+Repository = "https://github.com/Power-Agent/PowerMCP"
+"Bug Tracker" = "https://github.com/Power-Agent/PowerMCP/issues"
+
+[tool.setuptools]
+packages = ["common", "ANDES", "Egret", "OpenDSS", "pandapower_tools", "PowerWorld", "PSLF", "PSSE", "PSSE35", "PyLTSpice", "pypsa_tools"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.dss", "*.csv", "*.pwb", "*.pwd", "*.sav", "*.dyr", "*.dyd", "*.m", "*.nc", "*.otg", "*.cntl", "*.dycr", "*.con", "*.mon", "*.sub"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=. --cov-report=term-missing"
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true

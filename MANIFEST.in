@@ -1,0 +1,24 @@
+# Include documentation
+include README.md
+include LICENSE
+include config.json
+
+# Include all data files in subdirectories
+recursive-include ANDES *.json *.dyd
+recursive-include Egret *.m *.json
+recursive-include OpenDSS *.dss *.csv
+recursive-include pandapower *.json
+recursive-include PowerWorld *.pwb *.pwd
+recursive-include PSLF *.sav *.otg *.cntl *.dycr *.dyd
+recursive-include PSSE *.dyr *.sav *.con *.mon *.sub
+recursive-include PSSE35 *.dyr *.sav *.con *.mon *.sub
+recursive-include PyLTSpice *.txt
+recursive-include PyPSA *.nc *.txt
+
+# Include all README files
+recursive-include * README.md
+
+# Exclude test files and cache
+recursive-exclude tests *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]

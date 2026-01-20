@@ -1,0 +1,6 @@
+# Core MCP dependencies
+fastmcp>=2.0.1
+mcp>=1.0.0
+
+# For development and testing
+# Install with: pip install -e .[dev]
