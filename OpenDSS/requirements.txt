@@ -1,2 +1,2 @@
-py_dss_interface
+py_dss_toolkit
 mcp
