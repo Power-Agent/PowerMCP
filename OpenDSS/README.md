@@ -35,7 +35,6 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 
 Responses are JSON with `success` and either `payload` (tabular data) or `error`.
 
-
 | Tool | Purpose |
 |------|---------|
 | **compile_opendss_file** | `ClearAll` + `Compile`; `payload` includes `circuit_readiness` and `circuit_loaded: true` |
@@ -48,6 +47,8 @@ Responses are JSON with `success` and either `payload` (tabular data) or `error`
 | **get_results_summary_records** | `results._summary_records` (after solve) |
 | **get_voltage_mag_ln_nodes_records** | `results._voltage_mag_ln_nodes_records` |
 | **get_powers_p_records** | `results._powers_p_records` |
+| **get_voltage_profile_plotly_figure** | V vs distance along the feeder from `interactive_view.voltage_profile` as Plotly JSON (`payload.plotly_json`); typically needs an energymeter; use **add_line_in_vsource** then **solve_opendss_snapshot** if missing. |
+| **get_opendss_circuit_map_plotly_figure** | Feeder map from `interactive_view.circuit_plot` as Plotly JSON (`payload.plotly_json`); needs bus coordinates (e.g. `BusCoords`). Optional `parameter` (e.g. `active power`, `voltage`). |
 
 ## Example
 
