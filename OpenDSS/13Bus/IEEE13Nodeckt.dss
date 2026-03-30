@@ -147,7 +147,7 @@ New Line.671692    Phases=3 Bus1=671   Bus2=692  Switch=y  r1=1e-4 r0=1e-4 x1=0.
 
 Set Voltagebases=[115, 4.16, .48]
 calcv
-Solve
+! Solve # TODO. Create a process that avoids commands: solve, show, etc...
 BusCoords IEEE13Node_BusXY.csv
 
 !---------------------------------------------------------------------------------------------------------------------------------------------------
