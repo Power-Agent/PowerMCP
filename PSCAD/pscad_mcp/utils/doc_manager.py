@@ -100,7 +100,13 @@ class DocumentationManager:
         "mhi.pscad.annotation"
     ]
 
-    def __init__(self, docs_dir: str = "docs"):
+    def __init__(self, docs_dir: str = None):
+        if docs_dir is None:
+            # Default to a "docs" folder next to the main project root (PSCAD/docs)
+            current_file_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(current_file_dir))
+            docs_dir = os.path.join(project_root, "docs")
+            
         self.base_dir = os.path.abspath(docs_dir)
         self.md_dir = os.path.join(self.base_dir, "md")
         self.raw_dir = os.path.join(self.base_dir, "raw")

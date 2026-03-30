@@ -105,5 +105,4 @@ eig_*/
 htmlcov/
 
 # PSCAD generated docs (can be re-synced)
-PSCAD/docs/md/*.md
-PSCAD/docs/raw/*.txt
+PSCAD/docs/
