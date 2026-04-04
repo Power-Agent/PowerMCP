@@ -5,10 +5,26 @@ from typing import Any, Dict, Optional
 from core import state
 
 
+def _json_safe(obj: Any) -> Any:
+    """Recursively convert numpy/pandas scalar-like values to native Python for JSON MCP payloads."""
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(x) for x in obj]
+    if hasattr(obj, "item") and callable(getattr(obj, "item")):
+        try:
+            return _json_safe(obj.item())
+        except Exception:
+            pass
+    return obj
+
+
 def _ok(payload: Any = None) -> Dict[str, Any]:
     out: Dict[str, Any] = {"success": True}
     if payload is not None:
-        out["payload"] = payload
+        out["payload"] = _json_safe(payload)
     return out
 
 
