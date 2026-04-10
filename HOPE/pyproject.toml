@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hope-mcp-server"
+version = "0.1.0"
+description = "Proof-of-concept MCP server for the HOPE Julia project."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp>=1.0.0",
+  "PyYAML>=6.0",
+]
+
+[project.scripts]
+hope-mcp-server = "hope_mcp_server.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hope_mcp_server"]
