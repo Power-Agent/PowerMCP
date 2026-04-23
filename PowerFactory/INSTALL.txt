@@ -1,0 +1,114 @@
+DIgSILENT PowerFactory MCP Agent — Installation Guide
+======================================================
+
+PREREQUISITES
+-------------
+1. DIgSILENT PowerFactory 2023 or later installed on Windows.
+   - The PowerFactory Python API (powerfactory module) is bundled with PowerFactory.
+   - A valid PowerFactory licence is required.
+
+2. Python 3.10 or later (64-bit, matching the architecture of your PowerFactory installation).
+
+3. Git (optional, for cloning the repository).
+
+
+STEP 1 — CLONE OR DOWNLOAD THE REPOSITORY
+------------------------------------------
+
+
+STEP 2 — INSTALL PYTHON DEPENDENCIES
+--------------------------------------
+    pip install -r requirements.txt
+
+This installs:
+    fastmcp >= 2.0      (MCP server framework)
+    numpy >= 1.26       (numerical computing)
+    matplotlib >= 3.8   (plot generation)
+    pandas >= 1.5       (CSV parsing)
+
+The "powerfactory" module is NOT pip-installable. It is provided by DIgSILENT.
+See Step 4.
+
+
+STEP 3 — CONFIGURE THE POWERFACTORY PYTHON PATH
+-------------------------------------------------
+The powerfactory Python module lives inside your PowerFactory installation.
+You must add its path to PYTHONPATH so Python can import it.
+
+Default location (adjust version numbers as needed):
+    C:\Program Files\DIgSILENT\PowerFactory 2024\Python\3.11
+
+Option A — Set a permanent environment variable (recommended):
+    setx PYTHONPATH "C:\Program Files\DIgSILENT\PowerFactory 2024\Python\3.11"
+
+    Then restart your terminal / IDE.
+
+Option B — Add the path at runtime (already handled internally by the agent
+    if PowerFactory is running, but explicit PYTHONPATH is more reliable).
+
+Verify the import works:
+    python -c "import powerfactory; print('OK')"
+
+If you see "OK", the path is correct. If you see "ModuleNotFoundError", check
+that the folder contains "__init__.py" or a .pyd file for your Python version.
+
+
+STEP 4 — CREATE THE CONFIGURATION FILE
+----------------------------------------
+    copy simulation_config.example.json simulation_config.json
+
+Open simulation_config.json in a text editor and fill in:
+    - project_path   : PowerFactory project path as shown in the database tree
+                       (e.g. "\\<user>\\<folder>\\MyProject.IntPrj")
+    - output_dir     : absolute Windows path for result files
+                       (e.g. "C:\\Users\\You\\Simulations\\Output")
+    - study_case     : name of the study case to activate
+    - base_study_case: name of the base case to copy from when creating new ones
+    - run_label      : label prefix for CSV, PNG, and PFD output files
+
+Do NOT commit simulation_config.json to version control — it contains local paths.
+
+
+STEP 5 — START POWERFACTORY
+-----------------------------
+Launch DIgSILENT PowerFactory and keep it running. The MCP server connects to
+the already-running PowerFactory instance via GetApplicationExt().
+
+
+STEP 6 — START THE MCP SERVER
+-------------------------------
+With your virtual environment active:
+
+    python MCP_PowerFactory.py
+
+The server starts and listens for MCP connections on stdio (standard input/output).
+You should see a log line confirming the server is ready.
+
+
+STEP 7 — CONNECT AN AI ASSISTANT
+----------------------------------
+Configure your AI assistant (e.g. Claude Desktop) to use this MCP server.
+
+Example entry for Claude Desktop (claude_desktop_config.json):
+
+    {
+        "mcpServers": {
+            "digsilent": {
+                "command": "python",
+                "args": ["C:\\path\\to\\project\\MCP_PowerFactory.py"]
+            }
+        }
+    }
+
+Restart the assistant after saving the config. Use the "ping" tool to verify
+the connection: it should return "pong".
+
+
+VERIFYING THE INSTALLATION
+---------------------------
+1. Ask the assistant to call the "ping" tool   → expected result: "pong"
+2. Ask it to call "get_config"                 → returns your simulation_config.json
+3. Ask it to call "run_loadflow"               → runs a load flow in PowerFactory
+
+
+For further help, open an issue on the GitHub repository.
