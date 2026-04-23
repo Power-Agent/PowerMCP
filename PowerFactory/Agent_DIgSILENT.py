@@ -40,10 +40,22 @@ class SimulationConfig:
     """All parameters needed to run one RMS simulation."""
 
     # ── Project ───────────────────────────────────────────────────
-    project_path: str = r"\ilea_\Andrea Pomarico\UW\39 Bus SINDy RMS MA.IntPrj"
-    study_case:   str = r"ctocto"
+    project_path: str = ""
+    study_case:   str = ""
     base_study_case: str = r"0. Base"
 
+    def __post_init__(self):
+        """Fail fast when required environment-specific configuration is missing."""
+        if not self.project_path.strip():
+            raise ValueError(
+                "Missing required 'project_path' in SimulationConfig. "
+                "Please set it in simulation_config.json."
+            )
+        if not self.study_case.strip():
+            raise ValueError(
+                "Missing required 'study_case' in SimulationConfig. "
+                "Please set it in simulation_config.json."
+            )
     # ── Fault ─────────────────────────────────────────────────────
     # fault_type : "bus"  → EvtShc ON + EvtShc OFF (clear)
     #              "line" → EvtShc ON + EvtSwitch OPEN (trip line)
