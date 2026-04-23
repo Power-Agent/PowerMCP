@@ -21,7 +21,7 @@ STEP 2 — INSTALL PYTHON DEPENDENCIES
     pip install -r requirements.txt
 
 This installs:
-    fastmcp >= 2.0      (MCP server framework)
+    mcp >= 2.0          (MCP Python SDK / server framework)
     numpy >= 1.26       (numerical computing)
     matplotlib >= 3.8   (plot generation)
     pandas >= 1.5       (CSV parsing)
