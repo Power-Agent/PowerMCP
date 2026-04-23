@@ -72,6 +72,14 @@
         "yourpath\\PowerMCP\\PyPSA\\pypsa_mcp.py"
       ]
     },
+    "surge": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "yourpath\\python.exe",
+        "yourpath\\PowerMCP\\surge\\surge_mcp.py"
+      ]
+    },
     "filesystem": {
       "command": "npx",
       "args": [

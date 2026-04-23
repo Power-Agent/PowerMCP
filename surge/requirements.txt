@@ -1,2 +1,2 @@
-surge-py
+surge-py>=0.1.5
 mcp
