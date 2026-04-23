@@ -1,0 +1,3130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DispatchRequest",
+  "description": "Public dispatch request consumed by surge_dispatch::solve_dispatch.",
+  "type": "object",
+  "properties": {
+    "formulation": {
+      "default": "dc",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Formulation"
+        }
+      ]
+    },
+    "coupling": {
+      "default": "period_by_period",
+      "allOf": [
+        {
+          "$ref": "#/definitions/IntervalCoupling"
+        }
+      ]
+    },
+    "commitment": {
+      "default": "all_committed",
+      "allOf": [
+        {
+          "$ref": "#/definitions/CommitmentPolicy"
+        }
+      ]
+    },
+    "timeline": {
+      "default": {
+        "interval_hours": 1.0,
+        "periods": 1
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchTimeline"
+        }
+      ]
+    },
+    "profiles": {
+      "default": {
+        "ac_bus_load": {},
+        "branch_derates": {},
+        "generator_derates": {},
+        "generator_dispatch_bounds": {},
+        "hvdc_derates": {},
+        "load": {},
+        "renewable": {}
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchProfiles"
+        }
+      ]
+    },
+    "state": {
+      "default": {
+        "initial": {}
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchState"
+        }
+      ]
+    },
+    "market": {
+      "default": {
+        "bus_area_assignments": [],
+        "carbon_price": null,
+        "co2_cap_t": null,
+        "co2_price_per_t": 0.0,
+        "combined_cycle_offer_schedules": [],
+        "commitment_constraints": [],
+        "dispatchable_load_offer_schedules": [],
+        "dispatchable_load_reserve_offer_schedules": [],
+        "dispatchable_loads": [],
+        "emission_profile": null,
+        "energy_window_limits": [],
+        "frequency_security": {
+          "base_frequency_hz": 60.0,
+          "freq_event_mw": 0.0,
+          "largest_contingency_mw": 0.0,
+          "max_rocof_hz_per_s": null,
+          "min_inertia_mws": null,
+          "min_nadir_hz": 0.0,
+          "min_pfr_mw": null
+        },
+        "generator_cost_modeling": null,
+        "generator_offer_schedules": [],
+        "generator_reserve_offer_schedules": [],
+        "must_run_units": null,
+        "penalty_config": {
+          "angle": {
+            "cost_per_unit": 500.0,
+            "type": "linear"
+          },
+          "power_balance": {
+            "cost_per_unit": 1000000.0,
+            "type": "linear"
+          },
+          "ramp": {
+            "segments": [
+              {
+                "cost_per_unit": 100.0,
+                "max_violation": 5.0
+              },
+              {
+                "cost_per_unit": 1000.0,
+                "max_violation": "inf"
+              }
+            ],
+            "type": "piecewise_linear"
+          },
+          "reactive_balance": {
+            "cost_per_unit": 1000000.0,
+            "type": "linear"
+          },
+          "reserve": {
+            "cost_per_unit": 1000.0,
+            "type": "linear"
+          },
+          "thermal": {
+            "cost_per_unit": 1500.0,
+            "type": "linear"
+          },
+          "voltage_high": {
+            "segments": [
+              {
+                "cost_per_unit": 5000.0,
+                "max_violation": 0.01
+              },
+              {
+                "cost_per_unit": 50000.0,
+                "max_violation": "inf"
+              }
+            ],
+            "type": "piecewise_linear"
+          },
+          "voltage_low": {
+            "segments": [
+              {
+                "cost_per_unit": 5000.0,
+                "max_violation": 0.01
+              },
+              {
+                "cost_per_unit": 50000.0,
+                "max_violation": "inf"
+              }
+            ],
+            "type": "piecewise_linear"
+          }
+        },
+        "power_balance_penalty": {
+          "curtailment": [
+            [
+              1.7976931348623157e+308,
+              10000000.0
+            ]
+          ],
+          "excess": [
+            [
+              1.7976931348623157e+308,
+              100000.0
+            ]
+          ]
+        },
+        "ramp_sharing": {
+          "sharing_ratio": 0.0
+        },
+        "regulation_eligibility": [],
+        "reserve_products": [],
+        "resource_area_assignments": [],
+        "startup_window_limits": [],
+        "storage_reserve_soc_impacts": [],
+        "storage_self_schedules": [],
+        "system_reserve_requirements": [],
+        "tie_line_limits": null,
+        "virtual_bids": [],
+        "zonal_reserve_requirements": []
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchMarket"
+        }
+      ]
+    },
+    "network": {
+      "default": {
+        "commitment_transitions": {
+          "shutdown_deloading": false,
+          "trajectory_mode": "inline_deloading"
+        },
+        "energy_windows": {
+          "enforcement": "soft",
+          "penalty_per_puh": 0.0
+        },
+        "flowgates": {
+          "enabled": true,
+          "max_nomogram_iterations": 10
+        },
+        "forbidden_zones": {
+          "enabled": false
+        },
+        "hvdc_links": [],
+        "loss_factors": {
+          "enabled": false,
+          "max_iterations": 3,
+          "tolerance": 0.001,
+          "warm_start_mode": {
+            "mode": "disabled"
+          }
+        },
+        "par_setpoints": [],
+        "ph_head_curves": [],
+        "ph_mode_constraints": [],
+        "ramping": {
+          "enforcement": "soft",
+          "mode": "averaged"
+        },
+        "thermal_limits": {
+          "enforce": true,
+          "min_rate_a": 1.0
+        },
+        "topology_control": {
+          "branch_switching_big_m_factor": 10.0,
+          "mode": "fixed"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchNetwork"
+        }
+      ]
+    },
+    "runtime": {
+      "default": {
+        "ac_relax_committed_pmin_to_zero": false,
+        "capture_model_diagnostics": false,
+        "run_pricing": true,
+        "tolerance": 1e-8
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/DispatchRuntime"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Formulation": {
+      "description": "Power balance formulation.",
+      "oneOf": [
+        {
+          "description": "DC linearized power balance (B-theta LP via HiGHS/Gurobi). Fast, approximate.",
+          "type": "string",
+          "enum": [
+            "dc"
+          ]
+        },
+        {
+          "description": "Full AC polar power balance (NLP via Ipopt). Exact, slower.",
+          "type": "string",
+          "enum": [
+            "ac"
+          ]
+        }
+      ]
+    },
+    "IntervalCoupling": {
+      "description": "How dispatch intervals are coupled across the study timeline.",
+      "oneOf": [
+        {
+          "description": "Solve intervals one at a time, threading state between solves.",
+          "type": "string",
+          "enum": [
+            "period_by_period"
+          ]
+        },
+        {
+          "description": "Solve all intervals in one time-coupled optimization.",
+          "type": "string",
+          "enum": [
+            "time_coupled"
+          ]
+        }
+      ]
+    },
+    "CommitmentPolicy": {
+      "description": "Public commitment policy for dispatch studies.",
+      "oneOf": [
+        {
+          "description": "All in-service generators are committed.",
+          "type": "string",
+          "enum": [
+            "all_committed"
+          ]
+        },
+        {
+          "description": "Commitment is provided externally.",
+          "type": "object",
+          "required": [
+            "fixed"
+          ],
+          "properties": {
+            "fixed": {
+              "$ref": "#/definitions/CommitmentSchedule"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Optimize commitment endogenously.",
+          "type": "object",
+          "required": [
+            "optimize"
+          ],
+          "properties": {
+            "optimize": {
+              "$ref": "#/definitions/CommitmentOptions"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Lock day-ahead commitments on and optimize only additional units.",
+          "type": "object",
+          "required": [
+            "additional"
+          ],
+          "properties": {
+            "additional": {
+              "type": "object",
+              "required": [
+                "options"
+              ],
+              "properties": {
+                "minimum_commitment": {
+                  "description": "Per-resource minimum commitment floor.",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/ResourcePeriodCommitment"
+                  }
+                },
+                "options": {
+                  "description": "Commitment optimization settings.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/CommitmentOptions"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CommitmentSchedule": {
+      "description": "Fixed commitment schedule for dispatch-only studies.",
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceCommitmentSchedule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceCommitmentSchedule": {
+      "description": "Fixed commitment schedule for one resource.",
+      "type": "object",
+      "required": [
+        "initial",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "initial": {
+          "type": "boolean"
+        },
+        "periods": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "boolean"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentOptions": {
+      "description": "Public commitment optimization controls.",
+      "type": "object",
+      "properties": {
+        "initial_conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommitmentInitialCondition"
+          }
+        },
+        "warm_start_commitment": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourcePeriodCommitment"
+          }
+        },
+        "time_limit_secs": {
+          "default": null,
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "mip_rel_gap": {
+          "description": "Relative MIP optimality gap for the commitment optimizer (e.g. 0.01 = 1%). When set, the solver will continue improving the solution until this gap is reached or the time limit expires.",
+          "default": null,
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "mip_gap_schedule": {
+          "description": "Optional time-varying MIP gap schedule for the commitment optimizer.\n\nEach entry is `(time_secs, gap)`: at solve wall time `t`, the acceptable gap is the `gap` of the latest entry with `time_secs <= t`. The solver terminates as soon as the current incumbent's gap is within the target. When omitted, the caller's static `mip_rel_gap` is used unchanged. Backends without progress-callback support ignore this field and fall back to the static safety net.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "disable_warm_start": {
+          "description": "When `true`, skip the SCUC MIP warm-start pipeline entirely — no load-cover helper solve, no reduced-relaxed LP, no reduced-core MIP, no conservative fallback, no dense-primal-start construction. The SCUC MIP is handed to the solver cold. On cases the MIP can nail at the root this saves the full warm-start overhead (multiple seconds on 617-bus). On harder cases the warm start can pay for itself, so leave at default `false` for production.",
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentInitialCondition": {
+      "description": "Initial commitment metadata for one resource.",
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "default": "",
+          "type": "string"
+        },
+        "committed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hours_on": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32"
+        },
+        "offline_hours": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "starts_24h": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "starts_168h": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "energy_mwh_24h": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourcePeriodCommitment": {
+      "description": "Minimum commitment floor for one resource across the solved periods.",
+      "type": "object",
+      "required": [
+        "periods",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "periods": {
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchTimeline": {
+      "description": "Study timeline.",
+      "type": "object",
+      "properties": {
+        "periods": {
+          "description": "Number of dispatch intervals.",
+          "default": 1,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "interval_hours": {
+          "description": "Interval width in hours.",
+          "default": 1.0,
+          "type": "number",
+          "format": "double"
+        },
+        "interval_hours_by_period": {
+          "description": "Optional per-period interval widths in hours.\n\nWhen provided, this overrides `interval_hours` for period-specific calculations while preserving the scalar field for backwards-compatible callers and serialization.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchProfiles": {
+      "description": "Time-series profiles and derates applied during the study.",
+      "type": "object",
+      "properties": {
+        "load": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/BusLoadProfiles"
+            }
+          ]
+        },
+        "ac_bus_load": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/AcBusLoadProfiles"
+            }
+          ]
+        },
+        "renewable": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/RenewableProfiles"
+            }
+          ]
+        },
+        "generator_derates": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/GeneratorDerateProfiles"
+            }
+          ]
+        },
+        "generator_dispatch_bounds": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/GeneratorDispatchBoundsProfiles"
+            }
+          ]
+        },
+        "branch_derates": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/BranchDerateProfiles"
+            }
+          ]
+        },
+        "hvdc_derates": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/HvdcDerateProfiles"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "BusLoadProfiles": {
+      "description": "Collection of active-power bus load profiles.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BusLoadProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "BusLoadProfile": {
+      "description": "Active-power load profile for one bus.",
+      "type": "object",
+      "required": [
+        "bus_number",
+        "values_mw"
+      ],
+      "properties": {
+        "bus_number": {
+          "description": "External bus number (matches `Bus::number`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "values_mw": {
+          "description": "Active-power demand in MW.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AcBusLoadProfiles": {
+      "description": "Collection of AC-only bus load overrides.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AcBusLoadProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AcBusLoadProfile": {
+      "description": "Optional AC-only bus load override profile.\n\nThis augments the standard active-power-only [`BusLoadProfiles`] surface:\n\n- `p_mw = Some(..)`, `q_mvar = None`: override active load and preserve the base bus reactive power factor. - `p_mw = None`, `q_mvar = Some(..)`: keep active load and override only reactive demand. - `p_mw = Some(..)`, `q_mvar = Some(..)`: override both active and reactive bus demand explicitly.",
+      "type": "object",
+      "required": [
+        "bus_number"
+      ],
+      "properties": {
+        "bus_number": {
+          "description": "External bus number (matches `Bus::number`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "p_mw": {
+          "description": "Optional active-power demand profile in MW.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_mvar": {
+          "description": "Optional reactive-power demand profile in MVAr.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RenewableProfiles": {
+      "description": "Collection of renewable capacity-factor profiles.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RenewableProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RenewableProfile": {
+      "description": "Renewable capacity-factor profile keyed by dispatch `resource_id`.",
+      "type": "object",
+      "required": [
+        "capacity_factors",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "capacity_factors": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorDerateProfiles": {
+      "description": "Collection of generator derate profiles.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GeneratorDerateProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorDerateProfile": {
+      "description": "Generator derate profile keyed by dispatch `resource_id`.",
+      "type": "object",
+      "required": [
+        "derate_factors",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "derate_factors": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorDispatchBoundsProfiles": {
+      "description": "Collection of absolute generator dispatch bounds.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GeneratorDispatchBoundsProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorDispatchBoundsProfile": {
+      "description": "Absolute generator dispatch bounds keyed by dispatch `resource_id`.\n\nUnlike derates, these bounds specify the per-period physical dispatch window directly in MW and are applied before each SCED/SCUC network snapshot is built. This is the right surface for resources whose availability floor and ceiling both vary over time, such as fixed-profile renewable injections or externally supplied must-take schedules.",
+      "type": "object",
+      "required": [
+        "p_max_mw",
+        "p_min_mw",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "p_min_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "p_max_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_min_mvar": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_max_mvar": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "BranchDerateProfiles": {
+      "description": "Collection of branch derate profiles.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BranchDerateProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "BranchDerateProfile": {
+      "description": "Branch derate profile keyed by a stable branch selector.",
+      "type": "object",
+      "required": [
+        "derate_factors",
+        "from_bus",
+        "to_bus"
+      ],
+      "properties": {
+        "derate_factors": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "from_bus": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "circuit": {
+          "default": "1",
+          "type": "string"
+        },
+        "to_bus": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcDerateProfiles": {
+      "description": "Collection of HVDC derate profiles.",
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcDerateProfile"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcDerateProfile": {
+      "description": "HVDC derate profile keyed by dispatch `link_id`.",
+      "type": "object",
+      "required": [
+        "derate_factors",
+        "link_id"
+      ],
+      "properties": {
+        "link_id": {
+          "type": "string"
+        },
+        "derate_factors": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchState": {
+      "description": "Initial state carried into the study.",
+      "type": "object",
+      "properties": {
+        "initial": {
+          "default": {},
+          "allOf": [
+            {
+              "$ref": "#/definitions/DispatchInitialState"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchInitialState": {
+      "description": "Initial dispatch state for sequential or horizon-start solves.",
+      "type": "object",
+      "properties": {
+        "previous_resource_dispatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceDispatchPoint"
+          }
+        },
+        "previous_hvdc_dispatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcDispatchPoint"
+          }
+        },
+        "storage_soc_overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StorageSocOverride"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceDispatchPoint": {
+      "description": "Previous dispatch point for one resource.",
+      "type": "object",
+      "required": [
+        "mw",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "mw": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcDispatchPoint": {
+      "description": "Previous dispatch point for one HVDC link.",
+      "type": "object",
+      "required": [
+        "link_id",
+        "mw"
+      ],
+      "properties": {
+        "link_id": {
+          "type": "string"
+        },
+        "mw": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StorageSocOverride": {
+      "description": "Initial storage state override for one storage resource.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "soc_mwh"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "soc_mwh": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchMarket": {
+      "description": "Market inputs and market-facing policy for dispatch.",
+      "type": "object",
+      "properties": {
+        "reserve_products": {
+          "description": "External `surge_network::market::ReserveProduct`; opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "system_reserve_requirements": {
+          "description": "External `surge_network::market::SystemReserveRequirement`; opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "zonal_reserve_requirements": {
+          "description": "External `surge_network::market::ZonalReserveRequirement`; opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "ramp_sharing": {
+          "description": "External `surge_network::market::RampSharingConfig`; opaque JSON.",
+          "default": {
+            "sharing_ratio": 0.0
+          }
+        },
+        "co2_cap_t": {
+          "default": null,
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "co2_price_per_t": {
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "emission_profile": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/EmissionProfile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "carbon_price": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CarbonPrice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "storage_self_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StoragePowerSchedule"
+          }
+        },
+        "storage_reserve_soc_impacts": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StorageReserveSocImpact"
+          }
+        },
+        "generator_offer_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GeneratorOfferSchedule"
+          }
+        },
+        "dispatchable_load_offer_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DispatchableLoadOfferSchedule"
+          }
+        },
+        "generator_reserve_offer_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GeneratorReserveOfferSchedule"
+          }
+        },
+        "dispatchable_load_reserve_offer_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DispatchableLoadReserveOfferSchedule"
+          }
+        },
+        "combined_cycle_offer_schedules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CombinedCycleConfigOfferSchedule"
+          }
+        },
+        "tie_line_limits": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TieLineLimits"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resource_area_assignments": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceAreaAssignment"
+          }
+        },
+        "bus_area_assignments": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BusAreaAssignment"
+          }
+        },
+        "must_run_units": {
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/MustRunUnits"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "frequency_security": {
+          "default": {
+            "base_frequency_hz": 60.0,
+            "freq_event_mw": 0.0,
+            "largest_contingency_mw": 0.0,
+            "max_rocof_hz_per_s": null,
+            "min_inertia_mws": null,
+            "min_nadir_hz": 0.0,
+            "min_pfr_mw": null
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/FrequencySecurityOptions"
+            }
+          ]
+        },
+        "dispatchable_loads": {
+          "description": "External `surge_network::market::DispatchableLoad`; opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "virtual_bids": {
+          "description": "External `surge_network::market::VirtualBid`; opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "power_balance_penalty": {
+          "default": {
+            "curtailment": [
+              [
+                1.7976931348623157e+308,
+                10000000.0
+              ]
+            ],
+            "excess": [
+              [
+                1.7976931348623157e+308,
+                100000.0
+              ]
+            ]
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/PowerBalancePenalty"
+            }
+          ]
+        },
+        "penalty_config": {
+          "description": "External `surge_network::market::PenaltyConfig`; opaque JSON.",
+          "default": {
+            "angle": {
+              "cost_per_unit": 500.0,
+              "type": "linear"
+            },
+            "power_balance": {
+              "cost_per_unit": 1000000.0,
+              "type": "linear"
+            },
+            "ramp": {
+              "segments": [
+                {
+                  "cost_per_unit": 100.0,
+                  "max_violation": 5.0
+                },
+                {
+                  "cost_per_unit": 1000.0,
+                  "max_violation": "inf"
+                }
+              ],
+              "type": "piecewise_linear"
+            },
+            "reactive_balance": {
+              "cost_per_unit": 1000000.0,
+              "type": "linear"
+            },
+            "reserve": {
+              "cost_per_unit": 1000.0,
+              "type": "linear"
+            },
+            "thermal": {
+              "cost_per_unit": 1500.0,
+              "type": "linear"
+            },
+            "voltage_high": {
+              "segments": [
+                {
+                  "cost_per_unit": 5000.0,
+                  "max_violation": 0.01
+                },
+                {
+                  "cost_per_unit": 50000.0,
+                  "max_violation": "inf"
+                }
+              ],
+              "type": "piecewise_linear"
+            },
+            "voltage_low": {
+              "segments": [
+                {
+                  "cost_per_unit": 5000.0,
+                  "max_violation": 0.01
+                },
+                {
+                  "cost_per_unit": 50000.0,
+                  "max_violation": "inf"
+                }
+              ],
+              "type": "piecewise_linear"
+            }
+          }
+        },
+        "generator_cost_modeling": {
+          "description": "Canonical generator-cost approximation controls for SCED/SCUC.\n\nWhen omitted, generators retain their native cost representation.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/GeneratorCostModeling"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "regulation_eligibility": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceEligibility"
+          }
+        },
+        "startup_window_limits": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceStartupWindowLimit"
+          }
+        },
+        "energy_window_limits": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceEnergyWindowLimit"
+          }
+        },
+        "commitment_constraints": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommitmentConstraint"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "EmissionProfile": {
+      "description": "Public keyed emission profile.",
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourceEmissionRate"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceEmissionRate": {
+      "description": "Per-resource emission rate.",
+      "type": "object",
+      "required": [
+        "rate_tonnes_per_mwh",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "rate_tonnes_per_mwh": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CarbonPrice": {
+      "description": "Carbon price in $/tCO2.\n\nCombined with [`EmissionProfile`] (or the inline `co2_rate_t_per_mwh` generator field), this adds an emission surcharge to each generator's dispatch cost:\n\n```text carbon_cost_g = pg_mw_g * hours * rate_g * price_per_tonne ```",
+      "type": "object",
+      "required": [
+        "price_per_tonne"
+      ],
+      "properties": {
+        "price_per_tonne": {
+          "description": "Carbon price in USD per tonne of CO2.",
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "StoragePowerSchedule": {
+      "description": "Per-storage self schedule.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "values_mw"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "values_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "StorageReserveSocImpact": {
+      "description": "Per-storage reserve SOC impact profile.",
+      "type": "object",
+      "required": [
+        "product_id",
+        "resource_id",
+        "values_mwh_per_mw"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "product_id": {
+          "type": "string"
+        },
+        "values_mwh_per_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorOfferSchedule": {
+      "description": "Per-resource offer schedule override for a generator or storage resource.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "schedule"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "schedule": {
+          "description": "External `surge_network::market::OfferSchedule`; treated as opaque JSON."
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchableLoadOfferSchedule": {
+      "description": "Per-resource offer schedule override for a dispatchable load.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "schedule"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "schedule": {
+          "description": "External `surge_network::market::DlOfferSchedule`; treated as opaque JSON."
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorReserveOfferSchedule": {
+      "description": "Per-resource reserve offer schedule override for a generator or storage resource.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "schedule"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "schedule": {
+          "$ref": "#/definitions/ReserveOfferSchedule"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReserveOfferSchedule": {
+      "description": "Per-resource reserve offer override schedule.",
+      "type": "object",
+      "required": [
+        "periods"
+      ],
+      "properties": {
+        "periods": {
+          "description": "External `surge_network::market::ReserveOffer` per `[period][offer]`; treated as opaque JSON.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchableLoadReserveOfferSchedule": {
+      "description": "Per-resource reserve offer schedule override for a dispatchable load.",
+      "type": "object",
+      "required": [
+        "resource_id",
+        "schedule"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "schedule": {
+          "$ref": "#/definitions/ReserveOfferSchedule"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CombinedCycleConfigOfferSchedule": {
+      "description": "Combined-cycle config offer override.",
+      "type": "object",
+      "required": [
+        "config_name",
+        "plant_id",
+        "schedule"
+      ],
+      "properties": {
+        "plant_id": {
+          "type": "string"
+        },
+        "config_name": {
+          "type": "string"
+        },
+        "schedule": {
+          "description": "External `surge_network::market::OfferSchedule`; treated as opaque JSON."
+        }
+      },
+      "additionalProperties": false
+    },
+    "TieLineLimits": {
+      "description": "Inter-area transfer limits for multi-area dispatch.\n\nWhen provided in a canonical dispatch request, an additional LP constraint is added per `(from_area, to_area)` pair per hour on the physical interchange across AC branches and dispatchable HVDC links whose terminal buses lie in those two areas:\n\n```text net_transfer[from → to] = Σ AC branch flow crossing from_area to to_area + Σ dispatchable HVDC transfer from_area to to_area net_transfer[from → to] ≤ limit_mw[(from_area, to_area)] ```\n\nArea assignment uses `load_area[b]` (index into bus list). Generator-area tags are not used for these interface rows.\n\n`limits_mw` is directional: a positive entry `limits_mw[(0,1)] = 200.0` means area 0 may export at most 200 MW to area 1.  The reverse flow `limits_mw[(1,0)]` is a separate entry.",
+      "type": "object",
+      "required": [
+        "limits_mw"
+      ],
+      "properties": {
+        "limits_mw": {
+          "description": "Area pair (from_area, to_area) → max export MW (positive = from→to). Tuple-keyed map; schema renders the JSON shape used by serde_json (an array of [[from_area, to_area], limit_mw] pairs).",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "array",
+                "items": [
+                  {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0.0
+                  },
+                  {
+                    "type": "integer",
+                    "format": "uint",
+                    "minimum": 0.0
+                  }
+                ],
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        }
+      }
+    },
+    "ResourceAreaAssignment": {
+      "description": "Assign an area id to one resource.",
+      "type": "object",
+      "required": [
+        "area_id",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "area_id": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "BusAreaAssignment": {
+      "description": "Assign an area id to one bus.",
+      "type": "object",
+      "required": [
+        "area_id",
+        "bus_number"
+      ],
+      "properties": {
+        "bus_number": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "area_id": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "MustRunUnits": {
+      "description": "Public keyed must-run floor list.",
+      "type": "object",
+      "properties": {
+        "resource_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "FrequencySecurityOptions": {
+      "description": "Frequency security constraints to embed in the SCED/SCUC LP.\n\nEach field is optional — `None` means \"do not add this constraint.\" All `None` (the default) produces zero additional LP rows.",
+      "type": "object",
+      "properties": {
+        "min_inertia_mws": {
+          "description": "Minimum system inertia in MW·s.\n\nSCED (continuous LP): enforces Σ_i (H_i · Sg_i / Pmax_i) · Pg_i ≥ min_inertia_mws / base_mva using dispatch level as a proxy for online fraction. Conservative (underestimates inertia at partial dispatch), safe for security.\n\nSCUC (MIP): enforces Σ_i H_i · Sg_i · u_i ≥ min_inertia_mws exactly, since the binary commitment variable u_i correctly represents whether the unit is online.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "max_rocof_hz_per_s": {
+          "description": "Maximum rate-of-change-of-frequency (Hz/s) after the largest credible contingency. Converted to a minimum inertia requirement: H_min_from_rocof = largest_contingency_mw / (2 · base_frequency_hz · max_rocof) The effective inertia floor is max(min_inertia_mws, H_min_from_rocof).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "min_pfr_mw": {
+          "description": "Minimum primary frequency response (MW) deployable within 30 seconds.\n\nEnforces: Σ_i pfr_eligible_i · (Pmax_i - Pg_i) ≥ min_pfr_mw / base_mva Generators opt in via `Generator::pfr_eligible` (default: true).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "generator_h_values": {
+          "description": "Per-generator inertia constant H (seconds), indexed by position in the in-service generator list. Required for inertia and RoCoF post-solve metrics. When empty, frequency metrics are not computed.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "freq_event_mw": {
+          "description": "Generation loss event size (MW) for RoCoF and nadir calculations. When `0.0` (the default), the solver uses the largest generator Pmax as the event size.",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "min_nadir_hz": {
+          "description": "Minimum frequency nadir (Hz). `0.0` = disabled.\n\nEnforces a linearized headroom constraint: Σ (headroom_g / R_g) ≥ P_event / (f0 × Δf_max) where Δf_max = f0 − min_nadir_hz and R_g is per-unit droop (default 0.05).",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "largest_contingency_mw": {
+          "description": "Largest credible contingency in MW. Required when `max_rocof_hz_per_s` is `Some`. Ignored otherwise.",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "base_frequency_hz": {
+          "description": "Nominal system frequency in Hz. Default 60.0 (ERCOT / North America).",
+          "default": 60.0,
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "PowerBalancePenalty": {
+      "description": "Stepped penalty curves for power balance slack variables.",
+      "type": "object",
+      "properties": {
+        "curtailment": {
+          "description": "Penalty segments for unserved load (generation shortfall).",
+          "default": [
+            [
+              1.7976931348623157e+308,
+              10000000.0
+            ]
+          ],
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "excess": {
+          "description": "Penalty segments for excess generation (over-supply).",
+          "default": [
+            [
+              1.7976931348623157e+308,
+              100000.0
+            ]
+          ],
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneratorCostModeling": {
+      "description": "Generator cost approximation controls shared across dispatch formulations.\n\nExplicit piecewise-linear curves always use their native epiograph representation. These options control whether convex polynomial generator costs should be outer-linearized into the same PWL form.",
+      "type": "object",
+      "properties": {
+        "use_pwl_costs": {
+          "description": "Convert convex polynomial generator costs to a PWL epigraph.",
+          "default": false,
+          "type": "boolean"
+        },
+        "pwl_cost_breakpoints": {
+          "description": "Number of tangent-line breakpoints per approximated generator.",
+          "default": 20,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceEligibility": {
+      "description": "Boolean eligibility override for one resource.",
+      "type": "object",
+      "required": [
+        "eligible",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "eligible": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceStartupWindowLimit": {
+      "description": "Absolute startup-count limit for one resource over a horizon window.\n\nThe window is inclusive on both ends: `start_period_idx=0, end_period_idx=23` constrains the first 24 solved periods.",
+      "type": "object",
+      "required": [
+        "end_period_idx",
+        "max_startups",
+        "resource_id",
+        "start_period_idx"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "start_period_idx": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "end_period_idx": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_startups": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceEnergyWindowLimit": {
+      "description": "Absolute energy budget for one resource over a horizon window.\n\nThe window is inclusive on both ends. Either or both bounds may be set.",
+      "type": "object",
+      "properties": {
+        "resource_id": {
+          "default": "",
+          "type": "string"
+        },
+        "start_period_idx": {
+          "default": 0,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "end_period_idx": {
+          "default": 0,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "min_energy_mwh": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "max_energy_mwh": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentConstraint": {
+      "description": "Public commitment constraint keyed by resource ids.",
+      "type": "object",
+      "required": [
+        "lower_bound",
+        "name",
+        "period_idx",
+        "terms"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "period_idx": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "terms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CommitmentTerm"
+          }
+        },
+        "lower_bound": {
+          "type": "number",
+          "format": "double"
+        },
+        "penalty_cost": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentTerm": {
+      "description": "One linear commitment-cut term keyed by resource id.",
+      "type": "object",
+      "required": [
+        "coeff",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "coeff": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchNetwork": {
+      "description": "Network-facing study policy.",
+      "type": "object",
+      "properties": {
+        "thermal_limits": {
+          "default": {
+            "enforce": true,
+            "min_rate_a": 1.0
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ThermalLimitPolicy"
+            }
+          ]
+        },
+        "flowgates": {
+          "default": {
+            "enabled": true,
+            "max_nomogram_iterations": 10
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/FlowgatePolicy"
+            }
+          ]
+        },
+        "par_setpoints": {
+          "description": "External `surge_solution::ParSetpoint`; treated as opaque JSON.",
+          "default": [],
+          "type": "array",
+          "items": true
+        },
+        "hvdc_links": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcDispatchLink"
+          }
+        },
+        "loss_factors": {
+          "default": {
+            "enabled": false,
+            "max_iterations": 3,
+            "tolerance": 0.001,
+            "warm_start_mode": {
+              "mode": "disabled"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LossFactorPolicy"
+            }
+          ]
+        },
+        "forbidden_zones": {
+          "default": {
+            "enabled": false
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ForbiddenZonePolicy"
+            }
+          ]
+        },
+        "commitment_transitions": {
+          "default": {
+            "shutdown_deloading": false,
+            "trajectory_mode": "inline_deloading"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/CommitmentTransitionPolicy"
+            }
+          ]
+        },
+        "ramping": {
+          "default": {
+            "enforcement": "soft",
+            "mode": "averaged"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RampPolicy"
+            }
+          ]
+        },
+        "energy_windows": {
+          "default": {
+            "enforcement": "soft",
+            "penalty_per_puh": 0.0
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/EnergyWindowPolicy"
+            }
+          ]
+        },
+        "topology_control": {
+          "default": {
+            "branch_switching_big_m_factor": 10.0,
+            "mode": "fixed"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/TopologyControlPolicy"
+            }
+          ]
+        },
+        "security": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SecurityPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ph_head_curves": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PhHeadCurve"
+          }
+        },
+        "ph_mode_constraints": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/PhModeConstraint"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ThermalLimitPolicy": {
+      "description": "Thermal-limit enforcement policy.",
+      "type": "object",
+      "properties": {
+        "enforce": {
+          "default": true,
+          "type": "boolean"
+        },
+        "min_rate_a": {
+          "default": 1.0,
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FlowgatePolicy": {
+      "description": "Flowgate/interface enforcement policy.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "max_nomogram_iterations": {
+          "default": 10,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcDispatchLink": {
+      "description": "HVDC link description for dispatch co-optimization.",
+      "type": "object",
+      "required": [
+        "bands",
+        "cost_per_mwh",
+        "from_bus",
+        "loss_a_mw",
+        "loss_b_frac",
+        "name",
+        "p_dc_max_mw",
+        "p_dc_min_mw",
+        "ramp_mw_per_min",
+        "to_bus"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable public identifier. Falls back to `name` and then a synthesized id when empty.",
+          "default": "",
+          "type": "string"
+        },
+        "name": {
+          "description": "Human-readable name (e.g. \"HVDC_North_South\").",
+          "type": "string"
+        },
+        "from_bus": {
+          "description": "AC bus number at the rectifier (power source) end.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "to_bus": {
+          "description": "AC bus number at the inverter (power sink) end.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "p_dc_min_mw": {
+          "description": "Minimum DC power transfer (MW). Can be 0 or negative for bidirectional.",
+          "type": "number",
+          "format": "double"
+        },
+        "p_dc_max_mw": {
+          "description": "Maximum DC power transfer (MW).",
+          "type": "number",
+          "format": "double"
+        },
+        "loss_a_mw": {
+          "description": "Constant loss coefficient `a` (MW): P_loss = a + b * P_dc.",
+          "type": "number",
+          "format": "double"
+        },
+        "loss_b_frac": {
+          "description": "Linear loss coefficient `b` (fraction): P_loss = a + b * P_dc.",
+          "type": "number",
+          "format": "double"
+        },
+        "ramp_mw_per_min": {
+          "description": "Ramp rate limit (MW/min). 0 = unlimited.",
+          "type": "number",
+          "format": "double"
+        },
+        "cost_per_mwh": {
+          "description": "Dispatch cost per MWh (usually 0 for HVDC).",
+          "type": "number",
+          "format": "double"
+        },
+        "bands": {
+          "description": "Multi-band control segments. Empty = single-band legacy mode using the flat fields above.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcBand"
+          }
+        }
+      }
+    },
+    "HvdcBand": {
+      "description": "A single dispatch band for multi-band HVDC control.",
+      "type": "object",
+      "required": [
+        "cost_per_mwh",
+        "id",
+        "loss_b_frac",
+        "max_duration_hours",
+        "p_max_mw",
+        "p_min_mw",
+        "ramp_mw_per_min",
+        "reserve_eligible_down",
+        "reserve_eligible_up"
+      ],
+      "properties": {
+        "id": {
+          "description": "Band identifier (e.g. \"base\", \"economic\", \"emergency\").",
+          "type": "string"
+        },
+        "p_min_mw": {
+          "description": "Minimum transfer for this band (MW).",
+          "type": "number",
+          "format": "double"
+        },
+        "p_max_mw": {
+          "description": "Maximum transfer for this band (MW).",
+          "type": "number",
+          "format": "double"
+        },
+        "cost_per_mwh": {
+          "description": "Marginal cost for this band ($/MWh).",
+          "type": "number",
+          "format": "double"
+        },
+        "loss_b_frac": {
+          "description": "Linear loss fraction for this band.",
+          "type": "number",
+          "format": "double"
+        },
+        "ramp_mw_per_min": {
+          "description": "Per-band ramp rate (MW/min). 0 = inherits link-level ramp.",
+          "type": "number",
+          "format": "double"
+        },
+        "reserve_eligible_up": {
+          "description": "Whether headroom in this band can provide upward reserve.",
+          "type": "boolean"
+        },
+        "reserve_eligible_down": {
+          "description": "Whether reduction from this band can provide downward reserve.",
+          "type": "boolean"
+        },
+        "max_duration_hours": {
+          "description": "Maximum continuous duration (hours). 0 = unlimited.",
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "LossFactorPolicy": {
+      "description": "Iterative DC loss-factor policy.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "max_iterations": {
+          "default": 3,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "tolerance": {
+          "default": 0.001,
+          "type": "number",
+          "format": "double"
+        },
+        "warm_start_mode": {
+          "description": "Cold-start strategy the SCUC security loop uses to seed the first iteration's loss-factor state. Subsequent iterations always warm-start from the prior iteration's converged `dloss_dp`, so this only affects the very first MIP solve. See [`LossFactorWarmStartMode`] for the supported strategies.",
+          "default": {
+            "mode": "disabled"
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LossFactorWarmStartMode"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LossFactorWarmStartMode": {
+      "description": "Cold-start strategy for the SCUC loss-factor warm-start on the first security iteration.\n\nDefaults to [`LossFactorWarmStartMode::Disabled`] — first MIP is solved lossless, refinement LP corrects after. Set to one of the other variants to inject a loss estimate before the first MIP and (when the estimate is close to the converged state) skip the refinement LP re-solve entirely.",
+      "oneOf": [
+        {
+          "description": "No cold-start warm-start on iter 0. The first MIP is solved lossless; the refinement LP corrects for losses after. Subsequent security iterations still warm-start from the prior iteration's `dloss_dp` if available.",
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "disabled"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Seed every bus's `dloss` to the same rate `rate ∈ [0, 0.5]` (typical `0.02` for 2%). `total_losses_mw = rate × total_load`. No per-bus variation; cheapest cold-start. Good when the network's losses are dominated by a roughly uniform background loss rate rather than strong per-bus asymmetries.",
+          "type": "object",
+          "required": [
+            "mode",
+            "rate"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "uniform"
+              ]
+            },
+            "rate": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        {
+          "description": "Seed `dloss` from the loss-PTDF applied to the per-bus load vector, normalised so total weighted losses match `rate × total_load`. No DC PF invocation. Captures per-bus variation from network topology + load pattern alone.",
+          "type": "object",
+          "required": [
+            "mode",
+            "rate"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "load_pattern"
+              ]
+            },
+            "rate": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        },
+        {
+          "description": "Seed from a DC power flow on each hourly network's initial- condition dispatch. Most accurate cold-start; costs one DC PF per period (sub-ms on 617-bus). Falls back to `Uniform { rate: 0.02 }` if the DC PF fails.",
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "dc_pf"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ForbiddenZonePolicy": {
+      "description": "Forbidden-operating-zone enforcement policy.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "max_transit_periods": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentTransitionPolicy": {
+      "description": "Commitment transition modeling policy.",
+      "type": "object",
+      "properties": {
+        "shutdown_deloading": {
+          "default": false,
+          "type": "boolean"
+        },
+        "trajectory_mode": {
+          "default": "inline_deloading",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CommitmentTrajectoryMode"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CommitmentTrajectoryMode": {
+      "description": "How startup/shutdown output trajectories are modeled across intervals.",
+      "oneOf": [
+        {
+          "description": "Model transition output as same-interval online deloading.",
+          "type": "string",
+          "enum": [
+            "inline_deloading"
+          ]
+        },
+        {
+          "description": "Model transition output as offline neighboring-interval trajectories.",
+          "type": "string",
+          "enum": [
+            "offline_trajectory"
+          ]
+        }
+      ]
+    },
+    "RampPolicy": {
+      "description": "Ramp-constraint modeling policy.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "averaged",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RampMode"
+            }
+          ]
+        },
+        "enforcement": {
+          "default": "soft",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConstraintEnforcement"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "RampMode": {
+      "description": "How piecewise ramp curves are applied in dispatch LP formulations.",
+      "oneOf": [
+        {
+          "description": "Weighted-average rate integrated over [Pmin, Pmax].",
+          "type": "string",
+          "enum": [
+            "averaged"
+          ]
+        },
+        {
+          "description": "Interpolate the ramp curve at the unit's current operating point.",
+          "type": "string",
+          "enum": [
+            "interpolated"
+          ]
+        },
+        {
+          "description": "Incremental block decomposition.",
+          "type": "object",
+          "required": [
+            "block"
+          ],
+          "properties": {
+            "block": {
+              "type": "object",
+              "required": [
+                "per_block_reserves"
+              ],
+              "properties": {
+                "per_block_reserves": {
+                  "description": "Enable exact per-block reserve coupling.",
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ConstraintEnforcement": {
+      "description": "Whether a constraint family is enforced as hard or soft.",
+      "type": "string",
+      "enum": [
+        "soft",
+        "hard"
+      ]
+    },
+    "EnergyWindowPolicy": {
+      "description": "Multi-interval energy-window enforcement policy.",
+      "type": "object",
+      "properties": {
+        "enforcement": {
+          "default": "soft",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConstraintEnforcement"
+            }
+          ]
+        },
+        "penalty_per_puh": {
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TopologyControlPolicy": {
+      "description": "Topology-control modeling policy.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "fixed",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TopologyControlMode"
+            }
+          ]
+        },
+        "branch_switching_big_m_factor": {
+          "default": 10.0,
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TopologyControlMode": {
+      "description": "Network topology-control policy.",
+      "type": "string",
+      "enum": [
+        "fixed",
+        "switchable"
+      ]
+    },
+    "SecurityPolicy": {
+      "description": "Optional N-1 security policy for DC time-coupled dispatch.",
+      "type": "object",
+      "properties": {
+        "embedding": {
+          "description": "How contingencies enter the optimization model.",
+          "default": "explicit_contingencies",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SecurityEmbedding"
+            }
+          ]
+        },
+        "max_iterations": {
+          "description": "Maximum outer-loop iterations.",
+          "default": 10,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "violation_tolerance_pu": {
+          "description": "Post-contingency flow violation tolerance in p.u. on system base.",
+          "default": 0.01,
+          "type": "number",
+          "format": "double"
+        },
+        "max_cuts_per_iteration": {
+          "description": "Maximum number of new cuts added per iteration.",
+          "default": 50,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "branch_contingencies": {
+          "description": "Branches to consider as contingencies. Empty = all monitored branches.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BranchRef"
+          }
+        },
+        "hvdc_contingencies": {
+          "description": "HVDC links to consider as contingencies.",
+          "default": [],
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcLinkRef"
+          }
+        },
+        "preseed_count_per_period": {
+          "description": "Pre-seed iter 0 of `IterativeScreening` with this many top-ranked (contingency, monitored) cuts per period. `0` disables pre-seeding (default — preserves prior behavior). The goal is to reduce outer iteration count by starting with a skeleton of the most structurally binding N-1 pairs, avoiding at least one full SCUC re-solve.",
+          "default": 0,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "preseed_method": {
+          "description": "Ranking method used to pick the top-N pairs when pre-seeding.",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SecurityPreseedMethod"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "SecurityEmbedding": {
+      "description": "How N-1 contingencies are embedded into DC time-coupled dispatch.",
+      "oneOf": [
+        {
+          "description": "Build the full contingency constraint set directly into the SCUC.",
+          "type": "string",
+          "enum": [
+            "explicit_contingencies"
+          ]
+        },
+        {
+          "description": "Solve a base model, screen post-contingency violations, and add cuts iteratively.",
+          "type": "string",
+          "enum": [
+            "iterative_screening"
+          ]
+        }
+      ]
+    },
+    "BranchRef": {
+      "description": "Stable branch selector.",
+      "type": "object",
+      "required": [
+        "from_bus",
+        "to_bus"
+      ],
+      "properties": {
+        "from_bus": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "circuit": {
+          "default": "1",
+          "type": "string"
+        },
+        "to_bus": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcLinkRef": {
+      "description": "Stable HVDC selector.",
+      "type": "object",
+      "required": [
+        "link_id"
+      ],
+      "properties": {
+        "link_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SecurityPreseedMethod": {
+      "description": "Method for ranking contingency pairs when pre-seeding iter 0 of iterative-screening SCUC.",
+      "oneOf": [
+        {
+          "description": "No pre-seeding; iter 0 solves base SCUC with zero contingency cuts.",
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        },
+        {
+          "description": "Rank (contingency, monitored) pairs by `|LODF| * rating_ctg / rating_mon` — a dimensionless, dispatch-free structural severity score. Cheapest option; computed from the already-cached PTDF.",
+          "type": "string",
+          "enum": [
+            "max_lodf_topology"
+          ]
+        }
+      ]
+    },
+    "PhHeadCurve": {
+      "description": "Public pumped-hydro head curve keyed by resource id.",
+      "type": "object",
+      "required": [
+        "breakpoints",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "breakpoints": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "PhModeConstraint": {
+      "description": "Public pumped-hydro mode constraint keyed by resource id.",
+      "type": "object",
+      "required": [
+        "gen_to_pump_periods",
+        "min_gen_run_periods",
+        "min_pump_run_periods",
+        "pump_to_gen_periods",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "min_gen_run_periods": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "min_pump_run_periods": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "pump_to_gen_periods": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "gen_to_pump_periods": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_pump_starts": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "DispatchRuntime": {
+      "description": "Runtime execution controls for dispatch.",
+      "type": "object",
+      "properties": {
+        "tolerance": {
+          "default": 1e-8,
+          "type": "number",
+          "format": "double"
+        },
+        "run_pricing": {
+          "default": true,
+          "type": "boolean"
+        },
+        "ac_relax_committed_pmin_to_zero": {
+          "default": false,
+          "type": "boolean"
+        },
+        "ac_opf": {
+          "description": "External `surge_opf::AcOpfOptions`; treated as opaque JSON."
+        },
+        "fixed_hvdc_dispatch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcPeriodPowerSeries"
+          }
+        },
+        "ac_dispatch_warm_start": {
+          "$ref": "#/definitions/AcDispatchWarmStart"
+        },
+        "ac_target_tracking": {
+          "$ref": "#/definitions/AcDispatchTargetTracking"
+        },
+        "sced_ac_benders": {
+          "$ref": "#/definitions/ScedAcBendersRuntime"
+        },
+        "capture_model_diagnostics": {
+          "description": "When true, capture a structured [`crate::model_diagnostic::ModelDiagnostic`] snapshot after each LP/MIP solve stage. The diagnostics are attached to the [`crate::DispatchSolution`] for post-solve inspection.\n\nCost: a single scan over the primal/dual vectors (negligible vs solve time).",
+          "default": false,
+          "type": "boolean"
+        },
+        "ac_sced_period_concurrency": {
+          "description": "Per-period AC SCED concurrency.\n\n* `None` (default) — sequential per-period AC SCED. Each period warm-starts from the previous period's `OpfSolution`, so the solver chain inherits the prior NLP basin (faster convergence on stressed scenarios at the cost of an unbreakable serial loop). * `Some(n)` (n ≥ 2) — run periods in parallel on a rayon thread pool of size `n`. AC→AC warm-start is dropped; each period instead falls back to the per-period AC power-flow warm-start (`runtime_with_pf_warm_start_if_available`). The `prev_dispatch_mw` anchor used for ramp constraints comes from the per-period `generator_dispatch_bounds` midpoint — equivalent to the DC SCUC dispatch when the bounds are tightly pinned around the source-stage dispatch (as in a two-stage reconcile pipeline). Wider bounds make this a heuristic; results may differ from sequential at Ipopt's tolerance level. * `Some(0)` is normalized to sequential to keep the knob simple.\n\nStorage SoC continuity is enforced via sequential threading and is **not** preserved in parallel mode; networks with `is_storage()` generators force a sequential fallback regardless of this setting.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "HvdcPeriodPowerSeries": {
+      "type": "object",
+      "required": [
+        "link_id",
+        "p_mw"
+      ],
+      "properties": {
+        "link_id": {
+          "type": "string"
+        },
+        "p_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_fr_mvar": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_to_mvar": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AcDispatchWarmStart": {
+      "type": "object",
+      "properties": {
+        "buses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BusPeriodVoltageSeries"
+          }
+        },
+        "generators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourcePeriodPowerSeries"
+          }
+        },
+        "dispatchable_loads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ResourcePeriodPowerSeries"
+          }
+        },
+        "hvdc_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/HvdcPeriodPowerSeries"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "BusPeriodVoltageSeries": {
+      "type": "object",
+      "required": [
+        "bus_number",
+        "va_rad",
+        "vm_pu"
+      ],
+      "properties": {
+        "bus_number": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "vm_pu": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "va_rad": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourcePeriodPowerSeries": {
+      "type": "object",
+      "required": [
+        "p_mw",
+        "resource_id"
+      ],
+      "properties": {
+        "resource_id": {
+          "type": "string"
+        },
+        "p_mw": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "q_mvar": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AcDispatchTargetTracking": {
+      "type": "object",
+      "properties": {
+        "generator_p_penalty_per_mw2": {
+          "description": "**Legacy** symmetric quadratic penalty applied to generator active-power deviation from the corresponding AC warm-start target. When nonzero, this value is used as the symmetric `(upward_per_mw2, downward_per_mw2)` default coefficient pair for every generator that does not have a per-resource override.",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "generator_p_coefficients_default": {
+          "description": "Per-direction default coefficient pair for generators. Overrides the legacy symmetric field when at least one component is positive. Leave both fields at zero to use the legacy scalar.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AcDispatchTargetTrackingPair"
+            }
+          ]
+        },
+        "generator_p_coefficients_overrides_by_id": {
+          "description": "Per-resource-id overrides for the generator coefficient pair. When an entry exists for a generator's `resource_id`, it replaces the default. Useful for giving free renewables a strong downward penalty and a zero upward penalty, or for pinning expensive peakers in both directions.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/AcDispatchTargetTrackingPair"
+          }
+        },
+        "dispatchable_load_p_penalty_per_mw2": {
+          "description": "**Legacy** symmetric quadratic penalty applied to dispatchable-load served active-power deviation.",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "dispatchable_load_p_coefficients_default": {
+          "description": "Per-direction default coefficient pair for dispatchable loads.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/AcDispatchTargetTrackingPair"
+            }
+          ]
+        },
+        "dispatchable_load_p_coefficients_overrides_by_id": {
+          "description": "Per-resource-id overrides for the dispatchable-load coefficient pair, keyed by `dispatchable_load.resource_id`.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/AcDispatchTargetTrackingPair"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "AcDispatchTargetTrackingPair": {
+      "description": "Asymmetric quadratic penalty pair for one generator or dispatchable load in the AC-OPF target-tracking term.\n\nThe tracking objective applies `upward_per_mw2 * max(0, p - target)² + downward_per_mw2 * max(0, target - p)²`. Symmetric behaviour (the legacy case) can be encoded by setting both fields to the same value.",
+      "type": "object",
+      "properties": {
+        "upward_per_mw2": {
+          "description": "Penalty coefficient when `p > target` (resource over-produces).",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        },
+        "downward_per_mw2": {
+          "description": "Penalty coefficient when `p < target` (resource under-produces).",
+          "default": 0.0,
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScedAcBendersRuntime": {
+      "description": "Per-period configuration for SCED-AC Benders decomposition.\n\nWhen `period_eta_active` is true for a period, the SCED LP allocates a scalar `eta[period]` variable with cost coefficient `+1.0` and adds a row for every cut in `cuts` whose `period` matches. Periods not listed run the standard SCED LP unchanged.",
+      "type": "object",
+      "properties": {
+        "eta_periods": {
+          "description": "List of period indices for which the SCED LP should activate the `eta[period]` epigraph variable. Empty disables Benders entirely.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0.0
+          }
+        },
+        "cuts": {
+          "description": "Cut pool. Each cut is keyed to a single period via `cut.period`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScedAcBendersCut"
+          }
+        },
+        "orchestration": {
+          "description": "When `Some`, the dispatch solver runs the full SCED-AC Benders master/subproblem orchestration loop internally using these parameters. When `None`, the solver uses `eta_periods`/`cuts` as-is, leaving iteration control to an external driver.\n\nEnabling orchestration only has an effect for the AC formulation on sequential horizons; the DC formulation and time-coupled AC horizons ignore the flag.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ScedAcBendersRunParams"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScedAcBendersCut": {
+      "description": "A single Benders optimality cut on the SCED LP from an AC-OPF subproblem.\n\nEncodes a linear lower bound of the form\n\n`eta[period] >= rhs_dollars_per_hour + Σ_g coefficient[gen] * Pg[gen, period]`\n\nwhere `eta[period]` is a scalar epigraph variable that the SCED LP will minimise (one per period). The cut is generated by solving the AC-OPF subproblem with `Pg` fixed to a candidate master schedule and reading the shadow prices on the bound constraints. See `surge_opf::solve_ac_opf_subproblem` for the cut construction details and the SCED-AC Benders module documentation for the convergence story.",
+      "type": "object",
+      "required": [
+        "coefficients_dollars_per_mw_per_hour",
+        "period",
+        "rhs_dollars_per_hour"
+      ],
+      "properties": {
+        "period": {
+          "description": "Period index this cut applies to.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "coefficients_dollars_per_mw_per_hour": {
+          "description": "Per-generator slope coefficient `λ_g` in `$/MW-hr`. Keyed by the generator's `resource_id` (i.e. `Generator::id`) so the cut survives network re-build / re-canonicalisation between solver invocations. Generators absent from the map have an implicit coefficient of zero.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "rhs_dollars_per_hour": {
+          "description": "Constant term of the cut in `$/hr`. Already incorporates `slack_cost` and the linear-expansion offset `−Σ λ_g · P̃g_g` evaluated at the master point that produced this cut.",
+          "type": "number",
+          "format": "double"
+        },
+        "iteration": {
+          "description": "Iteration index that generated this cut. Used by the orchestration loop for diagnostics and cut pruning.",
+          "default": 0,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScedAcBendersRunParams": {
+      "description": "Orchestration parameters controlling the SCED-AC Benders master / subproblem loop. When populated inside [`ScedAcBendersRuntime::orchestration`], the dispatch solver runs the full decomposition internally (using [`crate::sced_ac_benders::solve_sced_sequence_benders`]) rather than expecting the caller to drive iterations from outside.\n\nEvery field has a sensible default; callers typically populate only the fields they want to override.",
+      "type": "object",
+      "properties": {
+        "max_iterations": {
+          "description": "Maximum number of master iterations per period. Set low for smoke tests; production runs typically use 25–50.",
+          "default": 25,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "rel_tol": {
+          "description": "Relative-gap tolerance `(UB − LB) / max(|UB|, 1)` below which the loop terminates with `converged = true`.",
+          "default": 0.0001,
+          "type": "number",
+          "format": "double"
+        },
+        "abs_tol": {
+          "description": "Absolute-gap tolerance `(UB − LB)` in `$/hr` summed over the horizon below which the loop terminates with `converged = true`.",
+          "default": 1.0,
+          "type": "number",
+          "format": "double"
+        },
+        "min_slack_dollars_per_hour": {
+          "description": "Periods whose subproblem slack is below this threshold are considered AC-feasible and do not generate cuts. A tiny floor avoids wasting cuts on numerical noise.",
+          "default": 0.001,
+          "type": "number",
+          "format": "double"
+        },
+        "marginal_trim_dollars_per_mw_per_hour": {
+          "description": "Cut coefficients whose magnitude is below this trim are dropped before the cut is installed in the master LP.",
+          "default": 1e-6,
+          "type": "number",
+          "format": "double"
+        },
+        "trust_region_mw": {
+          "description": "Optional trust region (MW). When `Some(width)`, each iteration's master dispatch is clipped to within `±width` of the previous iteration's dispatch (per-generator, per-period) by tightening the generator bounds on the LP. `None` disables the trust region.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "trust_region_expansion_factor": {
+          "description": "Trust-region expansion factor after successful iterations.",
+          "default": 2.0,
+          "type": "number",
+          "format": "double"
+        },
+        "trust_region_contraction_factor": {
+          "description": "Trust-region contraction factor after stalled iterations.",
+          "default": 0.5,
+          "type": "number",
+          "format": "double"
+        },
+        "trust_region_min_mw": {
+          "description": "Minimum trust-region width (MW). Floor below which further contraction is pointless.",
+          "default": 1.0,
+          "type": "number",
+          "format": "double"
+        },
+        "max_cuts_per_period": {
+          "description": "Optional cap on the number of cuts per period in the master cut pool. When exceeded, the loosest cuts at the current master dispatch are pruned.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "cut_dedup_marginal_tol": {
+          "description": "Numerical tolerance for the cut dedup pass. Two cuts whose coefficients and rhs differ by less than this are treated as duplicates.",
+          "default": 1e-9,
+          "type": "number",
+          "format": "double"
+        },
+        "stagnation_patience": {
+          "description": "Number of consecutive iterations without a UB improvement before the loop terminates with `\"stagnation\"`.",
+          "default": 3,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "oscillation_patience": {
+          "description": "Number of recent iterations considered for the bimodal alternation detector; `0` disables the check.",
+          "default": 4,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "ac_opf_thermal_slack_penalty_per_mva": {
+          "description": "AC OPF subproblem thermal-overload slack penalty (`$/MVA-hr`). A large finite value keeps the subproblem feasible even when the master proposes an AC-infeasible dispatch.",
+          "default": 10000.0,
+          "type": "number",
+          "format": "double"
+        },
+        "ac_opf_bus_active_power_balance_slack_penalty_per_mw": {
+          "description": "AC OPF subproblem bus active-power balance slack penalty (`$/MW-hr`).",
+          "default": 10000.0,
+          "type": "number",
+          "format": "double"
+        },
+        "ac_opf_bus_reactive_power_balance_slack_penalty_per_mvar": {
+          "description": "AC OPF subproblem bus reactive-power balance slack penalty (`$/MVAr-hr`).",
+          "default": 10000.0,
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
