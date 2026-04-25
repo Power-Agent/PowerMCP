@@ -1,0 +1,18 @@
+# MCP server framework
+fastmcp>=2.0
+
+# Scientific stack
+numpy>=1.26
+matplotlib>=3.8
+pandas>=1.5
+
+# DIgSILENT PowerFactory Python API
+# -------------------------------------------------------
+# The "powerfactory" module is bundled with PowerFactory
+# and is NOT installable via pip.
+# Add its folder to PYTHONPATH before running the server:
+#
+#   Windows default path (adjust version numbers):
+#   C:\Program Files\DIgSILENT\PowerFactory <version>\Python\<python_version>
+#
+# See INSTALL.txt — Step 4 for full instructions.

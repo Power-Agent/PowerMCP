@@ -1,0 +1,191 @@
+DIgSILENT PowerFactory MCP Functions Overview
+=============================================
+
+This project exposes DIgSILENT PowerFactory simulation capabilities through an MCP server and a simulation agent.
+
+Main entry points
+-----------------
+- MCP_PowerFactory.py: MCP server entry point.
+- Agent_DIgSILENT.py: PowerFactory simulation engine.
+- simulation_config.json: active runtime configuration.
+- simulation_config.example.json: example configuration for new users.
+
+User-facing MCP tools in MCP_PowerFactory.py
+--------------------------------------------
+- ping
+  - Health check for the MCP server.
+  - Returns: "pong".
+
+- close_digsilent
+  - Closes the DIgSILENT / PowerFactory session by calling app.Exit() through the agent cleanup logic.
+  - Use this when you want to stop the PowerFactory API session from Claude.
+
+- get_config
+  - Reads and returns the active simulation_config.json file.
+  - Useful for checking the current project, study case, output folder, and export flags.
+
+- import_project
+  - Imports a PowerFactory .pfd project into the current PowerFactory session.
+  - Activates the imported project so it is ready for simulation.
+  - Optional input open_digsilent (default true) controls app.Show().
+
+- create_study_case
+  - Creates and activates a study case by name without running load flow or RMS simulation.
+  - If the case already exists, it is activated.
+  - If it does not exist, it is copied from a base study case (default: "0. Base").
+  - Uses exact case-name matching to avoid unintended duplicate copies.
+  - Verifies before/after study-case lists and fails if one call appears to create more than one new case.
+  - Inputs:
+    - case_name: target study case name.
+    - base_study_case: source case to copy from when creating.
+    - open_digsilent: if true (default), requests app.Show().
+    - request_id: optional idempotency key; repeated IDs are ignored safely.
+    - cfg_path (optional): config path used to read project_path.
+
+- modify_parameter
+  - Updates one PowerFactory attribute for all objects matching a query.
+  - Inputs:
+    - object_name: object query for app.GetCalcRelevantObjects (example: "G 10.ElmSym").
+    - variable: attribute name to modify (example: "e:outserv").
+    - new_value: new value written through SetAttribute.
+    - open_digsilent: if true (default), requests app.Show().
+  - The server auto-casts string inputs to the target attribute type (int/float/bool) when possible.
+  - Use this to quickly change statuses/parameters without editing JSON config files.
+
+- run_loadflow
+  - Runs a load flow calculation (ComLdf) on the currently active study case.
+  - Can be called standalone without running a full simulation pipeline.
+  - Optional input open_digsilent (default true) controls app.Show().
+
+- run_short_circuit
+  - Runs a short-circuit calculation (ComShc) on the currently active study case.
+  - Can be called standalone without running a full simulation pipeline.
+  - Optional input open_digsilent (default true) controls app.Show().
+
+- run_simulation
+  - Runs the full simulation pipeline using the configuration file.
+  - Pipeline steps: connect, activate study case, run load flow, run RMS simulation, export CSV, generate standard plots, optionally export PFD.
+  - Optional arguments:
+    - open_digsilent: enables/disables app.Show() request (default true).
+    - export_pfd: enables/disables PFD export.
+
+- run_custom_case
+  - Runs one custom fault simulation using call-time parameters.
+  - By default, reuses case_name as study case name (single persistent custom case).
+  - Optional: set create_new_study_case=true to create a unique timestamped study case per run.
+  - Optional arguments:
+    - open_digsilent: enables/disables app.Show() request (default true).
+    - create_new_study_case: enables/disables timestamped per-run study case creation.
+    - export_pfd: enables/disables PFD export.
+  - Overrides fault settings such as fault type, fault element, timing, switch element, and switch state.
+
+- read_results_csv
+  - Reads the latest RMS results CSV or a specific CSV file.
+  - Returns the CSV text plus metadata lines.
+  - If no file is passed, it searches the output directory for the newest *_RMS.csv file.
+
+Simulation engine in Agent_DIgSILENT.py
+--------------------------------------
+- SimulationConfig.from_json
+  - Loads simulation settings from JSON and maps only known fields into the dataclass.
+
+- Logger.info / Logger.ok / Logger.warn / Logger.error / Logger.section
+  - Simple console logging helpers used throughout the simulation pipeline.
+
+- DIgSILENTAgent.__init__
+  - Creates a simulation agent instance from a SimulationConfig.
+  - Initializes runtime state such as PowerFactory handles, result objects, grid data, and output directory tracking.
+
+- DIgSILENTAgent._ensure_run_output_dir
+  - Creates a run-specific output subfolder under output_dir.
+  - Ensures CSV, PNG, and PFD files for the same run stay grouped together.
+
+- DIgSILENTAgent.connect
+  - Connects to PowerFactory and activates the configured project.
+  - Reuses the active PowerFactory session when possible.
+
+- DIgSILENTAgent.activate_study_case
+  - Activates the configured study case.
+  - If the case does not exist, it can copy it from the base study case.
+
+- DIgSILENTAgent.run_loadflow
+  - Executes the load flow calculation (ComLdf).
+
+- DIgSILENTAgent.run_rms_simulation
+  - Applies fault or switching events, initializes RMS simulation, and runs ComInc / ComSim.
+
+- DIgSILENTAgent._apply_fault_event
+  - Creates the fault event sequence inside the PowerFactory study case.
+  - Supports bus faults, line faults, and generator switch events.
+
+- DIgSILENTAgent.addSwitchEvent
+  - Creates a PowerFactory EvtSwitch event for a selected object.
+
+- DIgSILENTAgent.export_results_to_csv
+  - Exports the RMS result object to CSV using ComRes.
+  - Saves the file in the run-specific output folder.
+
+- DIgSILENTAgent.export_project_to_pfd
+  - Exports the active PowerFactory project to a .pfd file using ComPfdexport.
+  - Saves the file in the run-specific output folder.
+
+- DIgSILENTAgent.generate_standard_plots
+  - Reads the RMS CSV results and generates standard plots automatically.
+  - Current standard plots:
+    - bus voltage magnitudes
+    - generator speeds
+  - Saves the PNG files in the run-specific output folder.
+
+- DIgSILENTAgent.close
+  - Shuts down the PowerFactory application and clears shared handles.
+
+- DIgSILENTAgent.import_project
+  - Imports a .pfd file directly into PowerFactory.
+
+- DIgSILENTAgent.create_study_case
+  - Activates project, then creates or reuses a study case by name.
+  - Uses AddCopy from base_study_case only when target case does not already exist.
+  - Target/base lookup uses exact IntCase loc_name matching.
+  - Supports idempotency via request_id cache (TTL 1 hour) to ignore replayed calls.
+
+- DIgSILENTAgent.modify_parameter
+  - Sets an attribute (SetAttribute) on all objects returned by app.GetCalcRelevantObjects(object_name).
+  - Applies type coercion so MCP string payloads can update numeric/boolean PF attributes.
+  - Returns success/failure and the number of updated objects.
+
+- DIgSILENTAgent.load_flow
+  - Standalone classmethod that runs ComLdf.Execute() on the active study case.
+  - Reuses _shared_app if already connected; otherwise calls GetApplicationExt().
+
+- DIgSILENTAgent.short_circuit
+  - Standalone classmethod that runs ComShc.Execute() on the active study case.
+  - Reuses _shared_app if already connected; otherwise calls GetApplicationExt().
+
+- DIgSILENTAgent.run_pipeline
+  - Executes the full workflow in order.
+  - Current sequence:
+    - connect
+    - activate study case
+    - load flow
+    - RMS simulation
+    - CSV export
+    - standard plot generation
+    - optional PFD export
+  - Returns a structured report with per-step status and output paths.
+
+Internal helper functions in Agent_DIgSILENT.py
+----------------------------------------------
+- _find_study_case_exact
+- _list_study_case_names
+- _prune_create_case_request_cache
+- _apply_show_preference
+- _ensure_run_output_dir
+
+Internal helper functions in MCP_PowerFactory.py
+-------------------------------------------------
+- _stderr_print
+- _pf
+- _load_modules
+- _to_json
+
+
