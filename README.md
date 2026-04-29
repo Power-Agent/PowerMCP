@@ -1,9 +1,9 @@
-# PowerMCP ⚡
+﻿# PowerMCP ⚡
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
+PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. It also includes reliability-focused integrations such as NARP for adequacy analysis (e.g., LOLE, HLOLE, EUE).  These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
 
 ## 🌟 What is MCP?
 
