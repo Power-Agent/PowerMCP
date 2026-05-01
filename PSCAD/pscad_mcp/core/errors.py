@@ -15,11 +15,7 @@ class ErrorKind(str, Enum):
 
 
 def classify_exception(exc: BaseException) -> ErrorKind:
-    """Map an exception to an ErrorKind by type and message substring.
-
-    Heuristic: mhi.pscad errors are stringly-typed. Unclassified falls back to
-    INTERNAL, which is the safest retry signal for the caller.
-    """
+    """Classify PSCAD exceptions into stable error kinds."""
     msg = str(exc).lower()
 
     if isinstance(exc, asyncio.TimeoutError):
@@ -72,12 +68,7 @@ def err_from_exc(exc: BaseException) -> Dict[str, Any]:
 
 
 def values_equivalent(requested: Any, stored: Any) -> bool:
-    """Compare a requested parameter value to what PSCAD stored.
-
-    PSCAD normalizes typed parameters: '230' may come back as '230 [kV]', and
-    whitespace can vary. This collapses unit-suffix differences and falls back
-    to numeric compare when both sides parse as floats.
-    """
+    """Compare requested and stored PSCAD parameter values."""
     if requested == stored:
         return True
     if requested is None or stored is None:

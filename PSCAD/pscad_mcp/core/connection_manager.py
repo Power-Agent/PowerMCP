@@ -23,7 +23,7 @@ class PSCADConnectionManager:
         return cls._instance
 
     def invalidate_heartbeat(self) -> None:
-        """Force the next `pscad` access to re-run the full health check."""
+        """Force the next PSCAD access to check connection health."""
         self._last_heartbeat_at = 0.0
 
     @property
