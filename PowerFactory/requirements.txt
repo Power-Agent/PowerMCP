@@ -10,9 +10,9 @@ pandas>=1.5
 # -------------------------------------------------------
 # The "powerfactory" module is bundled with PowerFactory
 # and is NOT installable via pip.
-# Add its folder to PYTHONPATH before running the server:
+# Add its folder to POWERFACTORY_PYTHON_PATH or PYTHONPATH before running the server:
 #
-#   Windows default path (adjust version numbers):
+#   Windows example (adjust version numbers):
 #   C:\Program Files\DIgSILENT\PowerFactory <version>\Python\<python_version>
 #
 # See INSTALL.txt — Step 4 for full instructions.

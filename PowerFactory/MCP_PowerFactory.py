@@ -22,10 +22,9 @@ Tools
 
 Usage
 -----
-  python MCP_PowerFactory.py                  # stdio transport (default)
-  python MCP_PowerFactory.py --transport sse  # SSE transport on port 8000
+    python MCP_PowerFactory.py                  # stdio transport (default)
+    python MCP_PowerFactory.py --transport sse   # SSE transport on port 8000
 """
-
 
 import sys
 import os
@@ -65,7 +64,6 @@ mcp = FastMCP(
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_CFG = os.path.join(_HERE, "simulation_config.json")
-_DEFAULT_PFD = os.path.join(os.path.expanduser("~"), "Desktop", "test.pfd")
 
 # ── Single dedicated thread for ALL PowerFactory API calls ────────────────────
 # PowerFactory's Python API requires every call to originate from the same
@@ -159,7 +157,7 @@ def get_config(cfg_path: str = "") -> str:
 
 @mcp.tool()
 def import_project(
-    file_path: str = _DEFAULT_PFD,
+    file_path: str = "",
     open_digsilent: bool = True,
 ) -> str:
     """
@@ -172,7 +170,7 @@ def import_project(
     ----------
     file_path : str
         Absolute path to the .pfd export file.
-        Default: ~/Desktop/test.pfd (resolved at runtime for the current user).
+        No default is bundled. Provide the project export path at call time.
     open_digsilent : bool
         If True (default), requests the PowerFactory GUI window via app.Show().
 
@@ -181,6 +179,8 @@ def import_project(
     str
         JSON string with success flag and message.
     """
+    if not file_path:
+        return json.dumps({"success": False, "message": "file_path is required"})
     _, DIgSILENTAgent = _load_modules()
     ok, msg = _pf(DIgSILENTAgent.import_project, file_path, open_digsilent)
     return json.dumps({"success": ok, "message": msg})
@@ -264,7 +264,11 @@ def modify_parameter(
 
 
 @mcp.tool()
-def run_loadflow(open_digsilent: bool = True) -> str:
+def run_loadflow(
+    open_digsilent: bool = True,
+    save_csv: bool = False,
+    cfg_path: str = "",
+) -> str:
     """
     Run a load flow calculation (ComLdf) on the currently active study case.
 
@@ -272,14 +276,40 @@ def run_loadflow(open_digsilent: bool = True) -> str:
     ----------
     open_digsilent : bool
         If True (default), requests the PowerFactory GUI window via app.Show().
+    save_csv : bool
+        If True, also exports a load-flow snapshot CSV with:
+        - buses (*.ElmTerm): m:u, m:phiu
+        - generators (*.ElmSym): m:P:bus1, m:Q:bus1
+        - loads (*.ElmLod): e:plini, e:qlini
+        Default: False.
+    cfg_path : str, optional
+        Optional path to simulation_config.json used for output_dir/run_label
+        when save_csv=True. Defaults to this server's config file.
 
     Returns
     -------
     str
         JSON string with success flag and message.
     """
-    _, DIgSILENTAgent = _load_modules()
-    ok, msg = _pf(DIgSILENTAgent.load_flow, open_digsilent)
+    SimulationConfig, DIgSILENTAgent = _load_modules()
+
+    output_dir = r"C:\RMS_Results"
+    run_label = "run_001"
+    if save_csv:
+        path = cfg_path or _DEFAULT_CFG
+        try:
+            cfg = SimulationConfig.from_json(path)
+            output_dir = getattr(cfg, "output_dir", output_dir) or output_dir
+            run_label = getattr(cfg, "run_label", run_label) or run_label
+        except Exception as e:
+            return json.dumps(
+                {
+                    "success": False,
+                    "message": f"Could not read config for CSV export: {e}",
+                }
+            )
+
+    ok, msg = _pf(DIgSILENTAgent.load_flow, open_digsilent, save_csv, output_dir, run_label)
     return json.dumps({"success": ok, "message": msg})
 
 
@@ -437,12 +467,23 @@ def run_custom_case(
 
 
 @mcp.tool()
-def read_results_csv(csv_path: str = "", max_rows: int = 2000) -> str:
+def read_results_csv(csv_path: str = "", max_rows: int = 2000, as_path: bool = False, max_bytes: int = 900_000) -> str:
     """
     Read the RMS simulation results CSV and return its contents.
 
     If csv_path is not provided, the most recently modified *_RMS.csv file
     found anywhere inside the configured output_dir is used automatically.
+
+    New parameters
+    --------------
+    as_path : bool, optional
+        If True, return a small JSON object containing the absolute file
+        path instead of the file contents. Use this to avoid hitting MCP
+        transport size limits when passing the CSV to external LLMs.
+    max_bytes : int, optional
+        If > 0, the returned CSV text will be truncated to at most
+        `max_bytes` bytes (UTF-8 encoded). Truncation happens at row
+        boundaries when possible.
 
     Parameters
     ----------
@@ -480,6 +521,9 @@ def read_results_csv(csv_path: str = "", max_rows: int = 2000) -> str:
     if not os.path.exists(target):
         return json.dumps({"error": f"File not found: {target}"})
 
+    if as_path:
+        return json.dumps({"file_path": target})
+
     with open(target, "r", encoding="utf-8", errors="replace") as fh:
         lines = fh.readlines()
 
@@ -490,16 +534,54 @@ def read_results_csv(csv_path: str = "", max_rows: int = 2000) -> str:
             break
 
     header_line = lines[header_idx] if lines else ""
-    data_lines  = lines[header_idx + 1:]
-    total_rows  = len(data_lines)
-    truncated   = total_rows > max_rows
-    data_lines  = data_lines[:max_rows]
+    data_lines = lines[header_idx + 1:]
+    total_rows = len(data_lines)
 
+    # Apply max_rows pagination
+    data_lines = data_lines[:max_rows]
+    rows_returned = len(data_lines)
+    truncated = total_rows > rows_returned
+
+    # Build csv text while optionally enforcing max_bytes limit
+    if max_bytes and max_bytes > 0:
+        out_bytes = bytearray()
+        # add header (may be truncated)
+        hb = header_line.encode("utf-8", errors="replace")
+        if len(hb) >= max_bytes:
+            out_bytes.extend(hb[:max_bytes])
+            csv_text = out_bytes.decode("utf-8", errors="replace")
+            meta = (
+                f"\n# file: {target}\n"
+                f"# total_data_rows: {total_rows}\n"
+                f"# rows_returned: {0}\n"
+                f"# truncated_by_size: True\n"
+            )
+            return csv_text + meta
+        out_bytes.extend(hb)
+
+        rows_emitted = 0
+        for line in data_lines:
+            lb = line.encode("utf-8", errors="replace")
+            if len(out_bytes) + len(lb) > max_bytes:
+                break
+            out_bytes.extend(lb)
+            rows_emitted += 1
+
+        csv_text = out_bytes.decode("utf-8", errors="replace")
+        meta = (
+            f"\n# file: {target}\n"
+            f"# total_data_rows: {total_rows}\n"
+            f"# rows_returned: {rows_emitted}\n"
+            f"# truncated_by_size: {len(out_bytes) >= max_bytes}\n"
+        )
+        return csv_text + meta
+
+    # Default (no byte-size enforcement): join header + data rows
     csv_text = header_line + "".join(data_lines)
     meta = (
         f"\n# file: {target}\n"
         f"# total_data_rows: {total_rows}\n"
-        f"# rows_returned: {min(total_rows, max_rows)}\n"
+        f"# rows_returned: {rows_returned}\n"
         f"# truncated: {truncated}\n"
     )
     return csv_text + meta
