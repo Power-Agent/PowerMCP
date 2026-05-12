@@ -22,16 +22,6 @@ DIgSILENT PowerFactory
 Output folder:  CSV results · PNG plots · optional .pfd export
 ```
 
-## Path Handling
-
-This repository does not hardcode a personal PowerFactory installation path or a user-specific project path.
-
-- Configure the PowerFactory Python folder with `POWERFACTORY_PYTHON_PATH` or your existing `PYTHONPATH`.
-- Set `project_path` and `output_dir` in `simulation_config.json` to match your machine.
-- Keep `simulation_config.json` out of Git; only commit the example config.
-
----
-
 ## Features
 
 - **Full simulation pipeline** — connect, activate study case, load flow, RMS transient simulation, CSV export, plot generation, optional PFD export in one call.
