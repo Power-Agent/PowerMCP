@@ -21,7 +21,7 @@ STEP 2 — INSTALL PYTHON DEPENDENCIES
     pip install -r requirements.txt
 
 This installs:
-    mcp >= 2.0          (MCP Python SDK / server framework)
+    fastmcp >= 2.0      (MCP server framework)
     numpy >= 1.26       (numerical computing)
     matplotlib >= 3.8   (plot generation)
     pandas >= 1.5       (CSV parsing)
@@ -33,18 +33,20 @@ See Step 4.
 STEP 3 — CONFIGURE THE POWERFACTORY PYTHON PATH
 -------------------------------------------------
 The powerfactory Python module lives inside your PowerFactory installation.
-You must add its path to PYTHONPATH so Python can import it.
+You must add its path to POWERFACTORY_PYTHON_PATH or PYTHONPATH so Python can import it.
 
-Default location (adjust version numbers as needed):
-    C:\Program Files\DIgSILENT\PowerFactory 2024\Python\3.11
+Typical location (adjust version numbers as needed):
+    C:\Program Files\DIgSILENT\PowerFactory <version>\Python\<python_version>
 
-Option A — Set a permanent environment variable (recommended):
-    setx PYTHONPATH "C:\Program Files\DIgSILENT\PowerFactory 2024\Python\3.11"
+Option A — Set a permanent environment variable for this repository:
+    setx POWERFACTORY_PYTHON_PATH "C:\Program Files\DIgSILENT\PowerFactory <version>\Python\<python_version>"
 
     Then restart your terminal / IDE.
 
-Option B — Add the path at runtime (already handled internally by the agent
-    if PowerFactory is running, but explicit PYTHONPATH is more reliable).
+Option B — Use PYTHONPATH instead if you already manage it globally:
+    setx PYTHONPATH "C:\Program Files\DIgSILENT\PowerFactory <version>\Python\<python_version>"
+
+The agent also accepts a semicolon-separated list in POWERFACTORY_PYTHON_PATH.
 
 Verify the import works:
     python -c "import powerfactory; print('OK')"
@@ -60,8 +62,8 @@ STEP 4 — CREATE THE CONFIGURATION FILE
 Open simulation_config.json in a text editor and fill in:
     - project_path   : PowerFactory project path as shown in the database tree
                        (e.g. "\\<user>\\<folder>\\MyProject.IntPrj")
-    - output_dir     : absolute Windows path for result files
-                       (e.g. "C:\\Users\\You\\Simulations\\Output")
+    - output_dir     : absolute path for result files on your machine
+                       (e.g. "C:\\Simulations\\PowerFactory")
     - study_case     : name of the study case to activate
     - base_study_case: name of the base case to copy from when creating new ones
     - run_label      : label prefix for CSV, PNG, and PFD output files

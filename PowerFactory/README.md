@@ -22,8 +22,6 @@ DIgSILENT PowerFactory
 Output folder:  CSV results · PNG plots · optional .pfd export
 ```
 
----
-
 ## Features
 
 - **Full simulation pipeline** — connect, activate study case, load flow, RMS transient simulation, CSV export, plot generation, optional PFD export in one call.
@@ -130,6 +128,7 @@ See [requirements.txt](requirements.txt) and [INSTALL.txt](INSTALL.txt) for full
 
 - Python 3.10+
 - DIgSILENT PowerFactory 2023 or later (with Python interface enabled)
+- PowerFactory Python module path configured through `POWERFACTORY_PYTHON_PATH` or `PYTHONPATH`
 - fastmcp >= 2.0
 - numpy >= 1.26
 - matplotlib >= 3.8
@@ -141,9 +140,7 @@ See [requirements.txt](requirements.txt) and [INSTALL.txt](INSTALL.txt) for full
 
 1. Install Python dependencies: `pip install -r requirements.txt`
 2. Add the PowerFactory Python path to your environment (see [INSTALL.txt](INSTALL.txt)).
-3. Copy and edit the config:
-   - CMD: `copy simulation_config.example.json simulation_config.json`
-   - PowerShell: `Copy-Item simulation_config.example.json simulation_config.json`
+3. Copy and edit the config: `cp simulation_config.example.json simulation_config.json`
 4. Start the MCP server: `python MCP_PowerFactory.py`
 5. Connect your AI assistant to the server using the MCP protocol.
 

@@ -1,9 +1,9 @@
 {
-    "project_path":    "\\<username>\\<project_folder>\\<project_name>.IntPrj",
+    "project_path":    "\\<powerfactory_project_path>",
     "study_case":      "Case 1",
     "base_study_case": "0. Base",
 
-    "output_dir":   "C:\\path\\to\\your\\output\\folder",
+    "output_dir":   "C:\\<output_folder>",
     "run_label":    "Test_1",
     "result_name":  "All calculations.ElmRes",
     "export_graph": 0,

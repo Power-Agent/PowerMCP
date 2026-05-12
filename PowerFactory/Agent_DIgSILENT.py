@@ -9,10 +9,10 @@ Author
   
 """
 
-
 import sys
 import os
 import json
+import csv
 import re
 import time
 from dataclasses import dataclass, field
@@ -24,7 +24,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ── PowerFactory Python path ──────────────────────────────────────
-sys.path.append(r"C:\Program Files\DIgSILENT\PowerFactory 2025 SP1\Python\3.13")
+# Prefer an environment variable so the repository does not hardcode a local
+# PowerFactory installation path.
+_pf_python_path = os.environ.get("POWERFACTORY_PYTHON_PATH") or os.environ.get("PYTHONPATH", "")
+for _path in [part.strip() for part in _pf_python_path.split(os.pathsep) if part.strip()]:
+    if _path not in sys.path:
+        sys.path.append(_path)
 
 # Deferred import: powerfactory is only available when PowerFactory is running.
 # Importing it at module level would crash the MCP server on startup if PF isn't
@@ -41,21 +46,9 @@ class SimulationConfig:
 
     # ── Project ───────────────────────────────────────────────────
     project_path: str = ""
-    study_case:   str = ""
+    study_case:   str = r"ctocto"
     base_study_case: str = r"0. Base"
 
-    def __post_init__(self):
-        """Fail fast when required environment-specific configuration is missing."""
-        if not self.project_path.strip():
-            raise ValueError(
-                "Missing required 'project_path' in SimulationConfig. "
-                "Please set it in simulation_config.json."
-            )
-        if not self.study_case.strip():
-            raise ValueError(
-                "Missing required 'study_case' in SimulationConfig. "
-                "Please set it in simulation_config.json."
-            )
     # ── Fault ─────────────────────────────────────────────────────
     # fault_type : "bus"  → EvtShc ON + EvtShc OFF (clear)
     #              "line" → EvtShc ON + EvtSwitch OPEN (trip line)
@@ -76,7 +69,7 @@ class SimulationConfig:
     dt_rms: float = 0.01    # seconds
 
     # ── CSV output ────────────────────────────────────────────────
-    output_dir:   str = r"C:\RMS_Results"
+    output_dir:   str = r""
     run_label:    str = "run_001"
     result_name:  str = "All calculations.ElmRes"
     export_pfd: int = 0
@@ -105,9 +98,9 @@ class SimulationConfig:
     # Adjust names to match elements in your network model.
     signals: list = field(default_factory=lambda: [
         # Bus voltages
-        ("Bus 01.ElmTerm",    "m:u",    "V_Troia_pu"),
-        ("Bus 02.ElmTerm",   "m:u",    "V_Ariano_pu"),
-        ("Bus 03.ElmTerm",   "m:u",    "V_Latina_pu"),
+        ("Bus 01.ElmTerm",    "m:u",    "V_01_pu"),
+        ("Bus 02.ElmTerm",   "m:u",    "V_02_pu"),
+        ("Bus 03.ElmTerm",   "m:u",    "V_03_pu"),
 
         # # Generator rotor angles
         # ("Gen 01.ElmSym",       "s:firel","Angle_CS1_deg"),
@@ -885,7 +878,130 @@ class DIgSILENTAgent:
     # ──────────────────────────────────────────────────────────────
 
     @classmethod
-    def load_flow(cls, open_digsilent: bool = True) -> tuple[bool, str]:
+    def _export_loadflow_snapshot_to_csv(
+        cls,
+        app,
+        output_dir: str,
+        run_label: str,
+    ) -> tuple[bool, str]:
+        """Export a point-in-time load-flow snapshot to CSV."""
+        try:
+            safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_label or "run")
+            base_dir = output_dir or r"C:\RMS_Results"
+            run_dir = os.path.join(base_dir, safe_label)
+            os.makedirs(run_dir, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_path = os.path.join(run_dir, f"{safe_label}_loadflow_{timestamp}.csv")
+
+            fieldnames = [
+                "element_type",
+                "e:loc_name",
+                "m:u",
+                "m:phiu",
+                "m:P:bus1",
+                "m:Q:bus1",
+                "e:plini",
+                "e:qlini",
+                "c:loading",
+                "n:Pflow:bus1",
+            ]
+
+            def _safe_get_attr(obj, attr_name: str):
+                try:
+                    return obj.GetAttribute(attr_name)
+                except Exception:
+                    return None
+
+            def _name_of(obj) -> str:
+                return str(getattr(obj, "loc_name", str(obj)))
+
+            def _scalar(value):
+                if value is None:
+                    return ""
+                if isinstance(value, (str, int, float, bool)):
+                    return value
+                return str(value)
+
+            rows = []
+
+            buses = app.GetCalcRelevantObjects("*.ElmTerm") or []
+            for obj in sorted(buses, key=_name_of):
+                rows.append({
+                    "element_type": "ElmTerm",
+                    "e:loc_name": _name_of(obj),
+                    "m:u": _scalar(_safe_get_attr(obj, "m:u")),
+                    "m:phiu": _scalar(_safe_get_attr(obj, "m:phiu")),
+                    "m:P:bus1": "",
+                    "m:Q:bus1": "",
+                    "e:plini": "",
+                    "e:qlini": "",
+                    "c:loading": "",
+                    "n:Pflow:bus1": "",
+                })
+
+            generators = app.GetCalcRelevantObjects("*.ElmSym") or []
+            for obj in sorted(generators, key=_name_of):
+                rows.append({
+                    "element_type": "ElmSym",
+                    "e:loc_name": _name_of(obj),
+                    "m:u": "",
+                    "m:phiu": "",
+                    "m:P:bus1": _scalar(_safe_get_attr(obj, "m:P:bus1")),
+                    "m:Q:bus1": _scalar(_safe_get_attr(obj, "m:Q:bus1")),
+                    "e:plini": "",
+                    "e:qlini": "",
+                    "c:loading": "",
+                    "n:Pflow:bus1": "",
+                })
+
+            loads = app.GetCalcRelevantObjects("*.ElmLod") or []
+            for obj in sorted(loads, key=_name_of):
+                rows.append({
+                    "element_type": "ElmLod",
+                    "e:loc_name": _name_of(obj),
+                    "m:u": "",
+                    "m:phiu": "",
+                    "m:P:bus1": "",
+                    "m:Q:bus1": "",
+                    "e:plini": _scalar(_safe_get_attr(obj, "e:plini")),
+                    "e:qlini": _scalar(_safe_get_attr(obj, "e:qlini")),
+                    "c:loading": "",
+                    "n:Pflow:bus1": "",
+                })
+
+            lines = app.GetCalcRelevantObjects("*.ElmLne") or []
+            for obj in sorted(lines, key=_name_of):
+                rows.append({
+                    "element_type": "ElmLne",
+                    "e:loc_name": _name_of(obj),
+                    "m:u": "",
+                    "m:phiu": "",
+                    "m:P:bus1": "",
+                    "m:Q:bus1": "",
+                    "e:plini": "",
+                    "e:qlini": "",
+                    "c:loading": _scalar(_safe_get_attr(obj, "c:loading")),
+                    "n:Pflow:bus1": _scalar(_safe_get_attr(obj, "n:Pflow:bus1")),
+                })
+
+            with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+                writer = csv.DictWriter(fh, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            return True, csv_path
+        except Exception as e:
+            return False, str(e)
+
+    @classmethod
+    def load_flow(
+        cls,
+        open_digsilent: bool = True,
+        save_csv: bool = False,
+        output_dir: str = r"C:\RMS_Results",
+        run_label: str = "run_001",
+    ) -> tuple[bool, str]:
         """Run a load flow (ComLdf) on the currently active study case."""
         global pf
         if pf is None:
@@ -907,6 +1023,14 @@ class DIgSILENTAgent:
             err = ldf.Execute()
             if err:
                 raise RuntimeError(f"ComLdf returned error code {err}")
+
+            if save_csv:
+                ok_csv, csv_msg = cls._export_loadflow_snapshot_to_csv(app, output_dir, run_label)
+                if not ok_csv:
+                    raise RuntimeError(f"Load flow OK, but CSV export failed: {csv_msg}")
+                log.ok(f"Load flow CSV saved → {csv_msg}")
+                return True, f"Load flow OK | CSV saved to {csv_msg}"
+
             log.ok("Load flow converged successfully")
             return True, "Load flow OK"
         except Exception as e:
