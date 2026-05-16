@@ -1,8 +1,16 @@
 from typing import List, Dict, Any, Optional
+import asyncio
 import os
 from mcp.server.fastmcp import FastMCP
 from pscad_mcp.core.connection_manager import pscad_manager
 from pscad_mcp.core.executor import robust_executor
+from pscad_mcp.core.errors import (
+    ErrorKind,
+    err,
+    err_from_exc,
+    ok,
+    values_equivalent,
+)
 
 async def load_projects(filenames: List[str]) -> str:
     """Load projects or workspace into PSCAD."""
@@ -90,15 +98,196 @@ async def set_project_settings(project_name: str, settings: Dict[str, Any]) -> s
     await robust_executor.run_safe(project.settings, **settings)
     return f"Settings updated for project '{project_name}'."
 
+async def run_project_and_wait(
+    project_name: str,
+    timeout_s: float = 300.0,
+    initial_poll_s: float = 0.5,
+    max_poll_s: float = 10.0,
+    ctx: Optional[Any] = None,
+) -> Dict[str, Any]:
+    try:
+        pscad = pscad_manager.pscad
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        if not pscad.licensed():
+            return err(ErrorKind.LICENSE, "PSCAD is not licensed.")
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        project = await robust_executor.run_safe(pscad.project, project_name)
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        await robust_executor.run_safe(project.run)
+    except Exception as e:
+        return err_from_exc(e)
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    poll_interval = initial_poll_s
+    last_status: Any = None
+    last_progress: Any = None
+    last_reported_progress: Any = -1
+
+    while True:
+        elapsed = loop.time() - started
+        if elapsed > timeout_s:
+            return err(
+                ErrorKind.TIMEOUT,
+                f"Run did not complete within {timeout_s}s. "
+                f"Last status: ({last_status!r}, {last_progress!r}).",
+            )
+
+        try:
+            last_status, last_progress = await robust_executor.run_safe(project.run_status)
+        except Exception as e:
+            return err_from_exc(e)
+
+        if last_status is None:
+            break
+
+        if (
+            ctx is not None
+            and last_progress is not None
+            and last_progress != last_reported_progress
+        ):
+            try:
+                await ctx.report_progress(last_progress, 100)
+            except Exception:
+                pass
+            last_reported_progress = last_progress
+
+        await asyncio.sleep(poll_interval)
+
+        if elapsed > 60:
+            poll_interval = min(poll_interval * 1.5, max_poll_s)
+        elif last_progress is not None:
+            poll_interval = min(max(poll_interval, 2.0), max_poll_s)
+        else:
+            poll_interval = min(poll_interval * 1.2, max_poll_s)
+
+    runtime_s = round(loop.time() - started, 2)
+
+    output_messages = ""
+    try:
+        output_messages = await robust_executor.run_safe(project.output)
+    except Exception:
+        # Some PSCAD runs complete without exposing output through the API.
+        pass
+
+    output_file_path: Optional[str] = None
+    try:
+        settings = await robust_executor.run_safe(project.settings)
+        if settings:
+            output_file_path = settings.get("output_filename")
+    except Exception:
+        # Output metadata is useful but not required for a successful run.
+        pass
+
+    return ok({
+        "final_status": "completed",
+        "runtime_s": runtime_s,
+        "output_messages": output_messages,
+        "output_file_path": output_file_path,
+    })
+
+
+async def set_component_parameters_safe(
+    project_name: str,
+    component_id: int,
+    parameters: Dict[str, Any],
+    rollback_on_mismatch: bool = True,
+) -> Dict[str, Any]:
+    try:
+        pscad = pscad_manager.pscad
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        project = await robust_executor.run_safe(pscad.project, project_name)
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        component = await robust_executor.run_safe(project.component, component_id)
+    except Exception as e:
+        return err_from_exc(e)
+
+    invalid: Dict[str, str] = {}
+    for name in parameters.keys():
+        try:
+            await robust_executor.run_safe(component.range, name)
+        except Exception as e:
+            invalid[name] = str(e)
+    if invalid:
+        return err(
+            ErrorKind.PARAM_INVALID,
+            f"Parameter validation failed: {invalid}",
+        )
+
+    try:
+        snapshot = await robust_executor.run_safe(component.parameters) or {}
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        await robust_executor.run_safe(component.parameters, parameters=parameters)
+    except Exception as e:
+        return err_from_exc(e)
+
+    try:
+        after = await robust_executor.run_safe(component.parameters) or {}
+    except Exception as e:
+        return err_from_exc(e)
+
+    mismatches: Dict[str, Dict[str, Any]] = {}
+    normalized: Dict[str, Any] = {}
+    for name, requested in parameters.items():
+        stored = after.get(name)
+        normalized[name] = stored
+        if not values_equivalent(requested, stored):
+            mismatches[name] = {"requested": requested, "stored": stored}
+
+    if mismatches and rollback_on_mismatch:
+        rollback_status = "applied"
+        try:
+            rollback_params = {
+                k: snapshot[k] for k in parameters.keys() if k in snapshot
+            }
+            if rollback_params:
+                await robust_executor.run_safe(
+                    component.parameters, parameters=rollback_params
+                )
+        except Exception as e:
+            rollback_status = f"failed: {e}"
+        return err(
+            ErrorKind.PARAM_INVALID,
+            f"Read-back mismatch on {list(mismatches.keys())}. "
+            f"Rollback {rollback_status}. Mismatches: {mismatches}",
+        )
+
+    return ok({
+        "applied": list(parameters.keys()),
+        "normalized_values": normalized,
+        "mismatches": mismatches,
+    })
+
+
 def register_project_tools(mcp: FastMCP):
     """Register tools for managing projects and components."""
     mcp.tool()(load_projects)
     mcp.tool()(list_projects)
     mcp.tool()(run_project)
+    mcp.tool()(run_project_and_wait)
     mcp.tool()(get_run_status)
     mcp.tool()(find_components)
     mcp.tool()(get_component_parameters)
     mcp.tool()(set_component_parameters)
+    mcp.tool()(set_component_parameters_safe)
     mcp.tool()(validate_component_parameters)
     mcp.tool()(get_project_settings)
     mcp.tool()(set_project_settings)
