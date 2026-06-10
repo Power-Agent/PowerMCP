@@ -130,6 +130,12 @@ TOOLS: dict[str, "Tool"] = {
             ),
             external_solvers=("Julia",),
         ),
+        Tool(
+            "powerio", "PowerIO", "open-source", windows_only=False, extra="powerio",
+            server_dir="powerio", run_kind="script", entry_rel="powerio_mcp.py",
+            probe="powerio",
+            notes="Format-neutral case conversion and matrix builder; the JSON transport is the cross-server exchange format.",
+        ),
         # ---- CLOSED-SOURCE / VENDOR ----
         Tool(
             "powerworld", "PowerWorld", "closed-source", windows_only=_W, extra="powerworld",
