@@ -126,16 +126,20 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 ### Case conversion between servers (PowerIO)
 
-The `powerio` extra adds a conversion server backed by [powerio](https://github.com/eigenergy/powerio). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian).
+The `powerio` extra adds a conversion server backed by [powerio](https://github.com/eigenergy/powerio). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
 
 Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and load it anywhere.
 
 ```
-parse_case(path="case9.raw")                 # powerio server → {"json": ..., "summary": ...}
-load_network_from_json(network_json=...)     # pandapower server ingests the transport
-load_model_from_json(network_json=...)       # egret server stages it as a solvable case file
-compute_matrix(kind="ptdf", json=...)        # powerio server builds matrices from it
+parse_case(path="case9.raw")                       # powerio server → {"json": ..., "summary": ...}
+load_network_from_json(network_json=...)           # pandapower server ingests the transport
+load_model_from_json(network_json=...)             # egret server stages it as a solvable case file
+import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
+compute_matrix(kind="ptdf", json=...)              # powerio server builds matrices from it
+save_case(to="psse", out_path="case9.raw", json=...)  # stage a file for path-only servers
 ```
+
+`save_case` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
 
 ### Running from a clone (without installing)
 
