@@ -261,3 +261,17 @@ def test_launch_powerio_runs_once(record_mcp_run):
     assert len(record_mcp_run) == 1
     _, kwargs = record_mcp_run[0]
     assert kwargs.get("transport") == "stdio"
+
+
+def test_inline_convert_stages_no_temp_files(monkeypatch):
+    # Inline conversion goes through powerio.convert_str entirely in memory;
+    # touching tempfile would be a regression to the old staging path.
+    import tempfile
+
+    def boom(*args, **kwargs):
+        raise AssertionError("inline conversion must not create temp files")
+
+    monkeypatch.setattr(tempfile, "mkstemp", boom)
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", boom)
+    r = powerio_mcp.convert_case(to="psse", content=CASE9.read_text(), from_="matpower")
+    assert r["text"]
