@@ -10,16 +10,22 @@ from contextlib import redirect_stdout, redirect_stderr
 from mcp.server.fastmcp import FastMCP
 from typing import Dict, Any
 
-# Set up storage directory (relative to this script)
-STORE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".andes_runs")
-os.makedirs(STORE_DIR, exist_ok=True)
+# Storage directory resolved lazily (no filesystem writes at import time)
+def _andes_runs_dir():
+    try:
+        from powermcp.paths import runs_dir
+        return str(runs_dir("andes"))
+    except Exception:
+        import os
+        d = os.path.join(os.path.expanduser("~"), ".powermcp", "runs", "andes")
+        os.makedirs(d, exist_ok=True)
+        return d
 
-# Configure logging
+# Configure logging (stream only at import; file handler attached lazily)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(STORE_DIR, 'mcp_server.log')),
         logging.StreamHandler()
     ]
 )
@@ -30,6 +36,21 @@ logging.getLogger('andes').setLevel(logging.WARNING)
 logging.getLogger('numpy').setLevel(logging.WARNING)
 logging.getLogger('scipy').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
+
+# Attach a file handler lazily on first tool use (no log file opened at import)
+_file_handler_added = False
+
+def _ensure_file_logging():
+    global _file_handler_added
+    if _file_handler_added:
+        return
+    try:
+        fh = logging.FileHandler(os.path.join(_andes_runs_dir(), 'mcp_server.log'))
+        fh.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        logging.getLogger().addHandler(fh)
+    except Exception:
+        pass
+    _file_handler_added = True
 
 # Initialize MCP server
 mcp = FastMCP("ANDES MCP Server")
@@ -48,6 +69,7 @@ def run_power_flow(file_path: str) -> Dict[str, Any]:
         Dict containing power flow results and output information
     """
     try:
+        _ensure_file_logging()
         # Convert to absolute path if not already
         abs_file_path = os.path.abspath(file_path)
         if not os.path.exists(abs_file_path):
@@ -57,7 +79,7 @@ def run_power_flow(file_path: str) -> Dict[str, Any]:
             }
 
         # Create a unique directory for this run
-        run_dir = os.path.join(STORE_DIR, f"pf_{Path(abs_file_path).stem}")
+        run_dir = os.path.join(_andes_runs_dir(), f"pf_{Path(abs_file_path).stem}")
         os.makedirs(run_dir, exist_ok=True)
         
         # Copy input file to run directory
@@ -126,16 +148,17 @@ def run_time_domain_simulation(step_size: float = 0.01, t_end: float = 10.0) -> 
         Dict containing simulation results and output information
     """
     try:
+        _ensure_file_logging()
         if 'current_system' not in system_state:
             return {
                 "status": "error",
                 "message": "No power system currently loaded. Run power flow first."
             }
-            
+
         ss = system_state['current_system']
-        
+
         # Create a unique directory for this run
-        run_dir = os.path.join(STORE_DIR, f"tds_{int(t_end)}s")
+        run_dir = os.path.join(_andes_runs_dir(), f"tds_{int(t_end)}s")
         os.makedirs(run_dir, exist_ok=True)
         
         # Save current directory and change to run directory
@@ -202,17 +225,18 @@ def run_eigenvalue_analysis(file_path: str) -> Dict[str, Any]:
         Dict containing the eigenvalue analysis results
     """
     try:
+        _ensure_file_logging()
         # Convert to absolute path if relative
         abs_file_path = os.path.abspath(file_path)
-        
+
         if not os.path.exists(abs_file_path):
             return {
                 "status": "error",
                 "message": f"File not found: {file_path}"
             }
-            
+
         # Create a unique directory for this run
-        run_dir = os.path.join(STORE_DIR, f"eig_{Path(abs_file_path).stem}")
+        run_dir = os.path.join(_andes_runs_dir(), f"eig_{Path(abs_file_path).stem}")
         os.makedirs(run_dir, exist_ok=True)
         
         # Save current directory and change to run directory
@@ -311,5 +335,5 @@ def get_system_info() -> Dict[str, Any]:
 
 if __name__ == "__main__":
     print(f"Starting ANDES MCP Server")
-    print(f"Using storage directory: {STORE_DIR}")
-    mcp.run(transport="stdio") 
+    print(f"Using storage directory: {_andes_runs_dir()}")
+    mcp.run(transport="stdio")

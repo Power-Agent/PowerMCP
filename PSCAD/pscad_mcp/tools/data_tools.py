@@ -5,13 +5,6 @@ from mcp.server.fastmcp import FastMCP
 from pscad_mcp.core.connection_manager import pscad_manager
 from pscad_mcp.core.executor import robust_executor
 
-# PSOUT availability check
-try:
-    import mhi.psout
-    PSOUT_AVAILABLE = True
-except ImportError:
-    PSOUT_AVAILABLE = False
-
 async def get_project_output(project_name: str) -> str:
     """Get the text output messages from the PSCAD project's runtime."""
     pscad = pscad_manager.pscad
@@ -20,9 +13,11 @@ async def get_project_output(project_name: str) -> str:
 
 async def read_output_file(file_path: str) -> Dict[str, Any]:
     """Read results from a .psout or .out file using mhi.psout."""
-    if not PSOUT_AVAILABLE:
+    try:
+        import mhi.psout
+    except ImportError:
         return {"error": "mhi-psout package not installed."}
-    
+
     try:
         abs_path = os.path.abspath(file_path)
         with mhi.psout.open(abs_path) as psout:

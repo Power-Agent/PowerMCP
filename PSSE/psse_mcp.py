@@ -4,25 +4,66 @@ import json
 import io
 from pathlib import Path
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from mcp.server.fastmcp import FastMCP
 from typing import Dict, List, Optional, Any
 
 # Initialize MCP server
 mcp = FastMCP("PSSE 35+ Positive Sequence Load Flow Program")
 
-# Import and initialize PSSE Python library
-# You need to change the path to the PSSE Python library and version to the path on your computer.
-sys.path.append(r'C:\Program Files\PTI\PSSE36\36.2\PSSPY311')
-sys.path.append(r'C:\Program Files\PTI\PSSE36\36.2\PSSBIN')
-os.environ['PATH'] = r'C:\Program Files\PTI\PSSE36\36.2\PSSPY311;' + os.environ['PATH']
-os.environ['PATH'] = r'C:\Program Files\PTI\PSSE36\36.2\PSSBIN;' + os.environ['PATH']
-import psse36
+# ---------------------------------------------------------------------------
+# Lazy, memoized PSS/E engine initialization.
+#
+# psspy lives in a local PSS/E install dir and psseinit() starts the engine.
+# Both used to run at import time, which crashed this module on any machine
+# without PSS/E and blocked packaging/discovery. They now run once, on the first
+# tool call. The PSSPYxxx / PSSBIN dirs come from ~/.powermcp/config.toml (keys
+# psse.python_lib, psse.bin) when powermcp is installed, else fall back to the
+# historical hardcoded paths so a raw checkout keeps working.
+# ---------------------------------------------------------------------------
+_PSSE_LEGACY = {
+    "python_lib": r"C:\Program Files\PTI\PSSE36\36.2\PSSPY311",
+    "bin": r"C:\Program Files\PTI\PSSE36\36.2\PSSBIN",
+}
+
+psspy = None  # imported lazily by _ensure_psse()
+_psse_ready = False
 
 
-import psspy
-psspy.psseinit(50)
+def _resolve_psse_paths():
+    """Return (python_lib, bin): config when available, else legacy defaults."""
+    try:
+        from powermcp.config import get_path
+        return (get_path("psse", "python_lib", must_exist=False),
+                get_path("psse", "bin", must_exist=False))
+    except Exception:
+        return _PSSE_LEGACY["python_lib"], _PSSE_LEGACY["bin"]
+
+
+def _ensure_psse():
+    """Inject PSS/E paths, import psspy, and call psseinit(50) exactly once."""
+    global psspy, _psse_ready
+    if _psse_ready:
+        return psspy
+    python_lib, bin_dir = _resolve_psse_paths()
+    for p in (python_lib, bin_dir):
+        if not p:
+            continue
+        if p not in sys.path:
+            sys.path.insert(0, p)
+        os.environ["PATH"] = p + os.pathsep + os.environ.get("PATH", "")
+    try:
+        import psse36  # noqa: F401  (vendor shim that sets up further paths)
+        import psspy as _psspy
+    except Exception as e:
+        raise RuntimeError(
+            "Could not import PSS/E (psspy). Ensure PSS/E is installed and its paths "
+            "are configured: `powermcp config set psse.python_lib <PSSPYxxx dir>` and "
+            "`powermcp config set psse.bin <PSSBIN dir>`. Original error: " + repr(e)
+        )
+    _psspy.psseinit(50)  # 50 = PSS/E 35+ bus mode; do NOT change
+    psspy = _psspy
+    _psse_ready = True
+    return psspy
 
 # Path to JSON command reference files
 JSON_DIR = Path(__file__).parent / "psspy_command_json"
@@ -368,6 +409,7 @@ def open_case(case: str) -> Dict[str, Any]:
         Dict with status and case information
     """
     try:
+        _ensure_psse()
         ierr = psspy.case(case)
         err, bus_data = psspy.abuscount(flag=2)
         err, branch_data = psspy.abrncount(flag=4)
@@ -397,6 +439,7 @@ def solve_case() -> Dict[str, Any]:
         Dict with status and result code
     """
     try:
+        _ensure_psse()
         ierr = psspy.nsol()
         if ierr == 0:
             return {'status': 'success', 'ierr': 0}
@@ -449,6 +492,7 @@ def run_psspy_command(function_name: str, arguments: Optional[Dict[str, Any]] = 
         return {"status": "error", "message": f"Unknown return_type '{return_type}' for '{function_name}'"}
 
     try:
+        _ensure_psse()
         result = handler(spec, arguments)
         # Attach function metadata for AI context
         result["_function"] = function_name
