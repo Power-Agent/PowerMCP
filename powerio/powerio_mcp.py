@@ -43,7 +43,7 @@ _EXT = {
 
 _MATRIX_KINDS = (
     "bprime", "bdoubleprime", "ybus_real", "ybus_imag",
-    "adjacency", "ptdf", "lodf", "laplacian",
+    "adjacency", "ptdf", "lodf", "laplacian", "lacpf",
 )
 
 
@@ -166,6 +166,54 @@ def convert_case(
 
 
 @mcp.tool()
+def save_case(
+    to: str,
+    out_path: str,
+    path: Optional[str] = None,
+    content: Optional[str] = None,
+    json: Optional[str] = None,
+    format: str = "matpower",
+    overwrite: bool = False,
+) -> Dict[str, Any]:
+    """Convert a case and write the result to a file on disk.
+
+    Use this to stage input for the servers that only accept file paths
+    (PSS/E, PowerWorld, ANDES, surge, PyPSA): convert any case — or the JSON
+    transport from `parse_case` — to the target format and point the other
+    server's load tool at `out_path`. Pick an `out_path` extension matching
+    `to` (`.m`, `.json`, `.raw`, `.aux`).
+
+    `to` is a format name or alias: `matpower` (`m`), `powermodels-json`
+    (`pm`), `egret-json` (`egret`), `psse` (`raw`), `powerworld` (`aux`).
+    Provide exactly one of `path`, `content` (with `format`), or `json` (the
+    transport string). An existing `out_path` is not overwritten unless
+    `overwrite` is true.
+
+    Returns `{"path": <absolute path written>, "bytes_written": <count>,
+    "warnings": [<fidelity notes>]}`.
+    """
+    case = _load(path, content, json, format)
+    try:
+        conv = case.to_format(to)
+    except powerio.PowerIOError as exc:
+        raise ValueError(f"conversion failed: {exc}") from exc
+    try:
+        with open(out_path, "w" if overwrite else "x", encoding="utf-8") as fh:
+            fh.write(conv.text)
+    except FileExistsError:
+        raise ValueError(
+            f"refusing to overwrite existing file: {out_path}; pass overwrite=true"
+        ) from None
+    except OSError as exc:
+        raise ValueError(f"write failed: {exc}") from exc
+    return {
+        "path": os.path.abspath(out_path),
+        "bytes_written": len(conv.text.encode("utf-8")),
+        "warnings": list(conv.warnings),
+    }
+
+
+@mcp.tool()
 def case_summary(
     path: Optional[str] = None,
     content: Optional[str] = None,
@@ -262,8 +310,9 @@ def compute_matrix(
     `kind` is one of: `bprime` (FDPF B', shuntless), `bdoubleprime` (FDPF B''
     with shunts and taps), `ybus_real` / `ybus_imag` (Re/Im of Y_bus),
     `adjacency` (0/1 bus adjacency), `ptdf` (DC PTDF, m×n), `lodf` (DC LODF,
-    m×m), `laplacian` (weighted Laplacian L = A diag(b) Aᵀ). `scheme`
-    ("bx"|"xb") applies to bprime/bdoubleprime; `convention`
+    m×m), `laplacian` (weighted Laplacian L = A diag(b) Aᵀ), `lacpf`
+    (linearized AC 2n×2n block [[G, -B], [-B, -G]], taps and shifts included).
+    `scheme` ("bx"|"xb") applies to bprime/bdoubleprime; `convention`
     ("paper"|"matpower") to ptdf/lodf/laplacian.
 
     Provide exactly one of `path`, `content` (with `format`), or `json` — the
@@ -293,6 +342,8 @@ def compute_matrix(
             m = case.ptdf(convention)
         elif kind == "lodf":
             m = case.lodf(convention)
+        elif kind == "lacpf":
+            m = case.lacpf()
         else:
             m = case.weighted_laplacian(convention)
     except ImportError as exc:
