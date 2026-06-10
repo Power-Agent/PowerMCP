@@ -267,6 +267,9 @@ def get_network_info() -> Dict[str, Any]:
 _POWERIO_HINT = "powerio not installed: pip install 'powerio[mcp,matrix]'"
 
 # powerio bus kind -> MATPOWER/PYPOWER BUS_TYPE code
+# NOTE: _PPC_BUS_TYPE and _powerio_case_to_ppc are duplicated between
+# pandapower/panda_mcp.py and PyPSA/pypsa_mcp.py (server scripts are
+# standalone); keep the two copies identical and sync any fix to both.
 _PPC_BUS_TYPE = {"PQ": 1.0, "PV": 2.0, "REF": 3.0, "ISOLATED": 4.0}
 
 
