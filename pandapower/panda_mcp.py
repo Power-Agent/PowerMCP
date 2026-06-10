@@ -255,5 +255,227 @@ def get_network_info() -> Dict[str, Any]:
             "message": f"Failed to get network information: {str(e)}"
         }
 
+# ---------------------------------------------------------------------------
+# powerio bridge: exchange cases with the powerio conversion server.
+# Its parse_case / case_to_json tools emit a JSON transport string that
+# load_network_from_json ingests directly, so a case parsed once there loads
+# here without re-reading the file; export_network_to_format sends the current
+# network back out through powerio. powerio is an optional extra, so each tool
+# degrades to a status dict when it is missing.
+# ---------------------------------------------------------------------------
+
+_POWERIO_HINT = "powerio not installed: pip install 'powerio[mcp,matrix]'"
+
+# powerio bus kind -> MATPOWER/PYPOWER BUS_TYPE code
+_PPC_BUS_TYPE = {"PQ": 1.0, "PV": 2.0, "REF": 3.0, "ISOLATED": 4.0}
+
+
+def _powerio_case_to_ppc(case) -> Dict[str, Any]:
+    """Build a PYPOWER ppc dict from a powerio Network.
+
+    Values are MATPOWER style (MW, MVAr, degrees), which is what powerio's
+    parsed source tables carry; in-service loads and shunts are summed into
+    the bus table the way MATPOWER stores them.
+    """
+    import numpy as np
+
+    buses = case.buses
+    row_of = {b["id"]: i for i, b in enumerate(buses)}
+    bus = np.zeros((len(buses), 13))
+    for i, b in enumerate(buses):
+        bus[i, :] = (
+            b["id"], _PPC_BUS_TYPE.get(b["kind"], 1.0), 0.0, 0.0, 0.0, 0.0,
+            b["area"], b["vm"], b["va"], b["base_kv"], b["zone"], b["vmax"], b["vmin"],
+        )
+    for load in case.loads:
+        i = row_of.get(load["bus"])
+        if i is not None and load["in_service"]:
+            bus[i, 2] += load["p"]
+            bus[i, 3] += load["q"]
+    for shunt in case.shunts:
+        i = row_of.get(shunt["bus"])
+        if i is not None and shunt["in_service"]:
+            bus[i, 4] += shunt["g"]
+            bus[i, 5] += shunt["b"]
+
+    gens = case.generators
+    gen = np.zeros((len(gens), 21))
+    for i, g in enumerate(gens):
+        gen[i, :10] = (
+            g["bus"], g["pg"], g["qg"], g["qmax"], g["qmin"], g["vg"],
+            g["mbase"], float(g["in_service"]), g["pmax"], g["pmin"],
+        )
+
+    branches = case.branches
+    branch = np.zeros((len(branches), 13))
+    for i, br in enumerate(branches):
+        branch[i, :] = (
+            br["from_id"], br["to_id"], br["r"], br["x"], br["b"],
+            br["rate_a"], br["rate_b"], br["rate_c"], br["tap"], br["shift"],
+            float(br["in_service"]), br["angmin"], br["angmax"],
+        )
+
+    ppc = {
+        "version": "2",
+        "baseMVA": float(case.base_mva),
+        "bus": bus,
+        "gen": gen,
+        "branch": branch,
+    }
+
+    # gencost rows are [model, startup, shutdown, ncost, coeffs...] with
+    # coefficients left-aligned after ncost, padded to the widest row — the
+    # layout from_ppc reads. MATPOWER requires cost data for all gens or none,
+    # so a partial cost set is dropped rather than padded with fake rows.
+    costs = [g["cost"] for g in gens]
+    if costs and all(c is not None for c in costs):
+        gencost = np.zeros((len(costs), 4 + max(len(c["coeffs"]) for c in costs)))
+        for i, c in enumerate(costs):
+            gencost[i, :4] = (c["model"], c["startup"], c["shutdown"], c["ncost"])
+            gencost[i, 4:4 + len(c["coeffs"])] = c["coeffs"]
+        ppc["gencost"] = gencost
+    return ppc
+
+
+def _ppc_to_net(ppc) -> pp.pandapowerNet:
+    from pandapower.converter.pypower.from_ppc import from_ppc
+
+    return from_ppc(ppc)
+
+
+def _ppc_to_matpower_text(ppc) -> str:
+    """Serialize PYPOWER input tables as MATPOWER .m text for powerio to parse.
+    Columns beyond the MATPOWER input widths (result columns) are dropped."""
+    width = {"bus": 13, "gen": 21, "branch": 13}
+    out = [
+        "function mpc = ppc_export",
+        "mpc.version = '2';",
+        f"mpc.baseMVA = {float(ppc['baseMVA'])!r};",
+    ]
+    for name in ("bus", "gen", "branch", "gencost"):
+        table = ppc.get(name)
+        if table is None or len(table) == 0:
+            continue
+        w = width.get(name)
+        rows = "\n".join(
+            "\t" + "\t".join(repr(float(v)) for v in (row[:w] if w else row)) + ";"
+            for row in table
+        )
+        out.append(f"mpc.{name} = [\n{rows}\n];")
+    return "\n".join(out) + "\n"
+
+
+def _network_info_response(message: str) -> Dict[str, Any]:
+    return {
+        "status": "success",
+        "message": message,
+        "network_info": {
+            "buses": len(_current_net.bus),
+            "lines": len(_current_net.line),
+            "trafos": len(_current_net.trafo),
+        },
+    }
+
+
+@mcp.tool()
+def load_network_from_any(file_path: str, source_format: Optional[str] = None) -> Dict[str, Any]:
+    """Load a network from any powerio readable case file.
+
+    Reads MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels JSON, or
+    egret JSON via powerio and converts it to a pandapower network, replacing
+    the currently loaded one. Use this for case formats load_network does not
+    accept. Requires the powerio extra (pip install 'powermcp[powerio]').
+
+    Args:
+        file_path: Path to the case file
+        source_format: Input format name (matpower, powermodels-json,
+            egret-json, psse, powerworld); inferred from the file extension
+            when omitted
+
+    Returns:
+        Dict containing status and network information
+    """
+    logger.info(f"Loading network via powerio from: {file_path}")
+    global _current_net
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.parse_file(file_path, source_format)
+        _current_net = _ppc_to_net(_powerio_case_to_ppc(case))
+    except FileNotFoundError:
+        return {"status": "error", "message": f"File not found: {file_path}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to load network: {str(e)}"}
+    return _network_info_response(f"Network loaded successfully from {file_path}")
+
+
+@mcp.tool()
+def load_network_from_json(network_json: str) -> Dict[str, Any]:
+    """Load a network from a powerio JSON transport string.
+
+    Accepts the `json` string returned by the powerio server's parse_case or
+    case_to_json tools, so a case parsed once there loads here without passing
+    a file around or re-parsing it. Expects source-valued tables (MW, degrees)
+    as parse_case emits them, not the per-unit normalize_case form. Replaces
+    the currently loaded network. Requires the powerio extra
+    (pip install 'powermcp[powerio]').
+
+    Args:
+        network_json: The JSON transport string from powerio
+
+    Returns:
+        Dict containing status and network information
+    """
+    logger.info("Loading network from powerio JSON transport")
+    global _current_net
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.from_json(network_json)
+        _current_net = _ppc_to_net(_powerio_case_to_ppc(case))
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to load network: {str(e)}"}
+    return _network_info_response("Network loaded successfully from JSON transport")
+
+
+@mcp.tool()
+def export_network_to_format(to_format: str) -> Dict[str, Any]:
+    """Export the current network to a power system case format via powerio.
+
+    Converts the loaded network to MATPOWER tables and serializes them with
+    powerio. to_format is a powerio format name: matpower (m),
+    powermodels-json (pm), egret-json (egret), psse (raw), powerworld (aux).
+    Requires the powerio extra (pip install 'powermcp[powerio]').
+
+    Args:
+        to_format: Target format name
+
+    Returns:
+        Dict with status, the exported case `text`, and fidelity `warnings`
+        listing anything the target format could not represent
+    """
+    logger.info(f"Exporting network via powerio to format: {to_format}")
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        net = _get_network()
+        from pandapower.converter.pypower.to_ppc import to_ppc
+
+        ppc = to_ppc(net, init="flat")
+        case = powerio.parse_str(_ppc_to_matpower_text(ppc), "matpower")
+        conv = case.to_format(to_format)
+    except RuntimeError as re:
+        return {"status": "error", "message": str(re)}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to export network: {str(e)}"}
+    return {"status": "success", "text": conv.text, "warnings": list(conv.warnings)}
+
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio") 
+    mcp.run(transport="stdio")
