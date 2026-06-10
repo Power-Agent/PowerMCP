@@ -104,5 +104,12 @@ eig_*/
 .coverage
 htmlcov/
 
+# Type checkers, linters, and tool caches
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+
 # PSCAD generated docs (can be re-synced)
 PSCAD/docs/
