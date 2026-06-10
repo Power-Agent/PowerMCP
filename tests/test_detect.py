@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from powermcp import detect
 
 
@@ -15,6 +17,11 @@ def test_first_existing(tmp_path):
     assert detect._first_existing([None, ""]) is None
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="ltspice_exe builds ProgramFiles paths with backslash separators; "
+    "they only resolve on a real Windows filesystem",
+)
 def test_ltspice_exe_finds_adi(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setenv("ProgramFiles", str(tmp_path))
