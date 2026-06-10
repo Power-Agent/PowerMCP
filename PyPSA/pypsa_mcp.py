@@ -564,5 +564,221 @@ def export_to_csv_folder(network_name: str, folder_path: str) -> Dict[str, Any]:
         }
 
 
+# ---------------------------------------------------------------------------
+# powerio bridge: import any powerio readable case as a PyPSA network.
+# powerio parses MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels
+# JSON, and egret JSON; the case becomes a PYPOWER ppc dict, pypsa imports it,
+# and the network is saved to a .nc file whose path the other tools accept as
+# network_name. powerio is an optional extra, so the tools degrade to a status
+# dict when it is missing.
+# ---------------------------------------------------------------------------
+
+_POWERIO_HINT = "powerio not installed: pip install 'powerio[mcp,matrix]'"
+
+# powerio bus kind -> MATPOWER/PYPOWER BUS_TYPE code
+# NOTE: _PPC_BUS_TYPE and _powerio_case_to_ppc are duplicated between
+# pandapower/panda_mcp.py and PyPSA/pypsa_mcp.py (server scripts are
+# standalone); keep the two copies identical and sync any fix to both.
+_PPC_BUS_TYPE = {"PQ": 1.0, "PV": 2.0, "REF": 3.0, "ISOLATED": 4.0}
+
+
+def _powerio_case_to_ppc(case) -> Dict[str, Any]:
+    """Build a PYPOWER ppc dict from a powerio Network.
+
+    Values are MATPOWER style (MW, MVAr, degrees), which is what powerio's
+    parsed source tables carry; in-service loads and shunts are summed into
+    the bus table the way MATPOWER stores them.
+    """
+    import numpy as np
+
+    buses = case.buses
+    row_of = {b["id"]: i for i, b in enumerate(buses)}
+    bus = np.zeros((len(buses), 13))
+    for i, b in enumerate(buses):
+        bus[i, :] = (
+            b["id"], _PPC_BUS_TYPE.get(b["kind"], 1.0), 0.0, 0.0, 0.0, 0.0,
+            b["area"], b["vm"], b["va"], b["base_kv"], b["zone"], b["vmax"], b["vmin"],
+        )
+    for load in case.loads:
+        i = row_of.get(load["bus"])
+        if i is not None and load["in_service"]:
+            bus[i, 2] += load["p"]
+            bus[i, 3] += load["q"]
+    for shunt in case.shunts:
+        i = row_of.get(shunt["bus"])
+        if i is not None and shunt["in_service"]:
+            bus[i, 4] += shunt["g"]
+            bus[i, 5] += shunt["b"]
+
+    gens = case.generators
+    gen = np.zeros((len(gens), 21))
+    for i, g in enumerate(gens):
+        gen[i, :10] = (
+            g["bus"], g["pg"], g["qg"], g["qmax"], g["qmin"], g["vg"],
+            g["mbase"], float(g["in_service"]), g["pmax"], g["pmin"],
+        )
+
+    branches = case.branches
+    branch = np.zeros((len(branches), 13))
+    for i, br in enumerate(branches):
+        branch[i, :] = (
+            br["from_id"], br["to_id"], br["r"], br["x"], br["b"],
+            br["rate_a"], br["rate_b"], br["rate_c"], br["tap"], br["shift"],
+            float(br["in_service"]), br["angmin"], br["angmax"],
+        )
+
+    ppc = {
+        "version": "2",
+        "baseMVA": float(case.base_mva),
+        "bus": bus,
+        "gen": gen,
+        "branch": branch,
+    }
+
+    # gencost rows are [model, startup, shutdown, ncost, coeffs...] with
+    # coefficients left-aligned after ncost, padded to the widest row — the
+    # layout from_ppc reads. MATPOWER requires cost data for all gens or none,
+    # so a partial cost set is dropped rather than padded with fake rows.
+    costs = [g["cost"] for g in gens]
+    if costs and all(c is not None for c in costs):
+        gencost = np.zeros((len(costs), 4 + max(len(c["coeffs"]) for c in costs)))
+        for i, c in enumerate(costs):
+            gencost[i, :4] = (c["model"], c["startup"], c["shutdown"], c["ncost"])
+            gencost[i, 4:4 + len(c["coeffs"])] = c["coeffs"]
+        ppc["gencost"] = gencost
+    return ppc
+
+
+def _import_case_to_netcdf(case, output_path: str, overwrite_zero_s_nom: Optional[float]):
+    """Import a powerio case into a fresh PyPSA network, save it to
+    output_path, and collect warnings about anything the ppc import cannot
+    represent."""
+    ppc = _powerio_case_to_ppc(case)
+    warnings = []
+    isolated = ppc["bus"][:, 1] == 4.0
+    if isolated.any():
+        # import_from_pypower_ppc indexes ["", "PQ", "PV", "Slack"] by bus
+        # type, so type 4 would raise; PyPSA has no isolated bus type.
+        ppc["bus"][isolated, 1] = 1.0
+        warnings.append(f"{int(isolated.sum())} isolated bus(es) imported as PQ")
+    if any(g["cost"] is not None for g in case.generators):
+        warnings.append(
+            "generator cost data is not representable by the PyPSA ppc import and was dropped"
+        )
+    if (ppc["bus"][:, 9] == 0).any():
+        warnings.append("buses with base_kv 0 are assigned v_nom 1 by PyPSA")
+    in_service = ppc["branch"][:, 10] == 1.0
+    if overwrite_zero_s_nom is None and (ppc["branch"][in_service, 5] == 0).any():
+        warnings.append(
+            "branches with rating 0 imported with s_nom 0; pass overwrite_zero_s_nom to set a value"
+        )
+    network = Network()
+    network.import_from_pypower_ppc(ppc, overwrite_zero_s_nom=overwrite_zero_s_nom)
+    network.export_to_netcdf(output_path)
+    info = {
+        "buses": len(network.buses),
+        "generators": len(network.generators),
+        "loads": len(network.loads),
+        "lines": len(network.lines),
+        "transformers": len(network.transformers),
+        "shunt_impedances": len(network.shunt_impedances),
+    }
+    return info, warnings
+
+
+@mcp.tool()
+def import_case_from_any(
+    file_path: str,
+    output_path: str,
+    source_format: Optional[str] = None,
+    overwrite_zero_s_nom: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Import any powerio readable case file as a PyPSA network saved to a
+    NetCDF file.
+
+    Reads MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels JSON, or
+    egret JSON via powerio and writes a PyPSA network to output_path (use a
+    .nc extension); pass that path as network_name to the other tools. PyPSA's
+    ppc import drops generator cost data; anything else it cannot represent is
+    listed in the returned warnings. Branches with rating 0 are imported with
+    s_nom 0 unless overwrite_zero_s_nom supplies a value. Requires the powerio
+    extra (pip install 'powermcp[powerio]').
+
+    Args:
+        file_path: Path to the case file
+        output_path: Where to save the imported network (.nc)
+        source_format: Input format name (matpower, powermodels-json,
+            egret-json, psse, powerworld); inferred from the file extension
+            when omitted
+        overwrite_zero_s_nom: Replacement s_nom for branches with rating 0
+
+    Returns:
+        Dict with status, the saved network_file path, component counts, and
+        warnings about dropped or adjusted data
+    """
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.parse_file(file_path, source_format)
+        info, warnings = _import_case_to_netcdf(case, output_path, overwrite_zero_s_nom)
+    except FileNotFoundError:
+        return {"status": "error", "message": f"File not found: {file_path}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to import case: {str(e)}"}
+    return {
+        "status": "success",
+        "message": f"Network imported and saved to {output_path}",
+        "network_file": output_path,
+        "info": info,
+        "warnings": warnings,
+    }
+
+
+@mcp.tool()
+def import_case_from_json(
+    network_json: str,
+    output_path: str,
+    overwrite_zero_s_nom: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Import a powerio JSON transport string as a PyPSA network saved to a
+    NetCDF file.
+
+    Accepts the `json` string returned by the powerio server's parse_case or
+    case_to_json tools, so a case parsed once there loads here without passing
+    a file around or re-parsing it. Expects source-valued tables (MW, degrees)
+    as parse_case emits them, not the per-unit normalize_case form. Writes the
+    network to output_path (use a .nc extension); pass that path as
+    network_name to the other tools. Requires the powerio extra
+    (pip install 'powermcp[powerio]').
+
+    Args:
+        network_json: The JSON transport string from powerio
+        output_path: Where to save the imported network (.nc)
+        overwrite_zero_s_nom: Replacement s_nom for branches with rating 0
+
+    Returns:
+        Dict with status, the saved network_file path, component counts, and
+        warnings about dropped or adjusted data
+    """
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.from_json(network_json)
+        info, warnings = _import_case_to_netcdf(case, output_path, overwrite_zero_s_nom)
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to import case: {str(e)}"}
+    return {
+        "status": "success",
+        "message": f"Network imported and saved to {output_path}",
+        "network_file": output_path,
+        "info": info,
+        "warnings": warnings,
+    }
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

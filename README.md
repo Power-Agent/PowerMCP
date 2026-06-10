@@ -77,7 +77,7 @@ The base install includes the two open-source engines that need no extra setup â
 ```bash
 pip install powermcp[psse]              # add PSS/E support
 pip install powermcp[andes,opendss]     # add several tools at once
-pip install powermcp[opensource]        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice)
+pip install powermcp[opensource]        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice, PowerIO)
 pip install powermcp[all]               # everything (closed-source tools still need the local software)
 ```
 
@@ -123,6 +123,23 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 | PSCAD | *(none)* | `pip install powermcp[pscad-windows]` provides `mhi-pscad`; PSCAD must be installed |
 
 > The Codex *Desktop* app on Windows has been reported to overwrite `~/.codex/config.toml`; the Codex *CLI* is unaffected. If you use both, re-run `powermcp install` after Desktop edits.
+
+### Case conversion between servers (PowerIO)
+
+The `powerio` extra adds a conversion server backed by [powerio](https://github.com/eigenergy/powerio). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
+
+Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and load it anywhere.
+
+```
+parse_case(path="case9.raw")                       # powerio server â†’ {"json": ..., "summary": ...}
+load_network_from_json(network_json=...)           # pandapower server ingests the transport
+load_model_from_json(network_json=...)             # egret server stages it as a solvable case file
+import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
+compute_matrix(kind="ptdf", json=...)              # powerio server builds matrices from it
+save_case(to="psse", out_path="case9.raw", json=...)  # stage a file for path-only servers
+```
+
+`save_case` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
 
 ### Running from a clone (without installing)
 
