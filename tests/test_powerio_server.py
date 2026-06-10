@@ -57,6 +57,26 @@ mpc.branch = [
 ];
 """
 
+# 3-bus case with an out-of-service branch (2-3, status 0) and an out-of-service
+# generator (at PQ bus 3, status 0), for the PyPSA/pandapower status tests.
+OOS_CASE = """function mpc = oos
+mpc.version = '2';
+mpc.baseMVA = 100.0;
+mpc.bus = [
+\t1 3 0 0 0 0 1 1.0 0.0 230.0 1 1.1 0.9;
+\t2 1 50 10 0 0 1 1.0 0.0 230.0 1 1.1 0.9;
+\t3 1 30 5 0 0 1 1.0 0.0 230.0 1 1.1 0.9;
+];
+mpc.gen = [
+\t1 80 0 50 -50 1.0 100 1 200 0 0 0 0 0 0 0 0 0 0 0 0;
+\t3 20 0 50 -50 1.0 100 0 100 0 0 0 0 0 0 0 0 0 0 0 0;
+];
+mpc.branch = [
+\t1 2 0.01 0.05 0.0 250 0 0 0 0 1 -360 360;
+\t2 3 0.01 0.05 0.0 250 0 0 0 0 0 -360 360;
+];
+"""
+
 
 def test_parse_case_json_round_trips():
     r = powerio_mcp.parse_case(path=str(CASE9))
@@ -231,6 +251,63 @@ def test_pypsa_import_missing_file(tmp_path):
     r = pypsa_mcp.import_case_from_any("/nope/missing.m", str(tmp_path / "x.nc"))
     assert r["status"] == "error"
     assert "not found" in r["message"].lower()
+
+
+def test_pypsa_import_drops_out_of_service_branch(tmp_path):
+    # PyPSA's ppc import ignores branch status, so the bridge must drop the
+    # out-of-service branch (2-3) rather than import it as an active line.
+    src = tmp_path / "oos.m"
+    src.write_text(OOS_CASE)
+    out = tmp_path / "oos.nc"
+    r = pypsa_mcp.import_case_from_any(str(src), str(out))
+    assert r["status"] == "success", r
+    assert pypsa.Network(str(out)).lines.shape[0] == 1  # only the in-service 1-2
+    assert any("out-of-service branch" in w for w in r["warnings"]), r["warnings"]
+
+
+def test_pypsa_import_warns_out_of_service_generator(tmp_path):
+    src = tmp_path / "oos.m"
+    src.write_text(OOS_CASE)
+    r = pypsa_mcp.import_case_from_any(str(src), str(tmp_path / "g.nc"))
+    assert r["status"] == "success", r
+    assert any("out-of-service generator" in w for w in r["warnings"]), r["warnings"]
+
+
+def test_pandapower_bridge_honors_branch_status(tmp_path):
+    # Contrast with PyPSA: pandapower's from_ppc models status, so the bridge
+    # keeps the out-of-service branch as an inactive line (not dropped).
+    panda_dir = str(TOOLS["pandapower"].resolve_server_dir())
+    if panda_dir not in sys.path:
+        sys.path.insert(0, panda_dir)
+    import panda_mcp  # noqa: E402
+
+    src = tmp_path / "oos.m"
+    src.write_text(OOS_CASE)
+    res = panda_mcp.load_network_from_any(str(src))
+    assert res["status"] == "success", res
+    in_service = panda_mcp._current_net.line["in_service"].tolist()
+    assert len(in_service) == 2 and in_service.count(False) == 1, in_service
+
+
+def test_compute_matrix_laplacian():
+    m = powerio_mcp.compute_matrix("laplacian", path=str(CASE9))
+    assert m["format"] == "coo"
+    assert m["shape"] == [9, 9]
+
+
+def test_compute_matrix_bad_json_raises_valueerror():
+    with pytest.raises(ValueError):
+        powerio_mcp.compute_matrix("bprime", json="{not valid json")
+
+
+def test_convert_case_normalizes_stage_oserror(monkeypatch):
+    # a failure staging inline content surfaces as ValueError, not a raw OSError
+    def boom(content, fmt):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(powerio_mcp, "_stage", boom)
+    with pytest.raises(ValueError):
+        powerio_mcp.convert_case(to="psse", content="x", from_="matpower")
 
 
 def test_registry_entry():

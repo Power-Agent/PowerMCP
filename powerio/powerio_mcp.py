@@ -23,6 +23,18 @@ from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("PowerIO Conversion Server")
 
+# Fail fast if `import powerio` resolved to something without the real API — e.g.
+# this server's own powerio/ directory shadowing the package as a PEP 420
+# namespace (editable installs / PYTHONPATH / pytest rootdir), where the import
+# silently binds the empty dir. The shipped wheel (force-include relocation) and
+# `powermcp run powerio` (probe origin check) are already guarded; this covers
+# the dev paths where tool calls would otherwise die with a cryptic AttributeError.
+if not hasattr(powerio, "parse_file"):  # pragma: no cover
+    raise ImportError(
+        "the 'powerio' package is not importable (the repo's powerio/ directory "
+        "may be shadowing it); install it: pip install 'powerio[mcp,matrix]'"
+    )
+
 # Format name (and alias) → file extension, for staging inline content to a temp
 # file. `convert_file` is path-only, so inline conversion writes the text to disk
 # first; a matching extension keeps the format obvious even though we always
@@ -108,6 +120,10 @@ def _load(
         return powerio.from_json(json)
     except powerio.PowerIOError as exc:
         raise ValueError(f"parse failed: {exc}") from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        # Wrong-schema JSON may raise these instead of PowerIOError; keep the one
+        # documented error shape (a JSONDecodeError is itself a ValueError).
+        raise ValueError(f"parse failed: {exc}") from exc
 
 
 def _summary(case: "powerio.Network") -> Dict[str, Any]:
@@ -162,6 +178,10 @@ def convert_case(
         raise ValueError(f"conversion failed: {exc}") from exc
     except FileNotFoundError as exc:
         raise ValueError(f"file not found: {exc}") from exc
+    except OSError as exc:
+        # e.g. staging the inline content to a temp file failed (read-only temp
+        # dir, disk full); normalize to the module's single error shape.
+        raise ValueError(f"conversion failed: {exc}") from exc
     return {"text": conv.text, "warnings": list(conv.warnings)}
 
 
@@ -348,8 +368,10 @@ def compute_matrix(
             m = case.lodf(convention)
         elif kind == "lacpf":
             m = case.lacpf()
-        else:
+        elif kind == "laplacian":
             m = case.weighted_laplacian(convention)
+        else:  # pragma: no cover - unreachable; guarded by the _MATRIX_KINDS check
+            raise ValueError(f"unhandled matrix kind {kind!r}")
     except ImportError as exc:
         raise ValueError(str(exc)) from exc
     except powerio.PowerIOError as exc:

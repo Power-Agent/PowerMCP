@@ -667,14 +667,41 @@ def _import_case_to_netcdf(case, output_path: str, overwrite_zero_s_nom: Optiona
         )
     if (ppc["bus"][:, 9] == 0).any():
         warnings.append("buses with base_kv 0 are assigned v_nom 1 by PyPSA")
-    in_service = ppc["branch"][:, 10] == 1.0
-    if overwrite_zero_s_nom is None and (ppc["branch"][in_service, 5] == 0).any():
+
+    # PyPSA's import_from_pypower_ppc ignores the ppc status columns (branch
+    # col 10, gen col 7), so out-of-service elements would import as fully
+    # active and silently change topology. Drop them before import and report
+    # the count. (pandapower's from_ppc honors status, so its bridge does not
+    # need this — keep that asymmetry in mind when syncing the shared helper.)
+    br_oos = ppc["branch"][:, 10] == 0.0
+    if br_oos.any():
+        ppc["branch"] = ppc["branch"][~br_oos]
+        warnings.append(
+            f"{int(br_oos.sum())} out-of-service branch(es) dropped "
+            "(PyPSA's ppc import does not model branch status)"
+        )
+    gen_oos = ppc["gen"][:, 7] == 0.0
+    if gen_oos.any():
+        ppc["gen"] = ppc["gen"][~gen_oos]
+        if "gencost" in ppc:  # keep gencost rows aligned with gen rows
+            ppc["gencost"] = ppc["gencost"][~gen_oos]
+        warnings.append(
+            f"{int(gen_oos.sum())} out-of-service generator(s) dropped "
+            "(PyPSA's ppc import does not model generator status)"
+        )
+
+    # Only in-service branches remain now, so the rating-0 check is exact (and
+    # an out-of-service rating-0 branch no longer slips in unwarned).
+    if overwrite_zero_s_nom is None and (ppc["branch"][:, 5] == 0).any():
         warnings.append(
             "branches with rating 0 imported with s_nom 0; pass overwrite_zero_s_nom to set a value"
         )
     network = Network()
     network.import_from_pypower_ppc(ppc, overwrite_zero_s_nom=overwrite_zero_s_nom)
-    network.export_to_netcdf(output_path)
+    try:
+        network.export_to_netcdf(output_path)
+    except OSError as exc:
+        raise OSError(f"failed to write network to {output_path}: {exc}") from exc
     info = {
         "buses": len(network.buses),
         "generators": len(network.generators),
