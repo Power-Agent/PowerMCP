@@ -63,7 +63,31 @@ mcp = FastMCP(
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_CFG = os.path.join(_HERE, "simulation_config.json")
+
+
+def _default_cfg_path():
+    """Resolve the user-writable default config path (lazily, never at import).
+
+    Uses the powermcp config key ``powerfactory.config_path`` when set, otherwise
+    ``~/.powermcp/powerfactory/simulation_config.json``. On first use the bundled
+    ``simulation_config.example.json`` is copied there if the destination does not
+    yet exist (the packaged copy is read-only).
+    """
+    import os, shutil
+    try:
+        from powermcp.config import get_path
+        p = get_path("powerfactory", "config_path", must_exist=False)
+        if p:
+            return p
+    except Exception:
+        pass
+    base = os.path.join(os.path.expanduser("~"), ".powermcp", "powerfactory")
+    os.makedirs(base, exist_ok=True)
+    dest = os.path.join(base, "simulation_config.json")
+    example = os.path.join(os.path.dirname(os.path.abspath(__file__)), "simulation_config.example.json")
+    if not os.path.exists(dest) and os.path.exists(example):
+        shutil.copyfile(example, dest)
+    return dest
 
 # ── Single dedicated thread for ALL PowerFactory API calls ────────────────────
 # PowerFactory's Python API requires every call to originate from the same
@@ -150,7 +174,7 @@ def close_digsilent() -> str:
 @mcp.tool()
 def get_config(cfg_path: str = "") -> str:
     """Return the active simulation_config.json as a JSON string."""
-    path = cfg_path or _DEFAULT_CFG
+    path = cfg_path or _default_cfg_path()
     with open(path, "r", encoding="utf-8") as fh:
         return json.dumps(json.load(fh), indent=2, ensure_ascii=False)
 
@@ -218,7 +242,7 @@ def create_study_case(
         JSON string with success flag and message.
     """
     SimulationConfig, DIgSILENTAgent = _load_modules()
-    path = cfg_path or _DEFAULT_CFG
+    path = cfg_path or _default_cfg_path()
     cfg = SimulationConfig.from_json(path)
     ok, msg = _pf(
         DIgSILENTAgent.create_study_case,
@@ -296,7 +320,7 @@ def run_loadflow(
     output_dir = r"C:\RMS_Results"
     run_label = "run_001"
     if save_csv:
-        path = cfg_path or _DEFAULT_CFG
+        path = cfg_path or _default_cfg_path()
         try:
             cfg = SimulationConfig.from_json(path)
             output_dir = getattr(cfg, "output_dir", output_dir) or output_dir
@@ -364,7 +388,7 @@ def run_simulation(
         and per-step status.
     """
     SimulationConfig, DIgSILENTAgent = _load_modules()
-    path = cfg_path or _DEFAULT_CFG
+    path = cfg_path or _default_cfg_path()
     cfg = SimulationConfig.from_json(path)
     cfg.export_pfd = 1 if export_pfd else 0
     cfg.open_digsilent = 1 if open_digsilent else 0
@@ -438,7 +462,7 @@ def run_custom_case(
         JSON string with pipeline result (same schema as run_simulation).
     """
     SimulationConfig, DIgSILENTAgent = _load_modules()
-    path = cfg_path or _DEFAULT_CFG
+    path = cfg_path or _default_cfg_path()
     cfg = SimulationConfig.from_json(path)
     if create_new_study_case:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -502,7 +526,7 @@ def read_results_csv(csv_path: str = "", max_rows: int = 2000, as_path: bool = F
     if csv_path:
         target = csv_path
     else:
-        with open(_DEFAULT_CFG, "r", encoding="utf-8") as fh:
+        with open(_default_cfg_path(), "r", encoding="utf-8") as fh:
             cfg_data = json.load(fh)
         base_dir = cfg_data.get("output_dir", _HERE)
 

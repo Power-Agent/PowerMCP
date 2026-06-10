@@ -24,12 +24,32 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ── PowerFactory Python path ──────────────────────────────────────
-# Prefer an environment variable so the repository does not hardcode a local
-# PowerFactory installation path.
-_pf_python_path = os.environ.get("POWERFACTORY_PYTHON_PATH") or os.environ.get("PYTHONPATH", "")
-for _path in [part.strip() for part in _pf_python_path.split(os.pathsep) if part.strip()]:
-    if _path not in sys.path:
-        sys.path.append(_path)
+# The bundled vendor `powerfactory` module lives next to the PowerFactory
+# installation. Its directory is resolved lazily (from powermcp config, with an
+# environment-variable fallback) and injected onto sys.path only at the moment
+# of the deferred `import powerfactory`, never at module import time.
+
+def _powerfactory_python_path():
+    import os
+    try:
+        from powermcp.config import get_path
+        p = get_path("powerfactory", "python_path", must_exist=False)
+        if p:
+            return p
+    except Exception:
+        pass
+    return os.environ.get("POWERFACTORY_PYTHON_PATH") or os.environ.get("PYTHONPATH")
+
+
+def _ensure_powerfactory_on_path():
+    """Inject the PowerFactory python_path dir onto sys.path if not present."""
+    raw = _powerfactory_python_path()
+    if not raw:
+        return
+    for _path in [part.strip() for part in raw.split(os.pathsep) if part.strip()]:
+        if _path not in sys.path:
+            sys.path.append(_path)
+
 
 # Deferred import: powerfactory is only available when PowerFactory is running.
 # Importing it at module level would crash the MCP server on startup if PF isn't
@@ -239,6 +259,7 @@ class DIgSILENTAgent:
             global pf
             open_digsilent = bool(getattr(self.cfg, "open_digsilent", 1))
             if pf is None:
+                _ensure_powerfactory_on_path()
                 import powerfactory as pf
             if DIgSILENTAgent._shared_app is None:
                 self.app = pf.GetApplicationExt()
@@ -729,6 +750,7 @@ class DIgSILENTAgent:
         """
         global pf
         if pf is None:
+            _ensure_powerfactory_on_path()
             import powerfactory as pf
 
         if not os.path.isfile(file_path):
@@ -797,6 +819,7 @@ class DIgSILENTAgent:
         """
         global pf
         if pf is None:
+            _ensure_powerfactory_on_path()
             import powerfactory as pf
 
         try:
@@ -1005,6 +1028,7 @@ class DIgSILENTAgent:
         """Run a load flow (ComLdf) on the currently active study case."""
         global pf
         if pf is None:
+            _ensure_powerfactory_on_path()
             import powerfactory as pf
         try:
             if cls._shared_app is None:
@@ -1046,6 +1070,7 @@ class DIgSILENTAgent:
         """Run a short-circuit calculation (ComShc) on the currently active study case."""
         global pf
         if pf is None:
+            _ensure_powerfactory_on_path()
             import powerfactory as pf
         try:
             if cls._shared_app is None:
@@ -1094,6 +1119,7 @@ class DIgSILENTAgent:
         """
         global pf
         if pf is None:
+            _ensure_powerfactory_on_path()
             import powerfactory as pf
 
         try:

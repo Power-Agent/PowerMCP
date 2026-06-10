@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import psutil
 import logging
-from typing import Optional
-import mhi.pscad
+from typing import Optional, TYPE_CHECKING
 from pscad_mcp.core.executor import robust_executor
+
+if TYPE_CHECKING:
+    import mhi.pscad
 
 logger = logging.getLogger("pscad-mcp.connection")
 
@@ -50,6 +54,14 @@ class PSCADConnectionManager:
 
     async def attach_local(self) -> str:
         """Robustly attach to any local PSCAD instance or launch a new one."""
+        try:
+            import mhi.pscad
+        except ImportError as e:
+            raise RuntimeError(
+                "PSCAD support requires Windows, a PSCAD installation, and "
+                "`pip install powermcp[pscad-windows]` (provides mhi-pscad/mhi-psout). "
+                "Original import error: " + repr(e)
+            )
         try:
             self._pscad = await robust_executor.run_safe(mhi.pscad.application)
             return f"Successfully attached to PSCAD {self._pscad.version} (Local)."

@@ -68,23 +68,55 @@ logging.basicConfig(
 # =============================================================================
 #  2. Environment & Path Configuration
 # =============================================================================
-# --- IMPORTANT: USER CONFIGURATION REQUIRED ---
-# The user must set this path to their LTspice executable.
-# Default for Windows:
-LTSPICE_EXECUTABLE_PATH = r"C:\Program Files\LTC\LTspiceXVII\XVIIx64.exe"
-# For macOS/Linux with Wine, it might look like:
-# LTSPICE_EXECUTABLE_PATH = "/Users/username/.wine/drive_c/Users/username/AppData/Local/Programs/ADI/LTspice/LTspice.exe"
-
 # On macOS/Linux, Wine is required to run the Windows version of LTSpice.
 WINE_COMMAND = "wine"
 
-# Define the base directory for all simulation outputs.
-# This script is in the project root, so we can get the directory directly.
-project_root = os.path.dirname(os.path.abspath(__file__))
-BASE_OUTPUT_DIR = os.path.join(project_root, "simulation_output")
 
-# Ensure the base output directory exists on startup.
-os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+def _ltspice_exe():
+    """
+    Lazily resolve the LTspice executable path. Resolution order:
+      1. an explicit setting (env ``POWERMCP_LTSPICE_EXE`` or the ~/.powermcp
+         config key ``ltspice.exe``),
+      2. auto-detection of a standard install (modern ADI / legacy LTC / Wine),
+      3. the legacy Windows default (bare clone without powermcp).
+    On macOS/Linux this may be a Wine-wrapped path; that is handled by callers.
+    """
+    import os
+
+    explicit = os.environ.get("POWERMCP_LTSPICE_EXE")
+    if not explicit:
+        try:
+            from powermcp.config import get as _cfg_get
+            explicit = _cfg_get("ltspice", "exe")
+        except Exception:
+            explicit = None
+    if explicit:
+        return os.path.expanduser(explicit)
+
+    try:
+        from powermcp.detect import ltspice_exe as _detect
+        found = _detect()
+        if found:
+            return found
+    except Exception:
+        pass
+
+    return os.path.expanduser(r"C:\Program Files\LTC\LTspiceXVII\XVIIx64.exe")
+
+
+def _output_dir():
+    """
+    Lazily resolve a user-writable base directory for simulation outputs,
+    created on first use. Defaults to ~/.powermcp/runs/ltspice.
+    """
+    try:
+        from powermcp.paths import runs_dir
+        return str(runs_dir("ltspice"))
+    except Exception:
+        import os
+        d = os.path.join(os.path.expanduser("~"), ".powermcp", "runs", "ltspice")
+        os.makedirs(d, exist_ok=True)
+        return d
 
 
 def check_ltspice_executable():
@@ -96,8 +128,9 @@ def check_ltspice_executable():
         if not shutil.which(WINE_COMMAND):
             return False, f"'{WINE_COMMAND}' command not found. Wine is required to run LTspice on this OS."
 
-    if not os.path.exists(os.path.expanduser(LTSPICE_EXECUTABLE_PATH)):
-        return False, f"LTspice executable not found at '{LTSPICE_EXECUTABLE_PATH}'. Please check the path."
+    ltspice_exe = _ltspice_exe()
+    if not os.path.exists(os.path.expanduser(ltspice_exe)):
+        return False, f"LTspice executable not found at '{ltspice_exe}'. Please check the path."
     return True, ""
 
 
@@ -116,7 +149,7 @@ async def create_simulation_session(netlist_text: str) -> dict:
     """
     try:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        session_dir = os.path.join(BASE_OUTPUT_DIR, timestamp)
+        session_dir = os.path.join(_output_dir(), timestamp)
         os.makedirs(session_dir, exist_ok=True)
 
         netlist_path = os.path.join(session_dir, "circuit.net")
@@ -153,10 +186,11 @@ async def run_simulation(netlist_path: str, session_dir: str) -> dict:
 
     try:
         netlist_filename = os.path.basename(netlist_path)
+        ltspice_exe = _ltspice_exe()
         if sys.platform == "win32":
-            cmd = [LTSPICE_EXECUTABLE_PATH, "-b", netlist_filename]
+            cmd = [ltspice_exe, "-b", netlist_filename]
         else:
-            cmd = [WINE_COMMAND, LTSPICE_EXECUTABLE_PATH, "-b", netlist_filename]
+            cmd = [WINE_COMMAND, ltspice_exe, "-b", netlist_filename]
 
         process = subprocess.run(
             cmd, cwd=session_dir, capture_output=True, text=True, check=False
@@ -320,10 +354,11 @@ async def view_netlist_in_ltspice(netlist_path: str) -> dict:
         return {"status": "error", "message": f"Netlist file not found: '{netlist_path}'"}
 
     try:
+        ltspice_exe = _ltspice_exe()
         if sys.platform == "win32":
-            cmd = [LTSPICE_EXECUTABLE_PATH, os.path.abspath(netlist_path)]
+            cmd = [ltspice_exe, os.path.abspath(netlist_path)]
         else:
-            cmd = [WINE_COMMAND, LTSPICE_EXECUTABLE_PATH, os.path.abspath(netlist_path)]
+            cmd = [WINE_COMMAND, ltspice_exe, os.path.abspath(netlist_path)]
         subprocess.Popen(cmd)
         message = (f"🚀 LTspice launched successfully with {os.path.basename(netlist_path)}.\n"
                    f"💡 Note: The circuit is a text netlist, so no visual schematic will appear.")

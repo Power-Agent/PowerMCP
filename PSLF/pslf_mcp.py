@@ -1,6 +1,5 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 import subprocess
 from mcp.server.fastmcp import FastMCP
@@ -9,8 +8,48 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 # Initialize MCP server
 mcp = FastMCP("PSLF Positive Sequence Load Flow Program")
 
-from PSLF_PYTHON import *
-init_pslf(silent=False, working_directory=os.getcwd())
+# ---------------------------------------------------------------------------
+# Lazy, memoized PSLF engine initialization.
+#
+# `from PSLF_PYTHON import *` and init_pslf() used to run at import time, which
+# crashed this module on any machine without PSLF and blocked packaging. The
+# PSLF_PYTHON module is vendor-supplied (not on PyPI); its directory comes from
+# ~/.powermcp/config.toml (key pslf.python_lib) when powermcp is installed and
+# is added to sys.path before the import. The wildcard names (Pslf,
+# CaseParameters, Bus, Flox, ...) are published into this module's globals on
+# first use, so the tool functions below keep referencing them unchanged.
+# ---------------------------------------------------------------------------
+_pslf_ready = False
+
+
+def _resolve_pslf_lib():
+    try:
+        from powermcp.config import get_path
+        return get_path("pslf", "python_lib", must_exist=False)
+    except Exception:
+        return None
+
+
+def _ensure_pslf():
+    """Inject the PSLF_PYTHON dir, import it, and call init_pslf() exactly once."""
+    global _pslf_ready
+    if _pslf_ready:
+        return
+    lib = _resolve_pslf_lib()
+    if lib and lib not in sys.path:
+        sys.path.insert(0, lib)
+    try:
+        import PSLF_PYTHON
+    except Exception as e:
+        raise RuntimeError(
+            "Could not import PSLF_PYTHON. Install PSLF and configure its path: "
+            "`powermcp config set pslf.python_lib <dir containing PSLF_PYTHON>`. "
+            "Original error: " + repr(e)
+        )
+    # Publish the wildcard names (Pslf, CaseParameters, Bus, Flox, init_pslf, ...).
+    globals().update({k: getattr(PSLF_PYTHON, k) for k in dir(PSLF_PYTHON) if not k.startswith("_")})
+    PSLF_PYTHON.init_pslf(silent=False, working_directory=os.getcwd())
+    _pslf_ready = True
 
 @mcp.tool()
 def open_case(case: str) -> Dict[str, Any]:
@@ -25,6 +64,7 @@ def open_case(case: str) -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.load_case(os.getcwd() + "\\" + case)
         cp = CaseParameters()
         
@@ -67,6 +107,7 @@ def save_case() -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.save_case(os.getcwd() + "\\temp.sav")
         
         if (iret == 0):
@@ -93,6 +134,7 @@ def solve_case() -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.solve_case()
         if (iret == 0):
             return {
@@ -151,6 +193,7 @@ def add_bus(busnum: int, busname: str, nominalkv: float, type: int = 1) -> Dict[
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 0, busnum, 'type basekv busnam', str(type) + " " + str(nominalkv) + " " + busname)
         cp = CaseParameters()
         
@@ -253,6 +296,7 @@ def add_branch(frombus: int, tobus: int, reactance: float, circuit: str = "1 ", 
     """
     try:
         
+        _ensure_pslf()
         # determine if it is a transformer or transmission line
         index = Pslf.bus_internal_index(frombus)
         if (index < 0):
@@ -375,6 +419,7 @@ def add_generator(bus: int, power_scheduled_mw: float, genid: str = "1 ", power_
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 3, str(bus) + " " + str(genid), "st mbase pgen pmax qmax qmin", "1 100 " + str(power_scheduled_mw) + " " + str(power_max) + " " + str(reactive_power_max) + " " + str(reactive_power_min))
         
         cp = CaseParameters()
@@ -452,6 +497,7 @@ def add_load(bus: int, real_power: float, reactive_power: float, loadid: str = "
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 4, str(bus) + " " + loadid, "st p q", "1 " + str(real_power) + " " + str(reactive_power))
         
         cp = CaseParameters()
@@ -530,6 +576,7 @@ def add_shunt(bus: int, reactive_power: float, variable_flag: int = 0, reactive_
         Dict with status
     """
     try:
+        _ensure_pslf()
         if (variable_flag == 0):
             # Fixed shunt
             iret = Pslf.add_record(1, 5, str(bus) + " " + shuntid, "st b", "1 " + str(reactive_power / 100.0)) # Divide by system base MVA to get in per unit
@@ -610,8 +657,9 @@ def get_voltage(bus: int) -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         index = Pslf.bus_internal_index(bus)
-        
+
         if (index < 0):
             return {
                 'status': 'error bus not found'
@@ -648,6 +696,7 @@ def get_voltage_violations(overvoltage_threshold: float = 1.05, undervoltage_thr
     """
     try:
         
+        _ensure_pslf()
         bus_count = CaseParameters().Nbus
         
         overvoltage = {}
@@ -699,6 +748,7 @@ def get_overload_violations(overload_threshold: float = 1.0) -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         branch_count = CaseParameters().Nbrsec
         if (branch_count <= 0):
             return {
@@ -742,6 +792,7 @@ def run_contingency_analysis() -> Dict[str, Any]:
     
     # Save the case into a temporary file
     try:
+        _ensure_pslf()
         iret = Pslf.save_case(os.getcwd() + "\\sstools.sav")
     except Exception as e:
         return {

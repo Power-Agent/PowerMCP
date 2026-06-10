@@ -18,6 +18,24 @@ import yaml
 DEFAULT_HOPE_REPO_ROOT = Path("/Users/qianzhang/Documents/GitHub/HOPE")
 DEFAULT_JULIA_COMMAND = "julia"
 
+
+def _hope_setting(env_var: str, config_key: str, default: Any) -> Any:
+    """Resolve a HOPE setting in order: env var, powermcp config, hardcoded default.
+
+    The powermcp import is wrapped in try/except so HOPE stays runnable standalone
+    (e.g. ``python -m hope_mcp_server``) without powermcp installed; on any failure
+    we fall back to the historical hardcoded default.
+    """
+    v = os.environ.get(env_var)
+    if v:
+        return v
+    try:
+        from powermcp.config import get_path
+
+        return get_path("hope", config_key, must_exist=False)
+    except Exception:
+        return default
+
 DEFAULT_CASE_ID = "md_gtep_clean"
 LEGACY_CASE_ALIASES = {
     DEFAULT_CASE_ID: "MD_GTEP_clean_case",
@@ -51,11 +69,13 @@ def success_result(**payload: Any) -> dict[str, Any]:
 
 
 def get_repo_root() -> Path:
-    return Path(os.environ.get("HOPE_REPO_ROOT", str(DEFAULT_HOPE_REPO_ROOT))).expanduser()
+    return Path(
+        _hope_setting("HOPE_REPO_ROOT", "repo_root", str(DEFAULT_HOPE_REPO_ROOT))
+    ).expanduser()
 
 
 def configured_julia_command() -> str:
-    return os.environ.get("HOPE_JULIA_BIN", DEFAULT_JULIA_COMMAND)
+    return _hope_setting("HOPE_JULIA_BIN", "julia_bin", DEFAULT_JULIA_COMMAND)
 
 
 def modelcases_root(repo_root: Path) -> Path:
@@ -110,7 +130,9 @@ def setup_command(repo_root: Path, julia_command: str) -> str:
 
 def validate_julia_command(repo_root: Path) -> tuple[str | None, dict[str, Any] | None]:
     julia_command = configured_julia_command()
-    julia_env = os.environ.get("HOPE_JULIA_BIN")
+    # An explicit julia binary (from HOPE_JULIA_BIN or powermcp config) is anything
+    # other than the bare default command, which routes through the PATH lookup below.
+    julia_env = julia_command if julia_command != DEFAULT_JULIA_COMMAND else None
     if julia_env:
         julia_path = Path(julia_env).expanduser()
         if not julia_path.is_file():
@@ -303,9 +325,10 @@ def _launch_job(
 
 def _build_julia_process_env() -> dict[str, str]:
     # Inherit the current process environment, then preserve JULIA_DEPOT_PATH
-    # when Claude Desktop config points Julia to a policy-trusted depot.
+    # when Claude Desktop config (or powermcp config) points Julia to a
+    # policy-trusted depot.
     proc_env = os.environ.copy()
-    julia_depot = os.environ.get("JULIA_DEPOT_PATH")
+    julia_depot = _hope_setting("JULIA_DEPOT_PATH", "julia_depot_path", "")
     if julia_depot:
         proc_env["JULIA_DEPOT_PATH"] = julia_depot
     return proc_env
