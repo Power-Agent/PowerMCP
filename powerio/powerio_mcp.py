@@ -198,7 +198,11 @@ def save_case(
     except powerio.PowerIOError as exc:
         raise ValueError(f"conversion failed: {exc}") from exc
     try:
-        with open(out_path, "w" if overwrite else "x", encoding="utf-8") as fh:
+        # newline="" disables newline translation so the file is byte-identical
+        # to the converter output (and to the CLI) on every platform, and
+        # bytes_written below is exact on Windows.
+        mode = "w" if overwrite else "x"
+        with open(out_path, mode, encoding="utf-8", newline="") as fh:
             fh.write(conv.text)
     except FileExistsError:
         raise ValueError(
