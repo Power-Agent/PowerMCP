@@ -34,6 +34,15 @@ from typing import Any, Dict, Optional
 import powerio
 from mcp.server.fastmcp import FastMCP
 
+# Fail fast if `import powerio` resolved to something without the real API — e.g.
+# this server's own powerio/ directory shadowing the package as a PEP 420
+# namespace (editable installs / PYTHONPATH / pytest rootdir).
+if not hasattr(powerio, "parse_file"):  # pragma: no cover
+    raise ImportError(
+        "the 'powerio' package is not importable (the repo's powerio/ directory "
+        "may be shadowing it); install it: pip install 'powerio[mcp,matrix]'"
+    )
+
 mcp = FastMCP("PowerIO Conversion Server")
 
 _MATRIX_KINDS = (
@@ -72,6 +81,8 @@ def _load(
     try:
         return powerio.from_json(json)
     except powerio.PowerIOError as exc:
+        raise ValueError(f"parse failed: {exc}") from exc
+    except (ValueError, KeyError, TypeError) as exc:
         raise ValueError(f"parse failed: {exc}") from exc
 
 
@@ -123,6 +134,8 @@ def convert_case(
         raise ValueError(f"conversion failed: {exc}") from exc
     except FileNotFoundError as exc:
         raise ValueError(f"file not found: {exc}") from exc
+    except OSError as exc:
+        raise ValueError(f"conversion failed: {exc}") from exc
     return {"text": conv.text, "warnings": list(conv.warnings)}
 
 
@@ -313,8 +326,10 @@ def compute_matrix(
             m = case.lodf(convention)
         elif kind == "lacpf":
             m = case.lacpf()
-        else:
+        elif kind == "laplacian":
             m = case.weighted_laplacian(convention)
+        else:  # pragma: no cover - unreachable; guarded by the _MATRIX_KINDS check
+            raise ValueError(f"unhandled matrix kind {kind!r}")
     except ImportError as exc:
         raise ValueError(str(exc)) from exc
     except powerio.PowerIOError as exc:
