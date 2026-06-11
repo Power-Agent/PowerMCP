@@ -352,3 +352,31 @@ def test_convert_case_oserror_normalizes_to_valueerror(monkeypatch):
     monkeypatch.setattr(powerio, "convert_str", boom)
     with pytest.raises(ValueError):
         powerio_mcp.convert_case(to="psse", content="x", from_="matpower")
+
+
+def test_unreadable_file_maps_cleanly(tmp_path):
+    # PermissionError must surface as the documented ValueError shape, like
+    # FileNotFoundError, not leak raw through the tool. (Ported from the
+    # canonical server's suite at powerio 0.1.1.)
+    import os
+
+    if sys.platform == "win32" or os.geteuid() == 0:
+        pytest.skip("permission bits are not enforceable here")
+    locked = tmp_path / "locked.m"
+    locked.write_text("function mpc = x\n")
+    locked.chmod(0o000)
+    try:
+        with pytest.raises(ValueError, match="cannot read file"):
+            powerio_mcp.convert_case(to="psse", path=str(locked))
+        with pytest.raises(ValueError, match="cannot read file"):
+            powerio_mcp.case_summary(path=str(locked))
+    finally:
+        locked.chmod(0o644)
+
+
+def test_wrong_schema_json_maps_cleanly():
+    # Wrong-schema (but well-formed) JSON keeps the one error shape too; the
+    # malformed-JSON case is covered above.
+    for bad in ("{}", "[]", "null", '{"buses": "nope"}'):
+        with pytest.raises(ValueError, match="parse failed"):
+            powerio_mcp.compute_matrix("bprime", json=bad)

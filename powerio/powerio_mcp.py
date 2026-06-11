@@ -68,6 +68,9 @@ def _parse(path: Optional[str], content: Optional[str], format: str) -> "powerio
         raise ValueError(f"parse failed: {exc}") from exc
     except FileNotFoundError as exc:
         raise ValueError(f"file not found: {exc}") from exc
+    except OSError as exc:
+        # e.g. an unreadable file (permissions); keep the one error shape.
+        raise ValueError(f"cannot read file: {exc}") from exc
 
 
 def _load(
@@ -83,6 +86,9 @@ def _load(
     except powerio.PowerIOError as exc:
         raise ValueError(f"parse failed: {exc}") from exc
     except (ValueError, KeyError, TypeError) as exc:
+        # The Rust layer already maps malformed and wrong-schema JSON to
+        # PowerIOParseError; this guards future Python-side paths so the tool
+        # keeps its one error shape.
         raise ValueError(f"parse failed: {exc}") from exc
 
 
@@ -135,7 +141,8 @@ def convert_case(
     except FileNotFoundError as exc:
         raise ValueError(f"file not found: {exc}") from exc
     except OSError as exc:
-        raise ValueError(f"conversion failed: {exc}") from exc
+        # e.g. an unreadable file (permissions); keep the one error shape.
+        raise ValueError(f"cannot read file: {exc}") from exc
     return {"text": conv.text, "warnings": list(conv.warnings)}
 
 
@@ -328,7 +335,7 @@ def compute_matrix(
             m = case.lacpf()
         elif kind == "laplacian":
             m = case.weighted_laplacian(convention)
-        else:  # pragma: no cover - unreachable; guarded by the _MATRIX_KINDS check
+        else:  # pragma: no cover - unreachable; _MATRIX_KINDS is checked above
             raise ValueError(f"unhandled matrix kind {kind!r}")
     except ImportError as exc:
         raise ValueError(str(exc)) from exc
