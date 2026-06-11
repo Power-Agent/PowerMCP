@@ -380,3 +380,45 @@ def test_wrong_schema_json_maps_cleanly():
     for bad in ("{}", "[]", "null", '{"buses": "nope"}'):
         with pytest.raises(ValueError, match="parse failed"):
             powerio_mcp.compute_matrix("bprime", json=bad)
+
+
+# ---------------------------------------------------------------------------
+# ANDES bridge tests
+# ---------------------------------------------------------------------------
+
+def _load_andes_mcp():
+    """Import andes_mcp from the registry-resolved server dir, skipping if
+    andes or powerio are not installed."""
+    pytest.importorskip("andes")
+    andes_dir = str(TOOLS["andes"].resolve_server_dir())
+    if andes_dir not in sys.path:
+        sys.path.insert(0, andes_dir)
+    import andes_mcp  # noqa: E402
+    return andes_mcp
+
+
+def test_andes_load_network_from_any(tmp_path):
+    andes_mcp = _load_andes_mcp()
+    out = tmp_path / "case9.m"
+    r = andes_mcp.load_network_from_any(str(CASE9), str(out))
+    assert r["status"] == "success", r
+    assert out.exists()
+    assert r["case_file"] == str(out)
+    assert r["info"]["buses"] == 9
+
+
+def test_andes_load_network_from_json(tmp_path):
+    andes_mcp = _load_andes_mcp()
+    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    out = tmp_path / "case9_from_json.m"
+    r = andes_mcp.load_network_from_json(transport, str(out))
+    assert r["status"] == "success", r
+    assert out.exists()
+    assert r["info"]["buses"] == 9
+
+
+def test_andes_load_missing_file(tmp_path):
+    andes_mcp = _load_andes_mcp()
+    r = andes_mcp.load_network_from_any("/nope/missing.m", str(tmp_path / "x.m"))
+    assert r["status"] == "error"
+    assert "not found" in r["message"].lower()

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from contextlib import redirect_stdout, redirect_stderr
 from mcp.server.fastmcp import FastMCP
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Storage directory resolved lazily (no filesystem writes at import time)
 def _andes_runs_dir():
@@ -331,6 +331,111 @@ def get_system_info() -> Dict[str, Any]:
             "status": "error",
             "message": str(e)
         }
+
+
+# ---------------------------------------------------------------------------
+# powerio bridge: load any powerio readable case into ANDES.
+# powerio parses MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels
+# JSON, and egret JSON; the case is staged as a MATPOWER file that ANDES loads
+# natively via run_power_flow. powerio is an optional extra, so the tools
+# degrade gracefully when it is missing.
+# ---------------------------------------------------------------------------
+
+_POWERIO_HINT = "powerio not installed: pip install 'powerio[mcp,matrix]'"
+
+
+@mcp.tool()
+def load_network_from_json(
+    network_json: str,
+    out_path: str,
+) -> Dict[str, Any]:
+    """Stage a powerio JSON transport string as a MATPOWER file for ANDES.
+
+    Accepts the ``json`` string returned by the powerio server's parse_case or
+    case_to_json tools. Converts the network to MATPOWER format, writes it to
+    out_path (use a .m extension), and returns the path along with component
+    counts. Pass out_path to run_power_flow to run the simulation. Requires the
+    powerio extra (pip install 'powermcp[powerio]').
+
+    Args:
+        network_json: The JSON transport string from powerio
+        out_path: Destination for the MATPOWER case file (.m)
+
+    Returns:
+        Dict with status, case_file path, component counts, and fidelity warnings
+    """
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.from_json(network_json)
+        conv = case.to_format("matpower")
+        abs_out = os.path.abspath(out_path)
+        with open(abs_out, "w") as fh:
+            fh.write(conv.text)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    return {
+        "status": "success",
+        "message": f"Case staged at {abs_out}; pass this path to run_power_flow",
+        "case_file": abs_out,
+        "info": {
+            "buses": case.n_buses,
+            "branches": case.n_branches,
+            "generators": case.n_gens,
+        },
+        "warnings": list(conv.warnings),
+    }
+
+
+@mcp.tool()
+def load_network_from_any(
+    file_path: str,
+    out_path: str,
+    source_format: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Stage any powerio readable case as a MATPOWER file for ANDES.
+
+    Reads MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels JSON, or
+    egret JSON via powerio and writes a MATPOWER file to out_path (use a .m
+    extension). Pass out_path to run_power_flow to run the simulation. Requires
+    the powerio extra (pip install 'powermcp[powerio]').
+
+    Args:
+        file_path: Path to the source case file
+        out_path: Destination for the MATPOWER case file (.m)
+        source_format: Input format name (matpower, powermodels-json, egret-json,
+            psse, powerworld); inferred from the file extension when omitted
+
+    Returns:
+        Dict with status, case_file path, component counts, and fidelity warnings
+    """
+    try:
+        import powerio
+    except ImportError:
+        return {"status": "error", "message": _POWERIO_HINT}
+    try:
+        case = powerio.parse_file(file_path, source_format)
+        conv = case.to_format("matpower")
+        abs_out = os.path.abspath(out_path)
+        with open(abs_out, "w") as fh:
+            fh.write(conv.text)
+    except FileNotFoundError:
+        return {"status": "error", "message": f"File not found: {file_path}"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    return {
+        "status": "success",
+        "message": f"Case staged at {abs_out}; pass this path to run_power_flow",
+        "case_file": abs_out,
+        "info": {
+            "buses": case.n_buses,
+            "branches": case.n_branches,
+            "generators": case.n_gens,
+        },
+        "warnings": list(conv.warnings),
+    }
 
 
 if __name__ == "__main__":
