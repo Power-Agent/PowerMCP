@@ -57,10 +57,14 @@ def test_path_status_missing_and_configured(isolated_config):
     assert style == "green"
 
 
-def test_namespace_shadow_not_false_positive():
-    # surge-py is NOT installed in the core test venv. The repo's lowercase
-    # surge/ directory must not be mistaken for the installed library (PEP 420
-    # namespace shadow), so the dependency must report missing, not ok.
+def test_namespace_shadow_not_false_positive(monkeypatch):
+    # surge-py is NOT installed in the test venv. The repo's lowercase surge/
+    # directory must not be mistaken for the installed library (PEP 420 namespace
+    # shadow), so the dependency must report missing, not ok. Bypass surge's
+    # Python-version gate (it is 3.12-3.14 only) so this exercises the probe path
+    # on every Python version — otherwise on 3.10/3.11 _dep_status short-circuits
+    # to the "needs Python 3.12-3.14" warning before reaching the probe.
+    monkeypatch.setattr(doctor, "_surge_supported", lambda: True)
     style, msg = doctor._dep_status(get_tool("surge"))
     assert style == "red", f"expected surge missing, got {style}: {msg}"
 
