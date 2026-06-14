@@ -9,7 +9,7 @@ from powermcp.registry import CORE, TOOLS, Tool
 
 
 def test_core_tools_present_and_have_no_extra():
-    assert set(CORE) == {"pandapower", "pypsa"}
+    assert set(CORE) == {"pandapower", "pypsa", "powerio"}
     for name in CORE:
         assert TOOLS[name].extra is None
 

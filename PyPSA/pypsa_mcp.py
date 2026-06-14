@@ -727,8 +727,8 @@ def import_case_from_any(
     .nc extension); pass that path as network_name to the other tools. PyPSA's
     ppc import drops generator cost data; anything else it cannot represent is
     listed in the returned warnings. Branches with rating 0 are imported with
-    s_nom 0 unless overwrite_zero_s_nom supplies a value. Requires the powerio
-    extra (pip install 'powermcp[powerio]').
+    s_nom 0 unless overwrite_zero_s_nom supplies a value. powerio is a core
+    dependency, so this is always available.
 
     Args:
         file_path: Path to the case file
@@ -776,8 +776,8 @@ def import_case_from_json(
     a file around or re-parsing it. Expects source-valued tables (MW, degrees)
     as parse_case emits them, not the per-unit normalize_case form. Writes the
     network to output_path (use a .nc extension); pass that path as
-    network_name to the other tools. Requires the powerio extra
-    (pip install 'powermcp[powerio]').
+    network_name to the other tools. powerio is a core dependency, so this is
+    always available.
 
     Args:
         network_json: The JSON transport string from powerio

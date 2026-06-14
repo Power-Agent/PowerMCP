@@ -214,8 +214,8 @@ def load_model_from_any(file_path: str, source_format: Optional[str] = None) -> 
     egret JSON via powerio, converts it to egret JSON, validates it as an
     egret ModelData, and stages it to a temp file. Pass the returned
     `case_file` path to solve_ac_opf, solve_dc_opf, or
-    solve_unit_commitment_problem. Requires the powerio extra
-    (pip install 'powermcp[powerio]').
+    solve_unit_commitment_problem. powerio is a core dependency, so this is
+    always available.
 
     Args:
         file_path: Path to the case file
@@ -254,8 +254,8 @@ def load_model_from_json(network_json: str) -> Dict[str, Any]:
     case_to_json tools, so a case parsed once there feeds egret without
     re-reading the file. Converts it to egret JSON, validates it as an egret
     ModelData, and stages it to a temp file. Pass the returned `case_file`
-    path to the solver tools. Requires the powerio extra
-    (pip install 'powermcp[powerio]').
+    path to the solver tools. powerio is a core dependency, so this is always
+    available.
 
     Args:
         network_json: The JSON transport string from powerio

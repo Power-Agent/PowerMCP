@@ -1,7 +1,8 @@
 """Tests for the powerio conversion server, the PyPSA bridge, and the
 registry/runner wiring.
 
-The whole module skips when powerio is not installed (it is an opt-in extra).
+powerio is a core dependency, so it is normally present; the importorskip below
+stays as insurance for stripped-down environments.
 The FastMCP-decorated tools stay ordinary callables, so we exercise them
 in-process without a transport. The launch test lives here rather than in
 test_runner.py so it skips with the rest of the module.
@@ -236,7 +237,7 @@ def test_pypsa_import_missing_file(tmp_path):
 def test_registry_entry():
     t = TOOLS["powerio"]
     assert t.kind == "open-source"
-    assert t.extra == "powerio"
+    assert t.extra is None  # promoted to a core dependency (issue #30)
     assert t.run_kind == "script"
     assert t.windows_only is False
     assert t.probe == "powerio"
