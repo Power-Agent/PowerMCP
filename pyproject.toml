@@ -40,7 +40,9 @@ dependencies = [
     # ANDES bridges build on its JSON transport), and is cheap to require: abi3
     # wheels for five platforms, zero required runtime deps, [mcp,matrix] adding
     # only scipy (already transitive via pandapower) on top of mcp+numpy.
-    "powerio[mcp,matrix]>=0.1.1",
+    # >=0.2.1: powerio/powerio_mcp.py re-exports the canonical powerio.mcp.server
+    # (and its _load/_summary helpers) rather than vendoring a copy.
+    "powerio[mcp,matrix]>=0.2.1",
     # CLI / installer toolkit:
     "typer>=0.12",
     "questionary>=2.0",
