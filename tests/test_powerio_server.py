@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio")
+pytest.importorskip("powerio", minversion="0.2.2")
 
 import powerio  # noqa: E402
 
@@ -512,3 +512,10 @@ def test_read_display_file_decodes_pwd():
 def test_read_display_missing_file_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
         powerio_mcp.read_display_file(str(tmp_path / "nope.pwd"))
+
+
+def test_read_display_garbage_file_maps_cleanly(tmp_path):
+    bad = tmp_path / "garbage.pwd"
+    bad.write_bytes(b"not a real display file\x00\x01\x02")
+    with pytest.raises(ValueError):
+        powerio_mcp.read_display_file(str(bad))

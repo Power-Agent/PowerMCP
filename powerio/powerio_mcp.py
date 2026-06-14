@@ -55,9 +55,9 @@ def read_display_file(path: str) -> dict:
     canvas size, its stamp, and each substation's display coordinates, so a
     client can place buses on a one-line or map without PowerWorld installed.
 
-    Returns ``{"kind": "powerworld", "canvas_width": <float>,
-    "canvas_height": <float>, "stamp": <str>, "substations":
-    [{"number", "name", "x", "y"}, ...]}``.
+    Returns ``{"kind": "powerworld", "canvas_width": <int>,
+    "canvas_height": <int>, "stamp": <int>, "substations":
+    [{"number": <int>, "name": <str>, "x": <float>, "y": <float>}, ...]}``.
     """
     try:
         display = powerio.parse_display_file(path)
@@ -67,6 +67,11 @@ def read_display_file(path: str) -> dict:
         raise ValueError(f"file not found: {exc}") from exc
     except OSError as exc:
         raise ValueError(f"cannot read file: {exc}") from exc
+    # powerio's DisplayData is generic (kind + data); only "powerworld" yields a
+    # PwdDisplay. Reject any other kind with a clean error instead of an opaque
+    # AttributeError if a future powerio adds one (the pin is a >=0.2.2 floor).
+    if display.kind != "powerworld":
+        raise ValueError(f"unsupported display format: {display.kind!r}")
     pwd = display.data
     return {
         "kind": display.kind,
