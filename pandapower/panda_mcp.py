@@ -387,7 +387,7 @@ def load_network_from_any(file_path: str, source_format: Optional[str] = None) -
     Reads MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels JSON, or
     egret JSON via powerio and converts it to a pandapower network, replacing
     the currently loaded one. Use this for case formats load_network does not
-    accept. Requires the powerio extra (pip install 'powermcp[powerio]').
+    accept. powerio is a core dependency, so this is always available.
 
     Args:
         file_path: Path to the case file
@@ -422,8 +422,8 @@ def load_network_from_json(network_json: str) -> Dict[str, Any]:
     case_to_json tools, so a case parsed once there loads here without passing
     a file around or re-parsing it. Expects source-valued tables (MW, degrees)
     as parse_case emits them, not the per-unit normalize_case form. Replaces
-    the currently loaded network. Requires the powerio extra
-    (pip install 'powermcp[powerio]').
+    the currently loaded network. powerio is a core dependency, so this is
+    always available.
 
     Args:
         network_json: The JSON transport string from powerio
@@ -452,7 +452,7 @@ def export_network_to_format(to_format: str) -> Dict[str, Any]:
     Converts the loaded network to MATPOWER tables and serializes them with
     powerio. to_format is a powerio format name: matpower (m),
     powermodels-json (pm), egret-json (egret), psse (raw), powerworld (aux).
-    Requires the powerio extra (pip install 'powermcp[powerio]').
+    powerio is a core dependency, so this is always available.
 
     Args:
         to_format: Target format name

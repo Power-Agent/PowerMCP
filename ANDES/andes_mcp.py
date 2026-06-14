@@ -354,8 +354,8 @@ def load_network_from_json(
     Accepts the ``json`` string returned by the powerio server's parse_case or
     case_to_json tools. Converts the network to MATPOWER format, writes it to
     out_path (use a .m extension), and returns the path along with component
-    counts. Pass out_path to run_power_flow to run the simulation. Requires the
-    powerio extra (pip install 'powermcp[powerio]').
+    counts. Pass out_path to run_power_flow to run the simulation. powerio is a
+    core dependency, so this is always available.
 
     Args:
         network_json: The JSON transport string from powerio
@@ -399,8 +399,8 @@ def load_network_from_any(
 
     Reads MATPOWER .m, PSS/E .raw (v33), PowerWorld .aux, PowerModels JSON, or
     egret JSON via powerio and writes a MATPOWER file to out_path (use a .m
-    extension). Pass out_path to run_power_flow to run the simulation. Requires
-    the powerio extra (pip install 'powermcp[powerio]').
+    extension). Pass out_path to run_power_flow to run the simulation. powerio
+    is a core dependency, so this is always available.
 
     Args:
         file_path: Path to the source case file

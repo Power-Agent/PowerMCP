@@ -72,12 +72,12 @@ PowerMCP installs as a single Python package with an interactive CLI. Python 3.1
 pip install powermcp
 ```
 
-The base install includes the two open-source engines that need no extra setup — **pandapower** and **PyPSA**. Every other tool is opt-in via an extra:
+The base install includes the open-source engines that need no extra setup — **pandapower**, **PyPSA**, and **PowerIO** (the cross-server case-conversion substrate). Every other tool is opt-in via an extra:
 
 ```bash
 pip install powermcp[psse]              # add PSS/E support
 pip install powermcp[andes,opendss]     # add several tools at once
-pip install powermcp[opensource]        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice, PowerIO)
+pip install powermcp[opensource]        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice)
 pip install powermcp[all]               # everything (closed-source tools still need the local software)
 ```
 
@@ -87,7 +87,7 @@ pip install powermcp[all]               # everything (closed-source tools still 
 powermcp install
 ```
 
-The wizard lets you pick tools (pandapower + PyPSA pre-selected), captures the local install path for any closed-source/EXE-based tools you choose (PSS/E, PSLF, PowerFactory, PSCAD, LTSpice), installs the right extras, and writes the MCP client configuration for **Claude Desktop**, **Claude Code**, and the **Codex CLI**. Use `--dry-run` to preview the changes, or `--yes` for a non-interactive core install.
+The wizard lets you pick tools (pandapower + PyPSA + PowerIO pre-selected), captures the local install path for any closed-source/EXE-based tools you choose (PSS/E, PSLF, PowerFactory, PSCAD, LTSpice), installs the right extras, and writes the MCP client configuration for **Claude Desktop**, **Claude Code**, and the **Codex CLI**. Use `--dry-run` to preview the changes, or `--yes` for a non-interactive core install.
 
 In the interactive picker, move with ↑/↓ and **press SPACE to toggle each tool** before ENTER (ENTER alone keeps only the preselected tools). Prefer not to use the checkbox? Choose tools directly:
 
@@ -126,7 +126,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 ### Case conversion between servers (PowerIO)
 
-The `powerio` extra adds a conversion server backed by [powerio](https://github.com/eigenergy/powerio). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
+PowerMCP ships a conversion server backed by [powerio](https://github.com/eigenergy/powerio) as a **core dependency** (no extra needed). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
 
 Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and load it anywhere.
 

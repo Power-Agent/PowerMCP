@@ -36,6 +36,11 @@ dependencies = [
     "numpy>=1.24",
     "pandas>=2.0",
     "mcp>=1.0",
+    # powerio is the cross-server exchange substrate (the pandapower/Egret/PyPSA/
+    # ANDES bridges build on its JSON transport), and is cheap to require: abi3
+    # wheels for five platforms, zero required runtime deps, [mcp,matrix] adding
+    # only scipy (already transitive via pandapower) on top of mcp+numpy.
+    "powerio[mcp,matrix]>=0.1.1",
     # CLI / installer toolkit:
     "typer>=0.12",
     "questionary>=2.0",
@@ -53,7 +58,8 @@ opendss    = ["py_dss_toolkit"]
 ltspice    = ["PyLTSpice", "matplotlib"]
 surge      = ["surge-py>=0.1.5; python_version >= '3.12' and python_version < '3.15'"]
 hope       = ["PyYAML>=6.0"]
-powerio    = ["powerio[mcp,matrix]>=0.1.1"]
+# powerio moved to core `dependencies`; the extra is gone (a bare
+# `pip install powermcp` now always provides the conversion server).
 # --- closed-source / vendor tool engines ---
 powerworld = ["esa", "numba"]                   # esa auto-discovers a running Simulator via COM.
                                                 # numba is required: esa 1.3.5's no-numba code path
@@ -65,7 +71,7 @@ psse       = []                                 # vendor `psspy` not on PyPI —
 pslf       = ["pandas"]                         # vendor `PSLF_PYTHON` not on PyPI — path captured in config.toml
 powerfactory = ["fastmcp>=2.0", "numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powerfactory` not on PyPI
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[powerio]"]
+opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]"]
 

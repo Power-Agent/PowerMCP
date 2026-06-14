@@ -131,10 +131,10 @@ TOOLS: dict[str, "Tool"] = {
             external_solvers=("Julia",),
         ),
         Tool(
-            "powerio", "PowerIO", "open-source", windows_only=False, extra="powerio",
+            "powerio", "PowerIO", "open-source", windows_only=False, extra=None,
             server_dir="powerio", run_kind="script", entry_rel="powerio_mcp.py",
             probe="powerio",
-            notes="Format-neutral case conversion and matrix builder; the JSON transport is the cross-server exchange format.",
+            notes="Format-neutral case conversion and matrix builder; the JSON transport is the cross-server exchange format. Core dependency: it is the cross-server exchange substrate the pandapower/Egret/PyPSA/ANDES bridges build on.",
         ),
         # ---- CLOSED-SOURCE / VENDOR ----
         Tool(
@@ -205,7 +205,11 @@ TOOLS: dict[str, "Tool"] = {
 }
 
 # Tools installed by a bare `pip install powermcp` and pre-checked in the wizard.
-CORE: tuple[str, ...] = ("pandapower", "pypsa")
+# powerio is core because it is the cross-server exchange substrate (the
+# pandapower/Egret/PyPSA/ANDES bridges all build on its JSON transport) and is
+# cheap: abi3 wheels, zero required runtime deps, extras resolving to numpy
+# (core) + scipy (transitive via pandapower).
+CORE: tuple[str, ...] = ("pandapower", "pypsa", "powerio")
 
 
 def get_tool(name: str) -> "Tool":
