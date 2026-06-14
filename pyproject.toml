@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "powermcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
