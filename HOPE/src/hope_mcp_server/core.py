@@ -1176,7 +1176,14 @@ def hope_read_output(
 
     output_dir = output_dir_for_case(case_path)
     # Allow subdirectory paths like "postprocess_snapshot/metadata.yml"
-    csv_path = output_dir / filename
+    csv_path = (output_dir / filename).resolve()
+    if not csv_path.is_relative_to(output_dir.resolve()):
+        return error_result(
+            "path_traversal",
+            "filename must refer to a path inside the case output directory.",
+            case_id=case_id,
+            requested_file=filename,
+        )
     if not csv_path.is_file():
         available = list_top_level_output_csvs(output_dir)
         return error_result(
