@@ -15,6 +15,15 @@ string:
   transport (``Network.to_json``), the cheap handoff between tool calls.
 - ``compute_matrix``: the sparse matrix views in COO form as plain lists.
 - ``dense_view``: the dense table view as plain lists and dicts.
+- ``read_pypsa_csv_folder`` / ``write_pypsa_csv_folder``: the PyPSA static CSV
+  folder format, which has no single-file text form.
+- ``read_gridfm`` / ``write_gridfm``: the gridfm-datakit Parquet datasets.
+
+The single-file/text formats are ``matpower`` (``m``), ``powermodels-json``
+(``pm``), ``egret-json`` (``egret``), ``pandapower-json`` (``pp``), ``psse``
+(``raw``), and ``powerworld`` (``aux``); these flow through ``convert_case`` /
+``save_case`` and the parse tools. PyPSA CSV and gridfm Parquet are folder /
+binary formats, so they get their own read/write tools above.
 
 Run over stdio with the ``powerio-mcp`` console script (or ``python -m
 powerio.mcp``). The server is a thin wrapper over the powerio Python API; it
@@ -23,7 +32,8 @@ no temp file staging.
 
 This file is the standalone copy of the canonical ``powerio.mcp.server``
 (``python/powerio/mcp/server.py`` in eigenergy/powerio); land changes there
-first and sync them here. Requires powerio >= 0.1.0 (convert_str).
+first and sync them here. Requires powerio >= 0.1.1 (pandapower-json, the PyPSA
+CSV folder, and the gridfm Parquet readers/writers).
 """
 
 from __future__ import annotations
@@ -120,9 +130,11 @@ def convert_case(
 
     Provide exactly one of ``path`` (a file on disk) or ``content`` (inline file
     text). ``to``/``from_`` are format names or aliases: ``matpower`` (``m``),
-    ``powermodels-json`` (``pm``), ``egret-json`` (``egret``), ``psse``
-    (``raw``), ``powerworld`` (``aux``). The input format is inferred from the
-    file extension for ``path``; ``from_`` is REQUIRED with inline ``content``.
+    ``powermodels-json`` (``pm``), ``egret-json`` (``egret``),
+    ``pandapower-json`` (``pp``), ``psse`` (``raw``), ``powerworld`` (``aux``).
+    The input format is inferred from the file extension for ``path``; ``from_``
+    is REQUIRED with inline ``content``. (PyPSA CSV folders and gridfm Parquet
+    are not single files — use their dedicated read/write tools.)
 
     Returns ``{"text": <converted file>, "warnings": [<fidelity notes: data the
     target can't represent, defaults synthesized, or blocks mapped to the nearest
@@ -164,10 +176,11 @@ def save_case(
     matching ``to`` (``.m``, ``.json``, ``.raw``, ``.aux``).
 
     ``to`` is a format name or alias: ``matpower`` (``m``), ``powermodels-json``
-    (``pm``), ``egret-json`` (``egret``), ``psse`` (``raw``), ``powerworld``
-    (``aux``). Provide exactly one of ``path``, ``content`` (with ``format``),
-    or ``json`` (the transport string). An existing ``out_path`` is not
-    overwritten unless ``overwrite`` is true.
+    (``pm``), ``egret-json`` (``egret``), ``pandapower-json`` (``pp``), ``psse``
+    (``raw``), ``powerworld`` (``aux``). Provide exactly one of ``path``,
+    ``content`` (with ``format``), or ``json`` (the transport string). An
+    existing ``out_path`` is not overwritten unless ``overwrite`` is true.
+    (For the folder formats use ``write_pypsa_csv_folder`` / ``write_gridfm``.)
 
     Returns ``{"path": <absolute path written>, "bytes_written": <count>,
     "warnings": [<fidelity notes>]}``.
@@ -224,8 +237,8 @@ def parse_case(
 
     Provide exactly one of ``path`` or ``content``. For inline ``content``,
     ``format`` names the input format (default ``matpower``); formats:
-    ``matpower``, ``powermodels-json``, ``egret-json``, ``psse``,
-    ``powerworld``.
+    ``matpower``, ``powermodels-json``, ``egret-json``, ``pandapower-json``,
+    ``psse``, ``powerworld``.
 
     The returned ``json`` string is the exchange format between tool calls:
     pass it to ``compute_matrix``, ``dense_view``, and ``save_case`` here, or
@@ -405,6 +418,140 @@ def dense_view(
         "n_components": int(d.n_components),
         "is_radial": bool(d.is_radial),
     }
+
+
+@mcp.tool()
+def read_pypsa_csv_folder(folder: str) -> dict:
+    """Read a PyPSA static CSV folder into the JSON transport plus a summary.
+
+    ``folder`` is a directory of PyPSA component CSVs (``buses.csv``,
+    ``generators.csv``, ``lines.csv``, ...). PyPSA CSV is a folder format with
+    no single-file text form, so it can't go through ``parse_case`` /
+    ``convert_case``; use this to bring such a dataset into the transport, then
+    pass the returned ``json`` to any other tool.
+
+    Returns ``{"json": <transport string>, "summary": <case_summary fields>,
+    "warnings": [<read fidelity notes>]}``.
+    """
+    try:
+        case = powerio.read_pypsa_csv_folder(folder)
+    except powerio.PowerIOError as exc:
+        raise ValueError(f"parse failed: {exc}") from exc
+    except FileNotFoundError as exc:
+        raise ValueError(f"file not found: {exc}") from exc
+    except OSError as exc:
+        raise ValueError(f"cannot read folder: {exc}") from exc
+    return {
+        "json": case.to_json(),
+        "summary": _summary(case),
+        "warnings": list(getattr(case, "read_warnings", []) or []),
+    }
+
+
+@mcp.tool()
+def write_pypsa_csv_folder(
+    out_dir: str,
+    path: Optional[str] = None,
+    content: Optional[str] = None,
+    json: Optional[str] = None,
+    format: str = "matpower",
+) -> dict:
+    """Write a case out as a PyPSA static CSV folder.
+
+    Converts any case — a file ``path``, inline ``content`` (with ``format``),
+    or the ``json`` transport from ``parse_case`` — to PyPSA's CSV component
+    tables under ``out_dir`` (created if needed). This is the PyPSA-CSV
+    counterpart of ``save_case`` for the folder format.
+
+    Returns ``{"dir": <folder written>, "files": [<csv paths>],
+    "warnings": [<fidelity notes>]}``.
+    """
+    case = _load(path, content, json, format)
+    try:
+        result = case.write_pypsa_csv_folder(out_dir)
+    except powerio.PowerIOError as exc:
+        raise ValueError(f"conversion failed: {exc}") from exc
+    except OSError as exc:
+        raise ValueError(f"write failed: {exc}") from exc
+    return {
+        "dir": result.get("dir", os.path.abspath(out_dir)),
+        "files": list(result.get("files", [])),
+        "warnings": list(result.get("warnings", [])),
+    }
+
+
+@mcp.tool()
+def read_gridfm(dir: str, scenario: int = 0) -> dict:
+    """Read one scenario of a gridfm-datakit Parquet dataset into the transport.
+
+    ``dir`` is resolved leniently: the ``raw/`` directory holding the parquet
+    files, a ``<case>/`` directory with a ``raw/`` child, or a parent with one
+    ``*/raw/`` child all work. ``scenario`` selects one snapshot from a batch
+    (``0``, the base case, by default). The read is lossy but recovers
+    everything a power flow needs; what it can't recover is in ``warnings``.
+
+    Returns ``{"json": <transport string>, "summary": <case_summary fields>,
+    "scenario": <int>, "warnings": [<fidelity notes>]}``. Requires a powerio
+    build with the native gridfm reader (published wheels include it).
+    """
+    try:
+        result = powerio.read_gridfm(dir, scenario)
+    except powerio.PowerIOError as exc:
+        raise ValueError(f"parse failed: {exc}") from exc
+    except FileNotFoundError as exc:
+        raise ValueError(f"file not found: {exc}") from exc
+    except ImportError as exc:
+        raise ValueError(str(exc)) from exc
+    except OSError as exc:
+        raise ValueError(f"cannot read dataset: {exc}") from exc
+    case = result.network
+    return {
+        "json": case.to_json(),
+        "summary": _summary(case),
+        "scenario": int(result.scenario),
+        "warnings": list(result.warnings),
+    }
+
+
+@mcp.tool()
+def write_gridfm(
+    out_dir: str,
+    path: Optional[str] = None,
+    content: Optional[str] = None,
+    json: Optional[str] = None,
+    format: str = "matpower",
+    scenario: int = 0,
+    include_y_bus: bool = True,
+    include_taps: bool = True,
+    include_shifts: bool = True,
+) -> dict:
+    """Write a case as a gridfm-datakit Parquet dataset under ``out_dir``.
+
+    Converts any case — a file ``path``, inline ``content`` (with ``format``),
+    or the ``json`` transport — and writes the gridfm layout
+    (``<case>/raw/*.parquet`` plus ``gridfm_meta.json``). ``scenario`` tags the
+    snapshot id; the ``include_*`` flags toggle the Y-bus, tap, and shift
+    columns.
+
+    Returns the writer's report ``{"dir": ..., "files": [...], ...}``. Requires
+    a powerio build with the native gridfm writer (published wheels include it).
+    """
+    case = _load(path, content, json, format)
+    try:
+        result = case.write_gridfm(
+            out_dir,
+            scenario,
+            include_y_bus=include_y_bus,
+            include_taps=include_taps,
+            include_shifts=include_shifts,
+        )
+    except powerio.PowerIOError as exc:
+        raise ValueError(f"conversion failed: {exc}") from exc
+    except ImportError as exc:
+        raise ValueError(str(exc)) from exc
+    except OSError as exc:
+        raise ValueError(f"write failed: {exc}") from exc
+    return dict(result)
 
 
 if __name__ == "__main__":

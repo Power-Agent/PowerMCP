@@ -422,3 +422,62 @@ def test_andes_load_missing_file(tmp_path):
     r = andes_mcp.load_network_from_any("/nope/missing.m", str(tmp_path / "x.m"))
     assert r["status"] == "error"
     assert "not found" in r["message"].lower()
+
+
+# ---------------------------------------------------------------------------
+# pandapower-json (a text format added in powerio 0.1.1) and the folder /
+# Parquet formats that need their own read/write tools.
+# ---------------------------------------------------------------------------
+
+def test_convert_to_pandapower_json():
+    r = powerio_mcp.convert_case(to="pandapower-json", path=str(CASE9))
+    assert r["text"]
+    assert json.loads(r["text"])  # well-formed JSON
+
+
+def test_pandapower_json_round_trips_through_transport():
+    # pandapower-json is a plain text format, so it flows through the existing
+    # save_case/parse_case tools with no dedicated tool.
+    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    out = powerio_mcp.case_to_json(content=
+        powerio_mcp.convert_case(to="pandapower-json", path=str(CASE9))["text"],
+        format="pandapower-json")
+    assert json.loads(out["json"])
+    assert json.loads(transport)
+
+
+def test_pypsa_csv_folder_round_trip(tmp_path):
+    out_dir = tmp_path / "pypsa_csv"
+    w = powerio_mcp.write_pypsa_csv_folder(str(out_dir), path=str(CASE9))
+    assert w["files"], w
+    assert (out_dir / "buses.csv").exists()
+    r = powerio_mcp.read_pypsa_csv_folder(str(out_dir))
+    assert r["summary"]["n_buses"] == 9
+    assert json.loads(r["json"])
+
+
+def test_pypsa_csv_folder_accepts_transport(tmp_path):
+    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    out_dir = tmp_path / "from_json"
+    w = powerio_mcp.write_pypsa_csv_folder(str(out_dir), json=transport)
+    assert (out_dir / "generators.csv").exists(), w
+
+
+def test_read_pypsa_csv_missing_folder_maps_cleanly(tmp_path):
+    with pytest.raises(ValueError):
+        powerio_mcp.read_pypsa_csv_folder(str(tmp_path / "nope"))
+
+
+def test_gridfm_round_trip(tmp_path):
+    out_dir = tmp_path / "gfm"
+    w = powerio_mcp.write_gridfm(str(out_dir), path=str(CASE9))
+    assert w["files"], w
+    r = powerio_mcp.read_gridfm(str(out_dir))
+    assert r["summary"]["n_buses"] == 9
+    assert r["scenario"] == 0
+    assert json.loads(r["json"])
+
+
+def test_read_gridfm_missing_dir_maps_cleanly(tmp_path):
+    with pytest.raises(ValueError):
+        powerio_mcp.read_gridfm(str(tmp_path / "nope"))
