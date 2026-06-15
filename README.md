@@ -141,6 +141,8 @@ save_case(to="psse", out_path="case9.raw", json=...)  # stage a file for path-on
 
 `save_case` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
 
+PowerWorld `.pwd` display files decode separately via `read_display_file(path=...)`, which returns the one-line diagram's canvas size and each substation's display coordinates — the diagram geometry, distinct from the `.pwb`/`.aux` case data.
+
 ### Running from a clone (without installing)
 
 Every server is still a standalone script. Clone the repo and run any server directly for use in Claude Desktop:

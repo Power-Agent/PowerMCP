@@ -9,6 +9,8 @@ test_runner.py so it skips with the rest of the module.
 
 tests/data/case9.m is vendored verbatim from
 https://github.com/MATPOWER/matpower/tree/master/data (BSD-3).
+tests/data/powerworld/ACTIVSg200.pwd is vendored from powerio's test suite
+(eigenergy/powerio); ACTIVSg200 is a public Texas A&M synthetic grid.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio")
+pytest.importorskip("powerio", minversion="0.2.2")
 
 import powerio  # noqa: E402
 
@@ -39,6 +41,9 @@ import pypsa  # noqa: E402  (core dependency, like the server itself)
 import pypsa_mcp  # noqa: E402
 
 CASE9 = Path(__file__).resolve().parent / "data" / "case9.m"
+ACTIVSG200_PWD = (
+    Path(__file__).resolve().parent / "data" / "powerworld" / "ACTIVSg200.pwd"
+)
 
 # 3-bus case with rating 0 branches, for the overwrite_zero_s_nom tests.
 ZERO_RATE_CASE = """function mpc = zero_rate
@@ -482,3 +487,35 @@ def test_gridfm_round_trip(tmp_path):
 def test_read_gridfm_missing_dir_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
         powerio_mcp.read_gridfm(str(tmp_path / "nope"))
+
+
+# ---------------------------------------------------------------------------
+# PowerWorld .pwd display files (powerio #120). read_display_file is the one
+# remaining local overlay: it wraps powerio.parse_display_file until the
+# canonical server exposes a display tool.
+# ---------------------------------------------------------------------------
+
+def test_read_display_file_decodes_pwd():
+    r = powerio_mcp.read_display_file(str(ACTIVSG200_PWD))
+    assert r["kind"] == "powerworld"
+    assert r["canvas_width"] > 0 and r["canvas_height"] > 0
+    subs = r["substations"]
+    assert subs, "expected at least one substation"
+    assert all(set(s) == {"number", "name", "x", "y"} for s in subs)
+    assert any(s["name"] for s in subs)
+    assert all(
+        isinstance(s["x"], (int, float)) and isinstance(s["y"], (int, float))
+        for s in subs
+    )
+
+
+def test_read_display_missing_file_maps_cleanly(tmp_path):
+    with pytest.raises(ValueError):
+        powerio_mcp.read_display_file(str(tmp_path / "nope.pwd"))
+
+
+def test_read_display_garbage_file_maps_cleanly(tmp_path):
+    bad = tmp_path / "garbage.pwd"
+    bad.write_bytes(b"not a real display file\x00\x01\x02")
+    with pytest.raises(ValueError):
+        powerio_mcp.read_display_file(str(bad))

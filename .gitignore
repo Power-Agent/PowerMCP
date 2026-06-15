@@ -96,7 +96,9 @@ eig_*/
 
 # PowerWorld
 *.pwd
-# Note: .pwb files might be case files you want to keep (like IEEE 39 bus.pwb), 
+# ...but keep the vendored .pwd display fixture the powerio tests decode.
+!tests/data/powerworld/ACTIVSg200.pwd
+# Note: .pwb files might be case files you want to keep (like IEEE 39 bus.pwb),
 # so we don't ignore them globally.
 
 # Testing
