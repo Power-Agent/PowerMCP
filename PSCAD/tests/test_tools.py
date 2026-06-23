@@ -48,7 +48,8 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         """Edge case: Attempting simulation without a valid license."""
         self.mock_pscad.licensed.return_value = False
         result = await run_project(project_name="test")
-        self.assertIn("not licensed", result)
+        self.assertFalse(result["started"])
+        self.assertIn("not licensed", result["error"])
 
     async def test_find_no_components(self):
         """Edge case: Searching for components that don't exist."""

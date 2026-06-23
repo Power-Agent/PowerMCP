@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import psutil
 import logging
 from typing import Optional, TYPE_CHECKING
@@ -54,6 +55,15 @@ class PSCADConnectionManager:
 
     async def attach_local(self) -> str:
         """Robustly attach to any local PSCAD instance or launch a new one."""
+        # PSCAD's generated EMTDC run batch launches the compiled solver by a
+        # bare name from the build directory (``pushd <dir>`` then
+        # ``<project>.exe``). If ``NoDefaultCurrentDirectoryInExePath`` is set in
+        # our environment (some launchers set it), PSCAD inherits it and Windows
+        # refuses to find the exe in the current directory -- the run dies
+        # immediately with "'<project>.exe' is not recognized as an internal or
+        # external command". Scrub it so the PSCAD instance we launch, and the
+        # EMTDC processes it spawns, can run normally.
+        os.environ.pop("NoDefaultCurrentDirectoryInExePath", None)
         try:
             import mhi.pscad
         except ImportError as e:
@@ -63,7 +73,17 @@ class PSCADConnectionManager:
                 "Original import error: " + repr(e)
             )
         try:
-            self._pscad = await robust_executor.run_safe(mhi.pscad.application)
+            # Cold-launching PSCAD can take well over the default 30 s watchdog;
+            # give the attach/launch a generous timeout.
+            try:
+                self._pscad = await robust_executor.run_safe(mhi.pscad.application, _timeout=120)
+            except Exception as attach_err:
+                # application() only catches ConnectionRefusedError before
+                # launching; a stale PSCAD process with no automation listener
+                # raises ProcessLookupError instead, so it never falls back to
+                # launching. Start a fresh instance explicitly in that case.
+                logger.info("Could not attach to a running PSCAD (%s); launching a new instance.", attach_err)
+                self._pscad = await robust_executor.run_safe(mhi.pscad.launch, _timeout=180)
             return f"Successfully attached to PSCAD {self._pscad.version} (Local)."
         except Exception as e:
             logger.error(f"Attach failed: {str(e)}")
