@@ -15,13 +15,16 @@ tests/data/powerworld/ACTIVSg200.pwd is vendored from powerio's test suite
 
 from __future__ import annotations
 
+import asyncio
+import importlib
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio", minversion="0.2.2")
+pytest.importorskip("powerio", minversion="0.3.3")
 
 import powerio  # noqa: E402
 
@@ -66,8 +69,22 @@ mpc.branch = [
 
 def test_parse_json_round_trips():
     r = powerio_mcp.parse(path=str(CASE9))
-    assert r["summary"]["n_buses"] == 9
+    assert r["json_format"] == "powerio-json"
+    assert r["summary"]["elements"]["buses"] == 9
     assert powerio.from_json(r["json"]).n_buses == 9
+
+
+def test_tool_surface_is_canonical():
+    names = {tool.name for tool in asyncio.run(powerio_mcp.mcp.list_tools())}
+    assert names == {
+        "convert",
+        "save",
+        "summary",
+        "parse",
+        "normalize",
+        "matrix",
+        "display",
+    }
 
 
 def test_normalize_returns_dense_one_based_ids():
@@ -76,13 +93,13 @@ def test_normalize_returns_dense_one_based_ids():
     assert [b["id"] for b in case.buses] == list(range(1, 10))
 
 
-def test_to_json_accepted_downstream():
-    r = powerio_mcp.to_json(path=str(CASE9))
+def test_parse_transport_accepted_downstream():
+    r = powerio_mcp.parse(path=str(CASE9))
     assert powerio.from_json(r["json"]).n_buses == 9
 
 
-def test_compute_matrix_bprime():
-    m = powerio_mcp.compute_matrix("bprime", path=str(CASE9))
+def test_matrix_bprime():
+    m = powerio_mcp.matrix("bprime", path=str(CASE9))
     assert m["format"] == "coo"
     assert m["shape"] == [9, 9]
     assert m["nnz"] > 0
@@ -93,27 +110,17 @@ def test_compute_matrix_bprime():
     assert type(m["col"][0]) is int
 
 
-def test_compute_matrix_accepts_json_transport():
+def test_matrix_accepts_json_transport():
     transport = powerio_mcp.parse(path=str(CASE9))["json"]
-    from_json = powerio_mcp.compute_matrix("bprime", json=transport)
-    from_path = powerio_mcp.compute_matrix("bprime", path=str(CASE9))
+    from_json = powerio_mcp.matrix("bprime", json=transport)
+    from_path = powerio_mcp.matrix("bprime", path=str(CASE9))
     assert from_json["shape"] == from_path["shape"]
     assert from_json["nnz"] == from_path["nnz"]
 
 
-def test_compute_matrix_unknown_kind():
+def test_matrix_unknown_kind():
     with pytest.raises(ValueError):
-        powerio_mcp.compute_matrix("nope", path=str(CASE9))
-
-
-def test_dense_view_counts():
-    d = powerio_mcp.dense_view(path=str(CASE9))
-    assert d["n"] == 9
-    assert d["m"] == 9
-    assert d["base_mva"] == 100.0
-    assert type(d["bus_ids"][0]) is int
-    assert type(d["branch"]["r"][0]) is float
-    assert type(d["is_radial"]) is bool
+        powerio_mcp.matrix("nope", path=str(CASE9))
 
 
 def test_convert_powermodels():
@@ -124,15 +131,12 @@ def test_convert_powermodels():
 
 def test_summary_fields():
     s = powerio_mcp.summary(path=str(CASE9))
-    assert s["n_buses"] == 9
+    assert s["elements"]["buses"] == 9
     assert s["base_mva"] == 100.0
     assert s["source_format"] == "Matpower"
-    assert s["n_connected_components"] == 1
-    for key in (
-        "name", "n_branches", "n_gens", "n_loads", "n_shunts",
-        "is_radial", "connectivity_report",
-    ):
-        assert key in s
+    assert s["topology"]["connected_components"] == 1
+    assert s["elements"]["branches"] == 9
+    assert s["topology"]["connectivity_report"]
 
 
 def test_exactly_one_input_enforced():
@@ -141,20 +145,17 @@ def test_exactly_one_input_enforced():
     with pytest.raises(ValueError):
         powerio_mcp.summary(path="x", content="y")
     with pytest.raises(ValueError):
-        powerio_mcp.compute_matrix("bprime")
+        powerio_mcp.matrix("bprime")
     with pytest.raises(ValueError):
-        powerio_mcp.compute_matrix("bprime", path=str(CASE9), json="{}")
-    with pytest.raises(ValueError):
-        powerio_mcp.dense_view(path="x", content="y")
+        powerio_mcp.matrix("bprime", path=str(CASE9), json="{}")
 
 
-def test_inline_content_requires_from():
-    with pytest.raises(ValueError):
-        powerio_mcp.convert(to="psse", content=CASE9.read_text())
+def test_inline_matpower_content_defaults_to_matpower():
+    assert powerio_mcp.convert(to="psse", content=CASE9.read_text())["text"]
 
 
-def test_compute_matrix_lacpf():
-    m = powerio_mcp.compute_matrix("lacpf", path=str(CASE9))
+def test_matrix_lacpf():
+    m = powerio_mcp.matrix("lacpf", path=str(CASE9))
     assert m["format"] == "coo"
     assert m["shape"] == [18, 18]
     assert m["nnz"] > 0
@@ -338,15 +339,15 @@ def test_pandapower_bridge_honors_branch_status(tmp_path):
     assert len(in_service) == 2 and in_service.count(False) == 1, in_service
 
 
-def test_compute_matrix_laplacian():
-    m = powerio_mcp.compute_matrix("laplacian", path=str(CASE9))
+def test_matrix_laplacian():
+    m = powerio_mcp.matrix("laplacian", path=str(CASE9))
     assert m["format"] == "coo"
     assert m["shape"] == [9, 9]
 
 
-def test_compute_matrix_bad_json_raises_valueerror():
+def test_matrix_bad_json_raises_valueerror():
     with pytest.raises(ValueError):
-        powerio_mcp.compute_matrix("bprime", json="{not valid json")
+        powerio_mcp.matrix("bprime", json="{not valid json")
 
 
 def test_convert_oserror_normalizes_to_valueerror(monkeypatch):
@@ -372,9 +373,9 @@ def test_unreadable_file_maps_cleanly(tmp_path):
     locked.write_text("function mpc = x\n")
     locked.chmod(0o000)
     try:
-        with pytest.raises(ValueError, match="cannot read file"):
+        with pytest.raises(ValueError, match="cannot read input"):
             powerio_mcp.convert(to="psse", path=str(locked))
-        with pytest.raises(ValueError, match="cannot read file"):
+        with pytest.raises(ValueError, match="cannot read input"):
             powerio_mcp.summary(path=str(locked))
     finally:
         locked.chmod(0o644)
@@ -385,7 +386,7 @@ def test_wrong_schema_json_maps_cleanly():
     # malformed-JSON case is covered above.
     for bad in ("{}", "[]", "null", '{"buses": "nope"}'):
         with pytest.raises(ValueError, match="parse failed"):
-            powerio_mcp.compute_matrix("bprime", json=bad)
+            powerio_mcp.matrix("bprime", json=bad, json_format="powerio-json")
 
 
 # ---------------------------------------------------------------------------
@@ -431,8 +432,7 @@ def test_andes_load_missing_file(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# pandapower-json (a text format added in powerio 0.1.1) and the folder /
-# Parquet formats that need their own read/write tools.
+# pandapower-json plus folder and Parquet formats routed through generic verbs.
 # ---------------------------------------------------------------------------
 
 def test_convert_to_pandapower_json():
@@ -445,9 +445,10 @@ def test_pandapower_json_round_trips_through_transport():
     # pandapower-json is a plain text format, so it flows through the existing
     # save/parse tools with no dedicated tool.
     transport = powerio_mcp.parse(path=str(CASE9))["json"]
-    out = powerio_mcp.to_json(content=
-        powerio_mcp.convert(to="pandapower-json", path=str(CASE9))["text"],
-        format="pandapower-json")
+    out = powerio_mcp.parse(
+        content=powerio_mcp.convert(to="pandapower-json", path=str(CASE9))["text"],
+        format="pandapower-json",
+    )
     assert json.loads(out["json"])
     assert json.loads(transport)
 
@@ -461,7 +462,7 @@ def test_pypsa_csv_folder_round_trip(tmp_path):
     assert w["files"], w
     assert (out_dir / "buses.csv").exists()
     r = powerio_mcp.parse(path=str(out_dir))
-    assert r["summary"]["n_buses"] == 9
+    assert r["summary"]["elements"]["buses"] == 9
     assert json.loads(r["json"])
 
 
@@ -479,29 +480,28 @@ def test_read_pypsa_csv_missing_folder_maps_cleanly(tmp_path):
 
 def test_gridfm_round_trip(tmp_path):
     out_dir = tmp_path / "gfm"
-    w = powerio_mcp.write_gridfm(str(out_dir), path=str(CASE9))
+    w = powerio_mcp.save(to="gridfm", out_path=str(out_dir), path=str(CASE9))
     assert w["files"], w
-    r = powerio_mcp.read_gridfm(str(out_dir))
-    assert r["summary"]["n_buses"] == 9
-    assert r["scenario"] == 0
+    r = powerio_mcp.parse(path=str(out_dir), format="gridfm", options={"scenario": 0})
+    assert r["summary"]["elements"]["buses"] == 9
     assert json.loads(r["json"])
 
 
-def test_read_gridfm_missing_dir_maps_cleanly(tmp_path):
+def test_gridfm_missing_dir_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
-        powerio_mcp.read_gridfm(str(tmp_path / "nope"))
+        powerio_mcp.parse(path=str(tmp_path / "nope"), format="gridfm")
 
 
 # ---------------------------------------------------------------------------
-# PowerWorld .pwd display files. read_display_file is provided by the canonical
-# powerio.mcp.server since powerio 0.3.3 (the previous local overlay is gone);
-# these tests exercise the re-exported tool.
+# PowerWorld .pwd display files. display is provided by the canonical
+# powerio.mcp.server; these tests exercise the re-exported tool.
 # ---------------------------------------------------------------------------
 
-def test_read_display_file_decodes_pwd():
-    r = powerio_mcp.read_display_file(str(ACTIVSG200_PWD))
-    assert r["kind"] == "powerworld"
-    assert r["canvas_width"] > 0 and r["canvas_height"] > 0
+def test_display_decodes_pwd():
+    r = powerio_mcp.display(str(ACTIVSG200_PWD))
+    assert r["domain"] == "display"
+    assert r["source_format"] == "powerworld-pwd"
+    assert r["canvas"]["width"] > 0 and r["canvas"]["height"] > 0
     subs = r["substations"]
     assert subs, "expected at least one substation"
     assert all(set(s) == {"number", "name", "x", "y"} for s in subs)
@@ -514,11 +514,108 @@ def test_read_display_file_decodes_pwd():
 
 def test_read_display_missing_file_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
-        powerio_mcp.read_display_file(str(tmp_path / "nope.pwd"))
+        powerio_mcp.display(str(tmp_path / "nope.pwd"))
 
 
 def test_read_display_garbage_file_maps_cleanly(tmp_path):
     bad = tmp_path / "garbage.pwd"
     bad.write_bytes(b"not a real display file\x00\x01\x02")
     with pytest.raises(ValueError):
-        powerio_mcp.read_display_file(str(bad))
+        powerio_mcp.display(str(bad))
+
+
+# ---------------------------------------------------------------------------
+# OpenDSS distribution bridge
+# ---------------------------------------------------------------------------
+
+def _load_opendss_configuration(monkeypatch):
+    opendss_dir = Path(__file__).resolve().parents[1] / "OpenDSS"
+    monkeypatch.syspath_prepend(str(opendss_dir))
+
+    fake_config = types.SimpleNamespace(
+        compile_dss=lambda _path: None,
+        circuit_readiness=lambda: {"ready": True},
+    )
+    fake_tools = types.SimpleNamespace(
+        update_dss=lambda _dss: None,
+        configuration=fake_config,
+    )
+    fake_dss_interface = types.SimpleNamespace(DSS=lambda: object())
+    monkeypatch.setitem(
+        sys.modules, "py_dss_toolkit", types.SimpleNamespace(dss_tools=fake_tools)
+    )
+    monkeypatch.setitem(sys.modules, "py_dss_interface", fake_dss_interface)
+
+    for name in (
+        "opendss_tools.configuration",
+        "core.engine",
+        "core.state",
+        "utils.responses",
+    ):
+        sys.modules.pop(name, None)
+    return importlib.import_module("opendss_tools.configuration")
+
+
+def test_compile_distribution_compiles_dss_path_directly(monkeypatch, tmp_path):
+    configuration = _load_opendss_configuration(monkeypatch)
+    dss_file = tmp_path / "master.dss"
+    dss_file.write_text("Redirect feeders/loads.dss\n")
+    calls = []
+
+    def fake_compile(path, force_recompile=False):
+        calls.append((path, force_recompile))
+        return {"success": True, "payload": {"dss_file": path}}
+
+    monkeypatch.setattr(configuration, "compile_opendss_file", fake_compile)
+
+    result = configuration.compile_distribution(
+        path=str(dss_file),
+        source_format="opendss",
+        force_recompile=True,
+    )
+
+    assert calls == [(str(dss_file), True)]
+    assert result["success"] is True
+    assert result["payload"]["staged_dss_file"] is None
+    assert result["payload"]["distribution_source_file"] == str(dss_file)
+    assert result["payload"]["conversion_warnings"] == []
+
+
+def test_compile_distribution_stages_converted_json(monkeypatch, tmp_path):
+    configuration = _load_opendss_configuration(monkeypatch)
+    source = tmp_path / "network.json"
+    source.write_text('{"bus": {}}')
+    convert_calls = []
+    compile_calls = []
+
+    class Conversion:
+        text = "Redirect feeders/loads.dss\n"
+        warnings = ["dropped solver metadata"]
+
+    import powerio.dist as dist
+
+    def fake_convert_file(path, to, source_format):
+        convert_calls.append((path, to, source_format))
+        return Conversion()
+
+    def fake_compile(path, force_recompile=False):
+        compile_calls.append((Path(path), force_recompile))
+        assert Path(path).read_text() == Conversion.text
+        return {"success": True, "payload": {"dss_file": path}}
+
+    monkeypatch.setattr(dist, "convert_file", fake_convert_file)
+    monkeypatch.setattr(configuration, "compile_opendss_file", fake_compile)
+
+    result = configuration.compile_distribution(
+        path=str(source),
+        source_format="bmopf_json",
+        format="bmopf-json",
+    )
+
+    assert convert_calls == [(str(source), "dss", "bmopf-json")]
+    assert len(compile_calls) == 1
+    assert compile_calls[0][0].name.startswith("powerio_dist_")
+    assert result["success"] is True
+    assert result["payload"]["staged_dss_file"] == str(compile_calls[0][0])
+    assert result["payload"]["distribution_source_file"] == str(source)
+    assert result["payload"]["conversion_warnings"] == Conversion.warnings

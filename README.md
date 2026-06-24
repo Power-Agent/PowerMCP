@@ -131,17 +131,21 @@ PowerMCP ships a conversion server backed by [powerio](https://github.com/eigene
 Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and load it anywhere.
 
 ```
-parse_case(path="case9.raw")                       # powerio server → {"json": ..., "summary": ...}
+parse(path="case9.raw")                            # powerio server -> {"json": ..., "summary": ...}
 load_network_from_json(network_json=...)           # pandapower server ingests the transport
 load_model_from_json(network_json=...)             # egret server stages it as a solvable case file
 import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
-compute_matrix(kind="ptdf", json=...)              # powerio server builds matrices from it
-save_case(to="psse", out_path="case9.raw", json=...)  # stage a file for path-only servers
+matrix(kind="ptdf", json=...)                      # powerio server builds matrices from it
+save(to="psse", out_path="case9.raw", json=...)    # stage a file for path only servers
 ```
 
-`save_case` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
+`summary` returns the canonical nested shape used by PowerIO and PowerMCP: counts live under `elements` (`elements.buses`, `elements.branches`, `elements.generators`) and topology metadata lives under `topology` (`topology.connected_components`, `topology.reference_buses`).
 
-PowerWorld `.pwd` display files decode separately via `read_display_file(path=...)`, which returns the one-line diagram's canvas size and each substation's display coordinates — the diagram geometry, distinct from the `.pwb`/`.aux` case data.
+`save` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
+
+PowerWorld `.pwd` display files decode separately via `display(path=...)`, which returns the diagram canvas and each substation's display coordinates. The display geometry is distinct from the `.pwb`/`.aux` case data.
+
+PowerIO MCP tools accept local paths and `file://` URIs. Nonlocal URI schemes are rejected. Set `POWERIO_MCP_ALLOWED_ROOTS` to an `os.pathsep` separated list of directories to constrain MCP reads and writes.
 
 ### Running from a clone (without installing)
 

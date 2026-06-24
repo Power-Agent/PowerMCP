@@ -40,10 +40,9 @@ dependencies = [
     # ANDES bridges build on its JSON transport), and is cheap to require: abi3
     # wheels for five platforms, zero required runtime deps, [mcp,matrix] adding
     # only scipy (already transitive via pandapower) on top of mcp+numpy.
-    # >=0.3.3: the MCP tool surface was canonicalized to the powerio Python API
-    # (`*_network` names) and grew the distribution tools (convert_dist_network,
-    # dist_network_summary, save_dist_network) plus read_display_file, so
-    # powerio_mcp.py is a pure re-export of all sixteen tools — no local overlay.
+    # >=0.3.3: the MCP tool surface is the seven canonical verbs:
+    # convert, save, summary, parse, normalize, matrix, display.
+    # powerio_mcp.py re-exports exactly that surface with no local overlay.
     "powerio[mcp,matrix]>=0.3.3",
     # CLI / installer toolkit:
     "typer>=0.12",

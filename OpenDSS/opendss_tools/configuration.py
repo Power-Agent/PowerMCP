@@ -68,26 +68,28 @@ def compile_distribution(
     path: Optional[str] = None,
     content: Optional[str] = None,
     source_format: Optional[str] = None,
+    format: Optional[str] = None,
     force_recompile: bool = False,
 ) -> Dict[str, Any]:
     """Compile a distribution case given in any powerio distribution format.
 
     The on-ramp into OpenDSS for the BMOPF and PowerModelsDistribution worlds: a
-    feeder held as IEEE BMOPF JSON (``bmopf-json``) or PowerModelsDistribution
-    ENGINEERING JSON (``pmd-json``) — or already as OpenDSS ``.dss`` — is
-    converted to a self-contained ``.dss`` file by powerio and compiled here,
-    so a case authored or solved in those toolchains can run in OpenDSS without
-    a hand translation.
+    feeder held as IEEE BMOPF JSON (``bmopf-json``), PowerModelsDistribution
+    ENGINEERING JSON (``pmd-json``), or already as OpenDSS ``.dss`` is converted
+    to a self-contained ``.dss`` file by powerio and compiled here, so a case
+    authored or solved in those toolchains can run in OpenDSS without a hand
+    translation.
 
     Provide exactly one of ``path`` (a file on disk) or ``content`` (inline file
-    text). ``source_format`` is the distribution format name (``dss``,
-    ``pmd-json``, ``bmopf-json``); for a ``path`` it is inferred from the
-    extension when omitted, but it is REQUIRED for inline ``content``.
+    text). ``source_format``/``format`` is the distribution format name
+    (``dss``, ``pmd-json``, ``bmopf-json``); for a ``path`` it is inferred from
+    the extension when omitted, but it is REQUIRED for inline ``content``.
 
     Returns the ``compile_opendss_file`` result plus ``staged_dss_file`` (the
-    converted ``.dss`` path on disk) and ``conversion_warnings`` (powerio's
-    fidelity notes for the BMOPF/PMD → OpenDSS conversion — things OpenDSS could
-    not represent, e.g. solver-only metadata).
+    converted ``.dss`` path on disk, or ``None`` when an original DSS path was
+    compiled directly) and ``conversion_warnings`` (powerio's fidelity notes for
+    the BMOPF/PMD -> OpenDSS conversion, such as solver metadata OpenDSS cannot
+    represent).
     """
     try:
         import powerio.dist as _dist
@@ -96,19 +98,44 @@ def compile_distribution(
 
     if (path is None) == (content is None):
         return _err("provide exactly one of `path` or `content`")
-    if content is not None and not source_format:
-        return _err("`source_format` is required when compiling inline `content`")
+    source_key = (
+        source_format.strip().lower().replace("_", "-") if source_format else None
+    )
+    format_key = format.strip().lower().replace("_", "-") if format else None
+    if source_key is not None and format_key is not None and source_key != format_key:
+        return _err("`source_format` and `format` disagree")
+    source_key = source_key or format_key
+    if content is not None and not source_key:
+        return _err("`format` is required when compiling inline `content`")
+
+    direct_dss = (
+        path is not None
+        and (
+            source_key in ("dss", "opendss")
+            or (source_key is None and Path(path).suffix.lower() == ".dss")
+        )
+    )
+    if direct_dss:
+        result = compile_opendss_file(path, force_recompile=force_recompile)
+        if isinstance(result, dict):
+            target = (
+                result["payload"] if isinstance(result.get("payload"), dict) else result
+            )
+            target["staged_dss_file"] = None
+            target["distribution_source_file"] = path
+            target["conversion_warnings"] = []
+        return result
 
     try:
         if path is not None:
-            conv = _dist.convert_file(path, "dss", source_format)
+            conv = _dist.convert_file(path, "dss", source_key)
         else:
-            conv = _dist.convert_str(content, "dss", source_format)
+            conv = _dist.convert_str(content, "dss", source_key)
     except FileNotFoundError as exc:
         return _err(f"file not found: {exc}")
     except OSError as exc:
         return _err(f"cannot read file: {exc}")
-    except Exception as exc:  # powerio.PowerIOError and friends → one error shape
+    except Exception as exc:  # powerio.PowerIOError and friends use one error shape
         return _err(f"distribution conversion failed: {exc}")
 
     # newline="" keeps the converter output byte-identical across platforms.
@@ -126,8 +153,11 @@ def compile_distribution(
     result = compile_opendss_file(staged, force_recompile=force_recompile)
     if isinstance(result, dict):
         # Sit beside the rest of the compile result inside the _ok payload.
-        target = result["payload"] if isinstance(result.get("payload"), dict) else result
+        target = (
+            result["payload"] if isinstance(result.get("payload"), dict) else result
+        )
         target["staged_dss_file"] = staged
+        target["distribution_source_file"] = path
         target["conversion_warnings"] = list(conv.warnings)
     return result
 

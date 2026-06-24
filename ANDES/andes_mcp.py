@@ -351,9 +351,9 @@ def load_network_from_json(
 ) -> Dict[str, Any]:
     """Stage a powerio JSON transport string as a MATPOWER file for ANDES.
 
-    Accepts the ``json`` string returned by the powerio server's parse or
-    to_json tools. Converts the network to MATPOWER format, writes it to
-    out_path (use a .m extension), and returns the path along with component
+    Accepts the ``json`` string returned by the powerio server's parse tool.
+    Converts the network to MATPOWER format, writes it to out_path (use a .m
+    extension), and returns the path along with component
     counts. Pass out_path to run_power_flow to run the simulation. powerio is a
     core dependency, so this is always available.
 

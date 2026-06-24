@@ -257,8 +257,8 @@ def get_network_info() -> Dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # powerio bridge: exchange cases with the powerio conversion server.
-# Its parse / to_json tools emit a JSON transport string that
-# load_network_from_json ingests directly, so a case parsed once there loads
+# Its parse tool emits a JSON transport string that load_network_from_json
+# ingests directly, so a case parsed once there loads
 # here without re-reading the file; export_network_to_format sends the current
 # network back out through powerio. powerio is an optional extra, so each tool
 # degrades to a status dict when it is missing.
@@ -418,9 +418,9 @@ def load_network_from_any(file_path: str, source_format: Optional[str] = None) -
 def load_network_from_json(network_json: str) -> Dict[str, Any]:
     """Load a network from a powerio JSON transport string.
 
-    Accepts the `json` string returned by the powerio server's parse or
-    to_json tools, so a case parsed once there loads here without passing
-    a file around or re-parsing it. Expects source-valued tables (MW, degrees)
+    Accepts the `json` string returned by the powerio server's parse tool,
+    so a case parsed once there loads here without passing a file around or
+    re-parsing it. Expects source-valued tables (MW, degrees)
     as parse emits them, not the per-unit normalize form. Replaces
     the currently loaded network. powerio is a core dependency, so this is
     always available.
