@@ -771,10 +771,10 @@ def import_case_from_json(
     """Import a powerio JSON transport string as a PyPSA network saved to a
     NetCDF file.
 
-    Accepts the `json` string returned by the powerio server's parse_case or
-    case_to_json tools, so a case parsed once there loads here without passing
-    a file around or re-parsing it. Expects source-valued tables (MW, degrees)
-    as parse_case emits them, not the per-unit normalize_case form. Writes the
+    Accepts the `json` string returned by the powerio server's parse tool,
+    so a case parsed once there loads here without passing a file around or
+    re-parsing it. Expects source-valued tables (MW, degrees)
+    as parse emits them, not the per-unit normalize form. Writes the
     network to output_path (use a .nc extension); pass that path as
     network_name to the other tools. powerio is a core dependency, so this is
     always available.

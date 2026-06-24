@@ -124,24 +124,33 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 > The Codex *Desktop* app on Windows has been reported to overwrite `~/.codex/config.toml`; the Codex *CLI* is unaffected. If you use both, re-run `powermcp install` after Desktop edits.
 
-### Case conversion between servers (PowerIO)
+### Case compilation between servers (PowerIO)
 
-PowerMCP ships a conversion server backed by [powerio](https://github.com/eigenergy/powerio) as a **core dependency** (no extra needed). It parses MATPOWER `.m`, PSS/E `.raw`, PowerWorld `.aux`, PowerModels JSON, and egret JSON into one format neutral network, converts between those formats with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
+PowerMCP ships a compiler server backed by [powerio](https://github.com/eigenergy/powerio) as a **core dependency** (no extra needed). It parses transmission and distribution formats into canonical JSON transports, converts between target artifacts with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
 
-Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and load it anywhere.
+Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and save runtime artifacts only when a backend needs a file.
 
 ```
-parse_case(path="case9.raw")                       # powerio server → {"json": ..., "summary": ...}
+parse(path="case9.raw")                            # powerio server -> {"json": ..., "summary": ...}
 load_network_from_json(network_json=...)           # pandapower server ingests the transport
 load_model_from_json(network_json=...)             # egret server stages it as a solvable case file
 import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
-compute_matrix(kind="ptdf", json=...)              # powerio server builds matrices from it
-save_case(to="psse", out_path="case9.raw", json=...)  # stage a file for path-only servers
+matrix(kind="ptdf", json=...)                      # powerio server builds matrices from it
+save(to_format="psse", out_path="case9.raw", json=...)  # stage a file for path only servers
 ```
 
-`save_case` covers the servers without a bridge: write the converted case to disk and point their load tools at the file (e.g. convert PowerWorld `.aux` to MATPOWER `.m` for ANDES).
+`summary` returns the canonical nested shape used by PowerIO and PowerMCP: counts live under `elements` (`elements.buses`, `elements.branches`, `elements.generators`) and topology metadata lives under `topology` (`topology.connected_components`, `topology.reference_buses`).
 
-PowerWorld `.pwd` display files decode separately via `read_display_file(path=...)`, which returns the one-line diagram's canvas size and each substation's display coordinates — the diagram geometry, distinct from the `.pwb`/`.aux` case data.
+`save` covers the servers without a bridge: write the converted case to disk and point their load tools at the file. For OpenDSS, save a distribution transport as DSS, then compile that DSS file:
+
+```
+save(to_format="dss", out_path="feeder.dss", json=..., json_format="bmopf-json")
+compile_opendss_file(dss_file="feeder.dss")
+```
+
+PowerWorld `.pwd` display files decode separately via `display(path=...)`, which returns the diagram canvas and each substation's display coordinates. The display geometry is distinct from the `.pwb`/`.aux` case data.
+
+PowerIO MCP tools accept local paths and `file://` URIs. Nonlocal URI schemes are rejected. Set `POWERIO_MCP_ALLOWED_ROOTS` to an `os.pathsep` separated list of directories to constrain MCP reads and writes.
 
 ### Running from a clone (without installing)
 
