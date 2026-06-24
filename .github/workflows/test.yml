@@ -22,12 +22,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install package with the powerio extra
-        # The powerio extra makes tests/test_powerio_server.py run instead of
-        # skip; on revisions without that extra, pip warns and proceeds.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install companion PowerIO draft
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e '.[powerio]' pytest
+          python -m pip install "powerio[mcp,matrix] @ git+https://github.com/eigenergy/powerio.git@feat/mcp-dist-display-tools"
+
+      - name: Install package
+        run: |
+          python -m pip install -e . pytest
 
       - name: Run tests
         run: python -m pytest tests/ -q
