@@ -64,20 +64,20 @@ mpc.branch = [
 """
 
 
-def test_parse_case_json_round_trips():
-    r = powerio_mcp.parse_case(path=str(CASE9))
+def test_parse_json_round_trips():
+    r = powerio_mcp.parse(path=str(CASE9))
     assert r["summary"]["n_buses"] == 9
     assert powerio.from_json(r["json"]).n_buses == 9
 
 
-def test_normalize_case_returns_dense_one_based_ids():
-    r = powerio_mcp.normalize_case(path=str(CASE9))
+def test_normalize_returns_dense_one_based_ids():
+    r = powerio_mcp.normalize(path=str(CASE9))
     case = powerio.from_json(r["json"])
     assert [b["id"] for b in case.buses] == list(range(1, 10))
 
 
-def test_case_to_json_accepted_downstream():
-    r = powerio_mcp.case_to_json(path=str(CASE9))
+def test_to_json_accepted_downstream():
+    r = powerio_mcp.to_json(path=str(CASE9))
     assert powerio.from_json(r["json"]).n_buses == 9
 
 
@@ -94,7 +94,7 @@ def test_compute_matrix_bprime():
 
 
 def test_compute_matrix_accepts_json_transport():
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
     from_json = powerio_mcp.compute_matrix("bprime", json=transport)
     from_path = powerio_mcp.compute_matrix("bprime", path=str(CASE9))
     assert from_json["shape"] == from_path["shape"]
@@ -116,14 +116,14 @@ def test_dense_view_counts():
     assert type(d["is_radial"]) is bool
 
 
-def test_convert_case_powermodels():
-    r = powerio_mcp.convert_case(to="powermodels-json", path=str(CASE9))
+def test_convert_powermodels():
+    r = powerio_mcp.convert(to="powermodels-json", path=str(CASE9))
     assert isinstance(r["warnings"], list)
     assert len(json.loads(r["text"])["bus"]) == 9
 
 
-def test_case_summary_fields():
-    s = powerio_mcp.case_summary(path=str(CASE9))
+def test_summary_fields():
+    s = powerio_mcp.summary(path=str(CASE9))
     assert s["n_buses"] == 9
     assert s["base_mva"] == 100.0
     assert s["source_format"] == "Matpower"
@@ -137,9 +137,9 @@ def test_case_summary_fields():
 
 def test_exactly_one_input_enforced():
     with pytest.raises(ValueError):
-        powerio_mcp.case_summary()
+        powerio_mcp.summary()
     with pytest.raises(ValueError):
-        powerio_mcp.case_summary(path="x", content="y")
+        powerio_mcp.summary(path="x", content="y")
     with pytest.raises(ValueError):
         powerio_mcp.compute_matrix("bprime")
     with pytest.raises(ValueError):
@@ -150,7 +150,7 @@ def test_exactly_one_input_enforced():
 
 def test_inline_content_requires_from():
     with pytest.raises(ValueError):
-        powerio_mcp.convert_case(to="psse", content=CASE9.read_text())
+        powerio_mcp.convert(to="psse", content=CASE9.read_text())
 
 
 def test_compute_matrix_lacpf():
@@ -162,39 +162,39 @@ def test_compute_matrix_lacpf():
     assert type(m["row"][0]) is int
 
 
-def test_save_case_writes_file(tmp_path):
+def test_save_writes_file(tmp_path):
     out = tmp_path / "case9.json"
-    r = powerio_mcp.save_case(to="powermodels-json", out_path=str(out), path=str(CASE9))
+    r = powerio_mcp.save(to="powermodels-json", out_path=str(out), path=str(CASE9))
     assert r["path"] == str(out)
     assert r["bytes_written"] == out.stat().st_size
     assert isinstance(r["warnings"], list)
     assert len(json.loads(out.read_text())["bus"]) == 9
 
 
-def test_save_case_refuses_overwrite(tmp_path):
+def test_save_refuses_overwrite(tmp_path):
     out = tmp_path / "case9.m"
     out.write_text("existing")
     with pytest.raises(ValueError, match="overwrite"):
-        powerio_mcp.save_case(to="matpower", out_path=str(out), path=str(CASE9))
-    r = powerio_mcp.save_case(
+        powerio_mcp.save(to="matpower", out_path=str(out), path=str(CASE9))
+    r = powerio_mcp.save(
         to="matpower", out_path=str(out), path=str(CASE9), overwrite=True
     )
     assert r["bytes_written"] == out.stat().st_size
 
 
-def test_save_case_accepts_json_transport(tmp_path):
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+def test_save_accepts_json_transport(tmp_path):
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
     out = tmp_path / "case9.m"
-    powerio_mcp.save_case(to="matpower", out_path=str(out), json=transport)
+    powerio_mcp.save(to="matpower", out_path=str(out), json=transport)
     assert powerio.parse_file(out).n_buses == 9
 
 
-def test_save_case_exactly_one_input(tmp_path):
+def test_save_exactly_one_input(tmp_path):
     out = tmp_path / "x.m"
     with pytest.raises(ValueError):
-        powerio_mcp.save_case(to="matpower", out_path=str(out))
+        powerio_mcp.save(to="matpower", out_path=str(out))
     with pytest.raises(ValueError):
-        powerio_mcp.save_case(to="matpower", out_path=str(out), path="a", json="{}")
+        powerio_mcp.save(to="matpower", out_path=str(out), path="a", json="{}")
 
 
 def test_pypsa_import_case_from_any(tmp_path):
@@ -208,7 +208,7 @@ def test_pypsa_import_case_from_any(tmp_path):
 
 
 def test_pypsa_import_case_from_json(tmp_path):
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
     out = tmp_path / "case9.nc"
     r = pypsa_mcp.import_case_from_json(transport, str(out))
     assert r["status"] == "success", r
@@ -279,7 +279,7 @@ def test_inline_convert_stages_no_temp_files(monkeypatch):
 
     monkeypatch.setattr(tempfile, "mkstemp", boom)
     monkeypatch.setattr(tempfile, "NamedTemporaryFile", boom)
-    r = powerio_mcp.convert_case(to="psse", content=CASE9.read_text(), from_="matpower")
+    r = powerio_mcp.convert(to="psse", content=CASE9.read_text(), format="matpower")
     assert r["text"]
 
 
@@ -349,7 +349,7 @@ def test_compute_matrix_bad_json_raises_valueerror():
         powerio_mcp.compute_matrix("bprime", json="{not valid json")
 
 
-def test_convert_case_oserror_normalizes_to_valueerror(monkeypatch):
+def test_convert_oserror_normalizes_to_valueerror(monkeypatch):
     # An OSError from convert_str (e.g. disk full) must surface as ValueError,
     # not leak as a raw OSError.
     def boom(content, to, from_):
@@ -357,7 +357,7 @@ def test_convert_case_oserror_normalizes_to_valueerror(monkeypatch):
 
     monkeypatch.setattr(powerio, "convert_str", boom)
     with pytest.raises(ValueError):
-        powerio_mcp.convert_case(to="psse", content="x", from_="matpower")
+        powerio_mcp.convert(to="psse", content="x", format="matpower")
 
 
 def test_unreadable_file_maps_cleanly(tmp_path):
@@ -373,9 +373,9 @@ def test_unreadable_file_maps_cleanly(tmp_path):
     locked.chmod(0o000)
     try:
         with pytest.raises(ValueError, match="cannot read file"):
-            powerio_mcp.convert_case(to="psse", path=str(locked))
+            powerio_mcp.convert(to="psse", path=str(locked))
         with pytest.raises(ValueError, match="cannot read file"):
-            powerio_mcp.case_summary(path=str(locked))
+            powerio_mcp.summary(path=str(locked))
     finally:
         locked.chmod(0o644)
 
@@ -415,7 +415,7 @@ def test_andes_load_network_from_any(tmp_path):
 
 def test_andes_load_network_from_json(tmp_path):
     andes_mcp = _load_andes_mcp()
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
     out = tmp_path / "case9_from_json.m"
     r = andes_mcp.load_network_from_json(transport, str(out))
     assert r["status"] == "success", r
@@ -436,42 +436,45 @@ def test_andes_load_missing_file(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_convert_to_pandapower_json():
-    r = powerio_mcp.convert_case(to="pandapower-json", path=str(CASE9))
+    r = powerio_mcp.convert(to="pandapower-json", path=str(CASE9))
     assert r["text"]
     assert json.loads(r["text"])  # well-formed JSON
 
 
 def test_pandapower_json_round_trips_through_transport():
     # pandapower-json is a plain text format, so it flows through the existing
-    # save_case/parse_case tools with no dedicated tool.
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
-    out = powerio_mcp.case_to_json(content=
-        powerio_mcp.convert_case(to="pandapower-json", path=str(CASE9))["text"],
+    # save/parse tools with no dedicated tool.
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
+    out = powerio_mcp.to_json(content=
+        powerio_mcp.convert(to="pandapower-json", path=str(CASE9))["text"],
         format="pandapower-json")
     assert json.loads(out["json"])
     assert json.loads(transport)
 
 
 def test_pypsa_csv_folder_round_trip(tmp_path):
+    # pypsa-csv is a directory format: write through save(to="pypsa-csv"), read
+    # back through parse via a folder path (powerio 0.3.3 folded the dedicated
+    # read/write_pypsa_csv_folder tools into the bare verbs).
     out_dir = tmp_path / "pypsa_csv"
-    w = powerio_mcp.write_pypsa_csv_folder(str(out_dir), path=str(CASE9))
+    w = powerio_mcp.save(to="pypsa-csv", out_path=str(out_dir), path=str(CASE9))
     assert w["files"], w
     assert (out_dir / "buses.csv").exists()
-    r = powerio_mcp.read_pypsa_csv_folder(str(out_dir))
+    r = powerio_mcp.parse(path=str(out_dir))
     assert r["summary"]["n_buses"] == 9
     assert json.loads(r["json"])
 
 
 def test_pypsa_csv_folder_accepts_transport(tmp_path):
-    transport = powerio_mcp.parse_case(path=str(CASE9))["json"]
+    transport = powerio_mcp.parse(path=str(CASE9))["json"]
     out_dir = tmp_path / "from_json"
-    w = powerio_mcp.write_pypsa_csv_folder(str(out_dir), json=transport)
+    w = powerio_mcp.save(to="pypsa-csv", out_path=str(out_dir), json=transport)
     assert (out_dir / "generators.csv").exists(), w
 
 
 def test_read_pypsa_csv_missing_folder_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
-        powerio_mcp.read_pypsa_csv_folder(str(tmp_path / "nope"))
+        powerio_mcp.parse(path=str(tmp_path / "nope"))
 
 
 def test_gridfm_round_trip(tmp_path):
@@ -490,9 +493,9 @@ def test_read_gridfm_missing_dir_maps_cleanly(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# PowerWorld .pwd display files (powerio #120). read_display_file is the one
-# remaining local overlay: it wraps powerio.parse_display_file until the
-# canonical server exposes a display tool.
+# PowerWorld .pwd display files. read_display_file is provided by the canonical
+# powerio.mcp.server since powerio 0.3.3 (the previous local overlay is gone);
+# these tests exercise the re-exported tool.
 # ---------------------------------------------------------------------------
 
 def test_read_display_file_decodes_pwd():

@@ -250,8 +250,8 @@ def load_model_from_any(file_path: str, source_format: Optional[str] = None) -> 
 def load_model_from_json(network_json: str) -> Dict[str, Any]:
     """Convert a powerio JSON transport string into an egret model.
 
-    Accepts the `json` string returned by the powerio server's parse_case or
-    case_to_json tools, so a case parsed once there feeds egret without
+    Accepts the `json` string returned by the powerio server's parse or
+    to_json tools, so a case parsed once there feeds egret without
     re-reading the file. Converts it to egret JSON, validates it as an egret
     ModelData, and stages it to a temp file. Pass the returned `case_file`
     path to the solver tools. powerio is a core dependency, so this is always
