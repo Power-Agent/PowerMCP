@@ -2,21 +2,19 @@
 ``powerio.mcp.server`` that ships with the powerio package.
 
 powerio is a core dependency (see ``powermcp.registry`` / ``pyproject.toml``), so
-this server keeps no copy of the conversion/summary/matrix tools. As of powerio
-0.3.3 the canonical MCP surface is the bare powerio verbs, one set for
-transmission and distribution (routed by format):
+this server keeps no copy of the conversion/summary/matrix tools. PowerIO is the
+cross-server compiler layer for transmission and distribution cases:
 
-- ``convert`` / ``save`` / ``summary``: generic format and transport verbs.
-  ``save(to="dss")`` stages an IEEE BMOPF or PowerModelsDistribution case as a
-  ``.dss`` file the OpenDSS server can compile (see its
-  ``compile_distribution`` tool); ``save(to="pypsa-csv")`` writes the CSV folder.
-- ``parse`` / ``normalize``: JSON transport for parsed or normalized networks.
+- ``parse``: source format to canonical JSON transport.
+- ``convert`` / ``save``: canonical transport or source format to target artifact.
+- ``summary``: canonical network summary.
+- ``normalize``: normalized transmission transport.
 - ``matrix``: sparse transmission matrix outputs.
 - ``display``: display artifacts such as PowerWorld ``.pwd`` geometry.
 
 PowerMCP deliberately re-exports only those canonical tools. GridFM and PyPSA
-folders route through ``parse`` and ``save`` with format names, and display
-artifacts route through ``display``.
+folders route through ``parse`` and ``save`` with format names. OpenDSS compiles
+DSS files produced by PowerIO when a distribution case needs that runtime.
 
 Run over stdio with ``python powerio_mcp.py`` (or ``powermcp run powerio``).
 """
