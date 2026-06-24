@@ -70,7 +70,13 @@ mpc.branch = [
 
 def test_parse_json_round_trips():
     r = powerio_mcp.parse(path=str(CASE9))
+    assert r["schema"] == "powerio.parse"
+    assert r["schema_version"] == "0.1"
+    assert r["domain"] == "transmission"
+    assert r["model"] == "balanced"
     assert r["json_format"] == "powerio-json"
+    assert r["source_format"] == "Matpower"
+    assert isinstance(r["warnings"], list)
     assert r["summary"]["elements"]["buses"] == 9
     assert powerio.from_json(r["json"]).n_buses == 9
 
@@ -114,6 +120,13 @@ def test_parse_transport_accepted_downstream():
 
 def test_matrix_bprime():
     m = powerio_mcp.matrix("bprime", path=str(CASE9))
+    assert m["schema"] == "powerio.matrix"
+    assert m["schema_version"] == "0.1"
+    assert m["domain"] == "transmission"
+    assert m["model"] == "balanced"
+    assert m["json_format"] == "powerio-json"
+    assert m["source_format"] == "Matpower"
+    assert isinstance(m["warnings"], list)
     assert m["format"] == "coo"
     assert m["shape"] == [9, 9]
     assert m["nnz"] > 0
@@ -145,6 +158,12 @@ def test_convert_powermodels():
 
 def test_summary_fields():
     s = powerio_mcp.summary(path=str(CASE9))
+    assert s["schema"] == "powerio.summary"
+    assert s["schema_version"] == "0.1"
+    assert s["domain"] == "transmission"
+    assert s["model"] == "balanced"
+    assert s["json_format"] == "powerio-json"
+    assert isinstance(s["warnings"], list)
     assert s["elements"]["buses"] == 9
     assert s["base_mva"] == 100.0
     assert s["source_format"] == "Matpower"
@@ -521,7 +540,10 @@ def test_gridfm_missing_dir_maps_cleanly(tmp_path):
 
 def test_display_decodes_pwd():
     r = powerio_mcp.display(str(ACTIVSG200_PWD))
+    assert r["schema"] == "powerio.display"
+    assert r["schema_version"] == "0.1"
     assert r["domain"] == "display"
+    assert r["model"] == "display"
     assert r["source_format"] == "powerworld-pwd"
     assert r["canvas"]["width"] > 0 and r["canvas"]["height"] > 0
     subs = r["substations"]
