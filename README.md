@@ -128,7 +128,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 PowerMCP ships a compiler server backed by [powerio](https://github.com/eigenergy/powerio) as a **core dependency** (no extra needed). It parses transmission and distribution formats into canonical JSON transports, converts between target artifacts with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
 
-Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and save runtime artifacts only when a backend needs a file.
+Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and save runtime artifacts only when a backend needs a file. Existing `json` transport workflows remain supported.
 
 ```
 parse(path="case9.raw")                            # powerio server -> {"json": ..., "summary": ...}
@@ -137,6 +137,17 @@ load_model_from_json(network_json=...)             # egret server stages it as a
 import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
 matrix(kind="ptdf", json=...)                      # powerio server builds matrices from it
 save(to_format="psse", out_path="case9.raw", json=...)  # stage a file for path only servers
+```
+
+PowerIO 0.4.0 also supports the `.pio.json` package transport, which carries the model plus package metadata and structured diagnostics:
+
+```
+parsed = parse(path="case9.raw", transport="package")
+pkg = parsed["package_json"]
+summary(package_json=pkg)
+matrix(kind="ptdf", package_json=pkg)
+save(to_format="psse", out_path="case9.raw", package_json=pkg)
+diagnostics(package_json=pkg)  # package diagnostics summary and structured findings
 ```
 
 `summary` returns the canonical nested shape used by PowerIO and PowerMCP: counts live under `elements` (`elements.buses`, `elements.branches`, `elements.generators`) and topology metadata lives under `topology` (`topology.connected_components`, `topology.reference_buses`).

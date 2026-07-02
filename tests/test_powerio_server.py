@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio", minversion="0.3.3")
+pytest.importorskip("powerio", minversion="0.4.0")
 
 import powerio  # noqa: E402
 
@@ -91,19 +91,26 @@ def test_tool_surface_is_canonical():
         "parse",
         "normalize",
         "matrix",
+        "diagnostics",
         "display",
     }
     for name in ("parse", "summary", "normalize", "matrix", "display"):
         props = tools[name].inputSchema["properties"]
         assert "from_format" in props
         assert "format" not in props
+    parse_props = tools["parse"].inputSchema["properties"]
+    assert "transport" in parse_props
     convert_props = tools["convert"].inputSchema["properties"]
     assert "to_format" in convert_props and "from_format" in convert_props
+    assert "package_json" in convert_props
     assert "to" not in convert_props and "format" not in convert_props
+    for name in ("summary", "normalize", "matrix"):
+        assert "package_json" in tools[name].inputSchema["properties"]
     save_schema = tools["save"].inputSchema
     assert save_schema["required"] == ["out_path"]
     save_props = save_schema["properties"]
     assert "to_format" in save_props and "from_format" in save_props
+    assert "package_json" in save_props
     assert "to" not in save_props and "format" not in save_props
 
 
@@ -223,6 +230,38 @@ def test_save_accepts_json_transport(tmp_path):
     out = tmp_path / "case9.m"
     powerio_mcp.save(out_path=str(out), json=transport)
     assert powerio.parse_file(out).n_buses == 9
+
+
+def test_package_transport_flows_through_core_tools(tmp_path):
+    parsed = powerio_mcp.parse(path=str(CASE9), transport="package")
+    assert parsed["schema"] == "powerio.parse"
+    assert parsed["transport"] == "package"
+    assert parsed["json_format"] == "package"
+    assert parsed["domain"] == "transmission"
+    assert parsed["model"] == "balanced"
+    assert "package_json" in parsed
+
+    package = json.loads(parsed["package_json"])
+    assert package["model_kind"] == "balanced"
+    assert package["model"]["kind"] == "balanced"
+
+    package_json = parsed["package_json"]
+    assert powerio_mcp.summary(package_json=package_json)["elements"]["buses"] == 9
+
+    matrix = powerio_mcp.matrix("bprime", package_json=package_json)
+    assert matrix["kind"] == "bprime"
+    assert matrix["shape"] == [9, 9]
+
+    out = tmp_path / "case9.m"
+    powerio_mcp.save(out_path=str(out), package_json=package_json)
+    assert powerio.parse_file(out).n_buses == 9
+
+    diag = powerio_mcp.diagnostics(package_json)
+    assert diag["schema"] == "powerio.diagnostics"
+    assert diag["model_kind"] == "balanced"
+    assert diag["summary"]["status"] in {"ok", "info", "warning", "error", "fatal"}
+    assert isinstance(diag["summary"]["text"], str)
+    assert isinstance(diag["diagnostics"], list)
 
 
 def test_save_exactly_one_input(tmp_path):
