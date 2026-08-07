@@ -109,16 +109,20 @@ def translate_to_sienna(
 
     Notes
     -----
-    r2x_plexos 0.2.0 (the current PyPI release as of this writing) resolves a
-    PLEXOS model's simulation horizon by reading its Horizon object's "Chrono
-    Date From"/"Chrono Date To" attributes and only catches ``AssertionError``
-    if they are unset; plexosdb instead raises ``plexosdb.exceptions.
-    NotFoundError`` in that case, which is not a subclass of
-    ``AssertionError``. Any PLEXOS study whose Horizon does not set explicit
-    Chrono dates (the common case for studies that don't use PLEXOS's
-    chronological/rolling horizon feature) will raise
-    ``r2x_core.exceptions.PluginError`` from this call. That is an upstream
-    r2x_plexos bug, not a PowerMCP defect -- see PLEXOSDB/README.md.
+    r2x_plexos 0.2.0 has a bug resolving a PLEXOS model's simulation horizon:
+    it reads the Horizon object's "Chrono Date From"/"Chrono Date To"
+    attributes and only catches ``AssertionError`` if they are unset, but
+    plexosdb instead raises ``plexosdb.exceptions.NotFoundError`` when the
+    attribute isn't registered for the class at all (not a subclass of
+    ``AssertionError``) -- the common case for studies that don't use
+    PLEXOS's chronological/rolling horizon feature. This is already fixed in
+    r2x_plexos>=0.3.0 (confirmed against the released wheel), which is what
+    this package now pins. Getting that version installed cleanly still
+    requires ``--prerelease=allow`` today, because r2x_plexos>=0.3.0 needs
+    plexosdb>=1.6.0, whose own ``plexos2duckdb>=0.1.0b11`` dependency has no
+    non-yanked stable release yet (epri-dev/plexos2duckdb#3). See
+    PLEXOSDB/README.md for the install command and both upstream issues
+    (NatLabRockies/R2X#299, epri-dev/plexos2duckdb#3).
     """
     from r2x_core import PluginContext
     from r2x_plexos import PLEXOSConfig, PLEXOSParser
@@ -181,8 +185,8 @@ def compare_solutions(
 
     Notes
     -----
-    Subject to the same upstream r2x_plexos horizon-resolution limitation
-    documented on ``translate_to_sienna``.
+    Uses the same ``r2x_plexos>=0.3.0`` pin documented on ``translate_to_sienna``,
+    which fixes the upstream Horizon-resolution bug this connector previously hit.
     """
     from r2x_core import PluginContext
     from r2x_plexos import PLEXOSConfig, PLEXOSParser

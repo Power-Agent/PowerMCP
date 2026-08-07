@@ -78,7 +78,16 @@ powerfactory = ["fastmcp>=2.0", "numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]
 # metadata pins a direct git dependency — PyPI rejects packages that declare
 # that, which would break `pip install powermcp` itself. So it is deliberately
 # left out of this extra; install it manually per PLEXOSDB/README.md.
-plexosdb   = ["r2x>=2.1.0"]
+#
+# Pinned to the individual r2x-plexos/-to-sienna/-sienna packages, NOT the
+# `r2x` meta-package: `r2x==2.1.0` transitively pins `r2x-plexos==0.2.0`,
+# which has the Horizon-resolution bug this connector works around (see
+# PLEXOSDB/README.md and NatLabRockies/R2X#299). r2x-plexos>=0.3.0 already
+# fixes it, but pulls in plexosdb>=1.6.0, whose own `plexos2duckdb>=0.1.0b11`
+# dependency currently has no non-yanked stable release satisfying it
+# (epri-dev/plexos2duckdb#3) — install with `uv pip install --prerelease=allow
+# powermcp[plexosdb]` until that's resolved upstream.
+plexosdb   = ["r2x-plexos>=0.3.0", "r2x-plexos-to-sienna>=0.1.0", "r2x-sienna>=0.4.0"]
 # --- convenience groups ---
 opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]

@@ -16,10 +16,16 @@ two share no PowerMCP code, only the upstream `r2x` dependency each calls direct
 
 Two packages are needed. Only one of them is on PyPI.
 
-**1. PowerMCP with the `plexosdb` extra** (covers `r2x` — the translation library):
+**1. PowerMCP with the `plexosdb` extra** (covers `r2x-plexos`/`r2x-plexos-to-sienna`/
+`r2x-sienna` — the translation libraries). Pinned to `r2x-plexos>=0.3.0` specifically,
+*not* the `r2x` meta-package (which still transitively pins the buggy `r2x-plexos==0.2.0`
+— see [Known upstream issues](#known-upstream-issues-tracked-and-worked-around) below).
+Installing that version currently requires allowing prereleases, for reasons also
+explained there:
 
 ```bash
-pip install "powermcp[plexosdb]"
+pip install --prerelease=allow "powermcp[plexosdb]"   # uv
+# or: pip install --pre "powermcp[plexosdb]"           # pip
 ```
 
 **2. `plexosdb-mcp` itself, manually, from source.** It is a real, cleanly packaged
@@ -42,7 +48,7 @@ powermcp run plexosdb
 Verify both real installs and the resulting tool surface with `uv`:
 
 ```bash
-uv pip install plexosdb r2x
+uv pip install --prerelease=allow plexosdb "r2x-plexos>=0.3.0" "r2x-plexos-to-sienna>=0.1.0" "r2x-sienna>=0.4.0"
 uv pip install "plexosdb-mcp @ git+https://github.com/NatLabRockies/plexosdb.git@main#subdirectory=src/plexosdb-mcp"
 python -c "from plexosdb_mcp.server import build_mcp_server; print(build_mcp_server())"
 ```
@@ -117,45 +123,59 @@ comparing two scenarios of a study, or a study before/after an edit made through
 plexosdb-mcp's own CRUD tools. It does not solve anything (no PLEXOS license is
 present); solving is the paired `SIENNA` connector's job.
 
-## Known upstream limitation (verified, not a PowerMCP defect)
+## Known upstream issues (tracked, and worked around)
 
 `translate_to_sienna`/`compare_solutions` were exercised end-to-end against a real
 PLEXOS XML study (`plexosdb`'s own test fixture, `tests/data/run_of_river_case/
 TestSystem.xml` — a full, non-trivial study: 103 PLEXOS classes, multiple generators,
-7 Models/scenarios) using the exact commands below. Session inspection (open the XML,
-list classes, list objects by class, read object properties and memberships) worked
-correctly end to end. The translation step currently does not, for a reason confirmed
-to be upstream:
+7 Models/scenarios). Two separate upstream issues were found and are now both worked
+around by this connector's pins; **full translation is confirmed working end-to-end**
+against that fixture with them in place.
+
+**1. Horizon-resolution bug in `r2x_plexos` — fixed upstream in 0.3.0, not yet in this
+connector's original pin.** `r2x_plexos` resolves a PLEXOS model's simulation horizon
+by reading its `Horizon` object's "Chrono Date From"/"Chrono Date To" attributes
+(`r2x_plexos.utils_plexosdb.resolve_horizon_for_model`). `r2x_plexos==0.2.0` (what the
+`r2x` meta-package still transitively pins as of this writing) only catches
+`AssertionError` when they're unset; `plexosdb` instead raises
+`plexosdb.exceptions.NotFoundError` when the attribute isn't registered for the class
+at all — not a subclass of `AssertionError` — so the exception propagated uncaught on
+**every** Model in the test fixture (none of its 7 Models set explicit Chrono dates,
+the common case for studies that don't use PLEXOS's chronological/rolling-horizon
+feature). Confirmed fixed in `r2x_plexos>=0.3.0` by inspecting the released wheel
+directly (`except (AssertionError, _NotFoundError):`). Filed upstream so `r2x` itself
+picks it up: [NatLabRockies/R2X#299](https://github.com/NatLabRockies/R2X/issues/299).
+This connector now pins `r2x-plexos>=0.3.0` directly rather than the `r2x`
+meta-package, specifically to get this fix.
+
+**2. `r2x_plexos>=0.3.0` requires `plexosdb>=1.6.0`, whose `plexos2duckdb>=0.1.0b11`
+dependency has no non-yanked stable release.** `plexos2duckdb`'s only stable release,
+`0.1.0`, is yanked from PyPI ("doesn't contain any binaries and should not be used"),
+leaving no non-prerelease version satisfying `plexosdb`'s requirement. Filed upstream:
+[epri-dev/plexos2duckdb#3](https://github.com/epri-dev/plexos2duckdb/issues/3).
+Worked around here with `--prerelease=allow` (see Install, above) until a new stable
+`plexos2duckdb` release ships.
+
+**Verified fix, against the same fixture and exact code path this connector uses**:
 
 ```bash
-uv pip install plexosdb r2x
-uv pip install "plexosdb-mcp @ git+https://github.com/NatLabRockies/plexosdb.git@main#subdirectory=src/plexosdb-mcp"
+uv pip install --prerelease=allow "r2x-plexos>=0.3.0" "r2x-plexos-to-sienna>=0.1.0" "r2x-sienna>=0.4.0"
 git clone --depth 1 https://github.com/NatLabRockies/plexosdb.git
 python -c "
 from r2x_core import PluginContext
 from r2x_plexos import PLEXOSConfig, PLEXOSParser
-cfg = PLEXOSConfig(fpath='plexosdb/tests/data/run_of_river_case/TestSystem.xml', model_name='Base')
-PLEXOSParser.from_context(PluginContext(config=cfg)).run()
-"
-# r2x_core.exceptions.PluginError: PLEXOSParser build failed:
-#   Attribute 'Chrono Date To' not found for class 'Horizon'.
-```
+from r2x_plexos_to_sienna import PlexosToSiennaConfig, plexos_to_sienna
+from r2x_sienna import SiennaExporter, SiennaExporterConfig
 
-`r2x_plexos` (PyPI `r2x_plexos==0.2.0`, pulled in transitively by `r2x==2.1.0`)
-resolves a PLEXOS model's simulation horizon by reading its `Horizon` object's
-"Chrono Date From"/"Chrono Date To" attributes
-(`r2x_plexos.utils_plexosdb.resolve_horizon_for_model`), and only catches
-`AssertionError` when they are unset. `plexosdb` (both the PyPI `1.5.0` release and
-the `1.6.0` HEAD pulled in transitively by the git-installed `plexosdb-mcp`) instead
-raises `plexosdb.exceptions.NotFoundError` in that case — not a subclass of
-`AssertionError` — so the exception propagates instead of being treated as "horizon
-not configured." This reproduces on **every** Model in the test fixture (none of its
-7 Models set explicit Chrono dates), which is the common case for PLEXOS studies that
-don't use the chronological/rolling-horizon feature — this is not a fixture-specific
-edge case. `translate_to_sienna`/`compare_solutions` in this connector call
-`r2x_plexos.PLEXOSParser` exactly as documented, so they hit the same error on studies
-shaped like this one until upstream fixes the exception type mismatch (or a model with
-explicit Chrono Date attributes is supplied).
+cfg = PLEXOSConfig(fpath='plexosdb/tests/data/run_of_river_case/TestSystem.xml', model_name='Base')
+parse_ctx = PLEXOSParser.from_context(PluginContext(config=cfg)).run()
+sienna_system = plexos_to_sienna(parse_ctx.system, PlexosToSiennaConfig())
+export_ctx = PluginContext(config=SiennaExporterConfig(output_path='/tmp/out/system.json'), system=sienna_system)
+SiennaExporter.from_context(export_ctx).run()
+print({t.__name__: len(list(sienna_system.get_components(t))) for t in sienna_system.get_component_types()})
+"
+# {'ACBus': 3, 'PowerLoad': 1, 'Area': 1, 'Arc': 3, 'Line': 3}
+```
 
 ## What's out of scope here
 
