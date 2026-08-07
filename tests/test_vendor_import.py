@@ -69,3 +69,40 @@ def test_pslf_import_side_effect_free_then_inits_once(monkeypatch):
     assert hasattr(mod, "CaseParameters")
 
     monkeypatch.delitem(sys.modules, "pslf_mcp_under_test", raising=False)
+
+
+def test_sienna_main_import_and_server_creation_are_r2x_free(monkeypatch):
+    """SIENNA's shape differs from PSSE/PSLF: instead of a module-level global that
+    a memoized ``_ensure_*()`` populates on first use, each SIENNA tool function
+    (``load_system``/``translate_to_plexos``/``compare_solutions``) imports
+    ``r2x_core``/``r2x_plexos``/``r2x_sienna_to_plexos`` inline, at call time -- see
+    SIENNA/sienna_mcp/tools/*.py. So the invariant to check is simpler: importing
+    ``sienna_mcp.main`` and building the server (``create_server()``, which only
+    registers tool callables, never calls them) must not import any r2x module.
+    r2x is not installed in this test environment (by design), so this exercises a
+    real absence, not a simulated one -- unlike psspy/PSLF_PYTHON above, which do
+    get faked, no monkeypatched replacement module is needed here.
+    """
+    r2x_module_names = ("r2x", "r2x_core", "r2x_plexos", "r2x_sienna", "r2x_sienna_to_plexos")
+    for mod_name in r2x_module_names:
+        assert mod_name not in sys.modules, f"{mod_name} must not already be imported"
+
+    tool = get_tool("sienna")
+    monkeypatch.syspath_prepend(str(tool.resolve_module_root()))
+
+    path = tool.resolve_module_root() / "sienna_mcp" / "main.py"
+    mod = _load("sienna_mcp_main_under_test", path)
+
+    for mod_name in r2x_module_names:
+        assert mod_name not in sys.modules, f"importing sienna_mcp.main pulled in {mod_name}"
+
+    server = mod.create_server()
+    assert server is not None
+
+    for mod_name in r2x_module_names:
+        assert mod_name not in sys.modules, f"create_server() pulled in {mod_name}"
+
+    monkeypatch.delitem(sys.modules, "sienna_mcp_main_under_test", raising=False)
+    for name in list(sys.modules):
+        if name == "sienna_mcp" or name.startswith("sienna_mcp."):
+            monkeypatch.delitem(sys.modules, name, raising=False)

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sienna-mcp"
+version = "0.1.0"
+description = "MCP server for Sienna (PowerSystems.jl / PowerSimulations.jl), with PLEXOS translation via r2x."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PowerMCP contributors" }]
+dependencies = [
+    "mcp>=1.0",
+    # r2x provides r2x_core/r2x_sienna/r2x_plexos/r2x_sienna_to_plexos as its own
+    # transitive dependencies -- see root pyproject.toml's `sienna` extra for the
+    # authoritative pin. Listed here too so `pip install ./SIENNA` is self-contained.
+    "r2x",
+]
+
+[project.scripts]
+sienna-mcp = "sienna_mcp.main:main"
+
+[tool.setuptools.packages.find]
+include = ["sienna_mcp*"]
+
+[tool.setuptools.package-data]
+sienna_mcp = ["scripts/*.jl"]

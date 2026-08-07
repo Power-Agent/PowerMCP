@@ -131,6 +131,22 @@ TOOLS: dict[str, "Tool"] = {
             external_solvers=("Julia",),
         ),
         Tool(
+            "sienna", "SIENNA", "open-source", windows_only=False, extra="sienna",
+            server_dir="SIENNA", run_kind="module",
+            module="sienna_mcp.main", module_root_rel=None,  # parent of sienna_mcp is the server dir itself
+            probe="r2x_core",
+            config_keys=(
+                ConfigKey("julia_bin", "Path to the Julia executable", "file"),
+                ConfigKey("julia_depot_path", "JULIA_DEPOT_PATH (optional, Enter to skip)", "dir", required=False),
+            ),
+            external_solvers=("Julia",),
+            notes=(
+                "Sienna (PowerSystems.jl/PowerSimulations.jl) is Julia-only, not on PyPI; "
+                "run_sienna_solve shells out to julia_bin the same way HOPE does. "
+                "translate_to_plexos/compare_solutions call the r2x PyPI package directly."
+            ),
+        ),
+        Tool(
             "powerio", "PowerIO", "open-source", windows_only=False, extra=None,
             server_dir="powerio", run_kind="script", entry_rel="powerio_mcp.py",
             probe="powerio",
