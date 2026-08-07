@@ -73,10 +73,16 @@ pscad-windows = ["psutil", "mhi-pscad; sys_platform == 'win32'", "mhi-psout; sys
 psse       = []                                 # vendor `psspy` not on PyPI — path captured in config.toml
 pslf       = ["pandas"]                         # vendor `PSLF_PYTHON` not on PyPI — path captured in config.toml
 powerfactory = ["fastmcp>=2.0", "numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powerfactory` not on PyPI
+# plexosdb: covers only what's actually on PyPI. `plexosdb-mcp` (the MCP tool
+# layer PLEXOSDB/plexosdb_mcp/main.py re-exports) is NOT on PyPI, and its own
+# metadata pins a direct git dependency — PyPI rejects packages that declare
+# that, which would break `pip install powermcp` itself. So it is deliberately
+# left out of this extra; install it manually per PLEXOSDB/README.md.
+plexosdb   = ["r2x>=2.1.0"]
 # --- convenience groups ---
 opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
-all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]"]
+all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]", "powermcp[plexosdb]"]
 
 [project.urls]
 Homepage = "https://github.com/Power-Agent/PowerMCP"
@@ -108,6 +114,7 @@ packages = ["powermcp"]
 "PowerWorld"   = "powermcp/_servers/PowerWorld"
 "PowerFactory" = "powermcp/_servers/PowerFactory"
 "LTSpice"      = "powermcp/_servers/LTSpice"
+"PLEXOSDB"     = "powermcp/_servers/PLEXOSDB"
 
 # The sdist must contain the server dirs at the repo root so that the
 # build-wheel-from-sdist step (used by `python -m build`) can force-include them.
@@ -115,10 +122,10 @@ packages = ["powermcp"]
 include = [
     "powermcp",
     "pandapower", "PyPSA", "ANDES", "Egret", "surge", "OpenDSS", "HOPE", "powerio",
-    "PSCAD", "PSSE", "PSLF", "PowerWorld", "PowerFactory", "LTSpice",
+    "PSCAD", "PSSE", "PSLF", "PowerWorld", "PowerFactory", "LTSpice", "PLEXOSDB",
     "README.md", "LICENSE", "pyproject.toml",
 ]
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
-    "PSCAD/tests", "HOPE/tests",
+    "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
 ]
