@@ -61,6 +61,7 @@ opendss    = ["py_dss_toolkit"]
 ltspice    = ["PyLTSpice", "matplotlib"]
 surge      = ["surge-py>=0.1.5; python_version >= '3.12' and python_version < '3.15'"]
 hope       = ["PyYAML>=6.0"]
+sienna     = ["r2x"]                            # translate_to_plexos/compare_solutions; Sienna itself is Julia-only (julia_bin config key)
 # powerio moved to core `dependencies`; the extra is gone (a bare
 # `pip install powermcp` now always provides the conversion server).
 # --- closed-source / vendor tool engines ---
@@ -74,7 +75,7 @@ psse       = []                                 # vendor `psspy` not on PyPI —
 pslf       = ["pandas"]                         # vendor `PSLF_PYTHON` not on PyPI — path captured in config.toml
 powerfactory = ["fastmcp>=2.0", "numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powerfactory` not on PyPI
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]"]
+opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[sienna]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]"]
 
@@ -101,6 +102,7 @@ packages = ["powermcp"]
 "surge"        = "powermcp/_servers/surge"
 "OpenDSS"      = "powermcp/_servers/OpenDSS"
 "HOPE"         = "powermcp/_servers/HOPE"
+"SIENNA"       = "powermcp/_servers/SIENNA"
 "powerio"      = "powermcp/_servers/powerio"
 "PSCAD"        = "powermcp/_servers/PSCAD"
 "PSSE"         = "powermcp/_servers/PSSE"
@@ -114,11 +116,11 @@ packages = ["powermcp"]
 [tool.hatch.build.targets.sdist]
 include = [
     "powermcp",
-    "pandapower", "PyPSA", "ANDES", "Egret", "surge", "OpenDSS", "HOPE", "powerio",
+    "pandapower", "PyPSA", "ANDES", "Egret", "surge", "OpenDSS", "HOPE", "SIENNA", "powerio",
     "PSCAD", "PSSE", "PSLF", "PowerWorld", "PowerFactory", "LTSpice",
     "README.md", "LICENSE", "pyproject.toml",
 ]
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
-    "PSCAD/tests", "HOPE/tests",
+    "PSCAD/tests", "HOPE/tests", "SIENNA/tests",
 ]
