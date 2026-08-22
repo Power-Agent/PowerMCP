@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powermcp-plexosdb"
+version = "0.1.0"
+description = "PowerMCP's PLEXOSDB connector: thin re-export of plexosdb-mcp CRUD tools + translate_to_sienna/compare_solutions via r2x."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "PowerMCP contributors" }]
+dependencies = [
+    # Pinned to the individual r2x-plexos/-to-sienna/-sienna packages, not the
+    # `r2x` meta-package, which transitively pins the buggy r2x-plexos==0.2.0
+    # (NatLabRockies/R2X#299). r2x-plexos>=0.3.0 fixes the Horizon-resolution
+    # bug but needs plexosdb>=1.6.0 installed with prereleases allowed until
+    # epri-dev/plexos2duckdb#3 is resolved -- see README.md.
+    "r2x-plexos>=0.3.0",
+    "r2x-plexos-to-sienna>=0.1.0",
+    "r2x-sienna>=0.4.0",
+    # plexosdb-mcp itself is NOT declared here: it is not on PyPI, and its own
+    # metadata pins a direct git dependency which PyPI rejects on packages that
+    # (like this one, bundled into powermcp) are themselves published to PyPI.
+    # See README.md for the manual install command.
+]
+
+[project.urls]
+Homepage = "https://github.com/Power-Agent/PowerMCP"
+Repository = "https://github.com/Power-Agent/PowerMCP"
+
+[tool.setuptools.packages.find]
+include = ["plexosdb_mcp*"]
+
+# NOTE ON THE NAME COLLISION: this package's importable name is deliberately
+# `plexosdb_mcp` -- the same as the upstream `plexosdb-mcp` distribution it
+# re-exports (mirrors powerio_mcp.py's re-export of the `powerio` package).
+# Do not `pip install -e PLEXOSDB` into the same environment as the upstream
+# git-installed `plexosdb-mcp` package and expect both to cleanly coexist as
+# independent site-packages entries; see PLEXOSDB/README.md for the supported
+# install order and why `powermcp run plexosdb` launches this module as a
+# *script* (not `python -m plexosdb_mcp.main`).

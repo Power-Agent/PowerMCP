@@ -95,6 +95,10 @@ GUARDED = {
     "PSLF/pslf_mcp.py": {
         "open_case": ["case"],
     },
+    "PLEXOSDB/plexosdb_mcp/main.py": {
+        "translate_to_sienna": ["xml_path", "output_path"],
+        "compare_solutions": ["xml_path_a", "xml_path_b"],
+    },
 }
 
 

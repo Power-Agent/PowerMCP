@@ -71,6 +71,18 @@ def _stub_engines(tool: str) -> None:
         _module("esa", SAW=type("SAW", (), {}), PowerWorldError=PowerWorldError)
     elif tool == "pscad":
         _module("psutil", process_iter=lambda *_args, **_kwargs: [])
+    elif tool == "plexosdb":
+        # The bundled PLEXOSDB server re-exports the git-only upstream
+        # plexosdb-mcp package; stand in for it with a real MCPServer so the
+        # two locally-defined tools still register.
+        from mcp.server.mcpserver import MCPServer
+
+        _module(
+            "plexosdb_mcp.server",
+            MCPServerState=type("MCPServerState", (), {}),
+            build_mcp_server=lambda: MCPServer("plexosdb"),
+            main=lambda *_args, **_kwargs: None,
+        )
     elif tool == "hope":
         try:
             __import__("yaml")

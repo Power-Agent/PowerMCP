@@ -45,6 +45,64 @@ def test_psse_import_side_effect_free_then_inits_once(monkeypatch):
     monkeypatch.delitem(sys.modules, "psse_mcp_under_test", raising=False)
 
 
+def test_plexosdb_import_side_effect_free(monkeypatch):
+    """plexosdb_mcp.main is an always-imports thin re-export (like powerio_mcp.py),
+    not a lazy _ensure_*() style module -- so "side-effect-free" here means the
+    module builds its FastMCP server using only the (mocked) upstream
+    plexosdb_mcp.server factory, with no real plexosdb database opened, no
+    PLEXOS XML touched, and no PLEXOS license required.
+
+    plexosdb_mcp is a package name shared with the upstream ``plexosdb-mcp``
+    distribution PowerMCP re-exports (see the registry's "plexosdb" entry
+    comment on why it launches as a script rather than a module), so we
+    monkeypatch sys.modules the same way test_psse/test_pslf do for their
+    vendor packages, rather than requiring the real thing to be installed.
+    """
+    build_calls = []
+
+    class FakeMCP:
+        def __init__(self) -> None:
+            self.registered: list[str] = []
+
+        def tool(self):
+            def decorator(fn):
+                self.registered.append(fn.__name__)
+                return fn
+
+            return decorator
+
+    def fake_build_mcp_server(state=None, *, read_only=None):
+        build_calls.append((state, read_only))
+        return FakeMCP()
+
+    fake_server = types.ModuleType("plexosdb_mcp.server")
+    fake_server.MCPServerState = type("MCPServerState", (), {})
+    fake_server.build_mcp_server = fake_build_mcp_server
+    fake_server.main = lambda argv=None: None
+
+    fake_pkg = types.ModuleType("plexosdb_mcp")
+    fake_pkg.__path__ = []  # mark as a package so `from plexosdb_mcp import server` resolves
+    fake_pkg.server = fake_server
+
+    monkeypatch.setitem(sys.modules, "plexosdb_mcp", fake_pkg)
+    monkeypatch.setitem(sys.modules, "plexosdb_mcp.server", fake_server)
+
+    path = get_tool("plexosdb").resolve_entry_script()
+    mod = _load("plexosdb_mcp_under_test", path)
+
+    # Importing must not open a real PLEXOS database or require plexosdb/r2x to
+    # be installed: only the mocked build_mcp_server was ever called, exactly once.
+    assert len(build_calls) == 1
+    # Both of PowerMCP's own tools registered onto the (fake) re-exported server,
+    # alongside whatever the upstream server itself would have registered.
+    assert mod.mcp.registered == ["translate_to_sienna", "compare_solutions"]
+    # r2x (r2x_core/r2x_plexos/r2x_sienna) is imported lazily inside the tool
+    # function bodies, not at module import time -- reaching this line at all,
+    # with no r2x package installed, is the proof.
+
+    monkeypatch.delitem(sys.modules, "plexosdb_mcp_under_test", raising=False)
+
+
 def test_pslf_import_side_effect_free_then_inits_once(monkeypatch):
     init_calls = []
     fake = types.ModuleType("PSLF_PYTHON")

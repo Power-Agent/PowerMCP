@@ -208,6 +208,28 @@ TOOLS: dict[str, "Tool"] = {
                 ),
             ),
         ),
+        Tool(
+            "plexosdb", "PLEXOSDB", "closed-source", windows_only=False, extra="plexosdb",
+            server_dir="PLEXOSDB", run_kind="script", entry_rel="plexosdb_mcp/main.py",
+            # NOT run_kind="module": our own package dir is deliberately named
+            # plexosdb_mcp (it thin-re-exports the upstream *plexosdb-mcp* package
+            # of the same import name), so adding PLEXOSDB/ itself to sys.path
+            # (module launch's root) would make Python resolve `import plexosdb_mcp`
+            # to OURSELVES before ever reaching the real, pip/git-installed one on
+            # site-packages -- a self-shadow, confirmed by direct testing. Script
+            # launch only puts PLEXOSDB/plexosdb_mcp/ (the file's own dir) on
+            # sys.path, so the bare `import plexosdb_mcp` inside main.py correctly
+            # falls through to site-packages instead.
+            probe="plexosdb_mcp",
+            notes=(
+                "Thin re-export of the upstream plexosdb-mcp server (PLEXOS XML object/property/"
+                "membership CRUD, no PLEXOS license/install/vendor call needed) plus "
+                "translate_to_sienna/compare_solutions calling r2x directly. plexosdb-mcp is not on "
+                "PyPI yet: install it manually per PLEXOSDB/README.md "
+                "(pip install \"plexosdb-mcp @ git+https://github.com/NatLabRockies/plexosdb.git"
+                "@main#subdirectory=src/plexosdb-mcp\"); the `plexosdb` extra only covers r2x."
+            ),
+        ),
     )
 }
 
