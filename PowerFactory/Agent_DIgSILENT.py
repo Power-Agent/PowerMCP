@@ -1357,12 +1357,11 @@ class DIgSILENTAgent:
         if layout is None:
             raise RuntimeError("Diagram Layout Tool is unavailable")
 
-        start_elements = app.GetFromStudyCase(
-            "Set - SGL Layout - K-neighbourhood.SetSelect"
-        )
+        start_elements = layout.GetAttribute("neighborStartElems")
         if start_elements is None:
             raise RuntimeError(
-                "Diagram Layout Tool start-element set is unavailable"
+                "Diagram Layout Tool K-neighbourhood start-element set "
+                "is not configured in the active study case"
             )
 
         existing_start_elements = list(start_elements.All() or [])

@@ -242,13 +242,8 @@ class ComponentCreationTest(unittest.TestCase):
 
         layout.Execute.side_effect = execute
         app.GetDesktop.return_value = desktop
-        app.GetFromStudyCase.side_effect = lambda query: {
-            "ComSgllayout": layout,
-            (
-                "Set - SGL Layout - "
-                "K-neighbourhood.SetSelect"
-            ): start_elements,
-        }[query]
+        app.GetFromStudyCase.return_value = layout
+        layout.GetAttribute.return_value = start_elements
 
         with patch.object(
             agent_module.DIgSILENTAgent,
@@ -267,6 +262,29 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertEqual(executed_references, [component])
         self.assertEqual(references, [existing_start])
         find_graphics.assert_called_once_with(app, component)
+        app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
+        layout.GetAttribute.assert_called_once_with(
+            "neighborStartElems",
+        )
+
+    def test_update_active_diagram_requires_configured_start_set(self):
+        app = Mock()
+        app.GetDesktop.return_value = Mock()
+        layout = Mock()
+        layout.GetAttribute.return_value = None
+        app.GetFromStudyCase.return_value = layout
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "K-neighbourhood start-element set is not configured",
+        ):
+            agent_module.DIgSILENTAgent._update_active_diagram(
+                app,
+                Mock(),
+            )
+
+        app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
+        layout.GetAttribute.assert_called_once_with("neighborStartElems")
 
     def test_add_component_bus_validation_and_rollback(self):
         grid, _, _, _ = self.network()
