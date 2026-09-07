@@ -139,7 +139,11 @@ class ComponentCreationTest(unittest.TestCase):
         return grid, buses, template_object, template_type
 
     def assert_failed(self, result, text):
-        ok, message = result
+        if isinstance(result, dict):
+            ok = result["success"]
+            message = result["message"]
+        else:
+            ok, message = result
         self.assertFalse(ok)
         self.assertIn(text, message)
         return message
@@ -749,7 +753,7 @@ class ComponentCreationTest(unittest.TestCase):
                 create=True,
             ) as rebuild,
         ):
-            ok, message = agent_module.DIgSILENTAgent.delete_component(
+            result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Graphical Test Load",
                 confirmation="DELETE load Graphical Test Load",
@@ -757,12 +761,14 @@ class ComponentCreationTest(unittest.TestCase):
                 update_graphics=True,
             )
 
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
         self.assertTrue(desktop.unfrozen)
         rebuild.assert_called_once_with()
 
-        self.assertIn("graphics_deleted=1", message)
-        self.assertIn("graphics_refresh=rebuilt", message)
+        self.assertEqual(result["graphics"]["deleted"], 1)
+        self.assertEqual(result["graphics"]["remaining"], [])
+        self.assertEqual(result["graphics"]["refresh"], "rebuilt")
 
         self.assertNotIn(target_graphic, diagram["IntGrf"])
         self.assertIn(unrelated_graphic, diagram["IntGrf"])
@@ -801,8 +807,14 @@ class ComponentCreationTest(unittest.TestCase):
                 "Delete",
                 side_effect=RuntimeError("graphical deletion blocked"),
             ),
+            patch.object(
+                app,
+                "Rebuild",
+                return_value=None,
+                create=True,
+            ) as rebuild,
         ):
-            ok, message = agent_module.DIgSILENTAgent.delete_component(
+            result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Stubborn Graphical Test Load",
                 confirmation=(
@@ -812,8 +824,16 @@ class ComponentCreationTest(unittest.TestCase):
                 update_graphics=True,
             )
 
-        self.assertFalse(ok)
-        self.assertIn("graphical objects remain", message)
+        self.assertFalse(result["success"])
+        self.assertTrue(result["deleted"])
+        self.assertIn("graphical objects remain", result["message"])
+        self.assertEqual(result["graphics"]["deleted"], 0)
+        self.assertEqual(
+            result["graphics"]["remaining"],
+            [stubborn_graphic.GetFullName()],
+        )
+        self.assertEqual(result["graphics"]["refresh"], "rebuilt")
+        rebuild.assert_called_once_with()
         self.assertEqual(grid["ElmLod"], [])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])
         self.assertIn(stubborn_graphic, diagram["IntGrf"])
@@ -837,15 +857,16 @@ class ComponentCreationTest(unittest.TestCase):
         )
         self.assertTrue(ok, message)
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "line",
             "MCP Test Line",
             open_digsilent=False,
         )
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertFalse(result["deleted"])
         self.assertIn(
             "confirmation_required=DELETE line MCP Test Line",
-            message,
+            result["message"],
         )
         self.assertEqual(len(grid["ElmLne"]), 2)
 
@@ -869,24 +890,26 @@ class ComponentCreationTest(unittest.TestCase):
             "connected cubicles",
         )
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "line",
             "MCP Test Line",
             confirmation="DELETE line MCP Test Line",
             open_digsilent=False,
         )
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
         self.assertEqual(grid["ElmLne"], [template_line])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])
         self.assertEqual(buses["Bus 02"]["StaCubic"], [])
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "bus",
             "Bus 01",
             confirmation="DELETE bus Bus 01",
             open_digsilent=False,
         )
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
         self.assertNotIn(buses["Bus 01"], grid["ElmTerm"])
 
 

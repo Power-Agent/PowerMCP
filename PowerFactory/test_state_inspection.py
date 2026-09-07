@@ -3,6 +3,7 @@ import json
 import sys
 import unittest
 from types import ModuleType
+from unittest.mock import patch
 
 
 fastmcp = ModuleType("fastmcp")
@@ -82,6 +83,33 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_delete_component_preserves_partial_deletion_result(self):
+        expected = {
+            "success": False,
+            "deleted": True,
+            "graphics": {
+                "requested": True,
+                "matched": 1,
+                "deleted": 0,
+                "remaining": [r"\user\Grid\Load Symbol.IntGrf"],
+                "refresh": "rebuilt",
+            },
+            "message": "Component deleted, but graphical objects remain",
+        }
+
+        with (
+            patch.object(FakeAgent, "delete_component", create=True),
+            patch.object(mcp_module, "_pf", return_value=expected),
+        ):
+            result = json.loads(mcp_module.delete_component(
+                "load",
+                "Load 1",
+                confirmation="DELETE load Load 1",
+                update_graphics=True,
+            ))
+
+        self.assertEqual(result, expected)
+
     def test_state_and_discovery_tools(self):
         project = FakeObject(
             "test",

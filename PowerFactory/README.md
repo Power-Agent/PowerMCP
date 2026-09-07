@@ -160,6 +160,10 @@ circuit breakers. A bus cannot be deleted while it still has connected
 cubicles. Set `update_graphics=true` to remove the corresponding diagram object
 and rebuild the active view.
 
+The response reports component deletion separately from cleanup. In particular,
+`success=false` with `deleted=true` means the network component was removed but
+some graphical or cubicle cleanup failed; do not retry the component deletion.
+
 ---
 
 ## Configuration

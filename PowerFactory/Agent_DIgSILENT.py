@@ -17,7 +17,7 @@ import csv
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 
 import matplotlib
@@ -1650,7 +1650,7 @@ class DIgSILENTAgent:
         confirmation: str = "",
         open_digsilent: bool = True,
         update_graphics: bool = False,
-    ) -> tuple[bool, str]:
+    ) -> dict[str, Any]:
         """Preview or delete one exactly named supported grid component."""
         component_types = {
             "bus": ("ElmTerm", ()),
@@ -1661,14 +1661,30 @@ class DIgSILENTAgent:
         }
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
+        deleted = False
+        graphics_status = {
+            "requested": bool(update_graphics),
+            "matched": 0,
+            "deleted": 0,
+            "remaining": [],
+            "refresh": "not_requested",
+        }
+
+        def result(success: bool, message: str) -> dict[str, Any]:
+            return {
+                "success": success,
+                "deleted": deleted,
+                "graphics": graphics_status,
+                "message": message,
+            }
 
         if kind not in component_types:
-            return False, (
+            return result(False, (
                 "component_type must be one of: "
                 + ", ".join(component_types)
-            )
+            ))
         if not name:
-            return False, "component_name must not be empty"
+            return result(False, "component_name must not be empty")
 
         try:
             app = cls._get_application(open_digsilent)
@@ -1713,10 +1729,10 @@ class DIgSILENTAgent:
             required = f"DELETE {kind} {name}"
 
             if not confirmation:
-                return True, (
+                return result(True, (
                     f"Preview only: {component.GetFullName()} | "
                     f"confirmation_required={required}"
-                )
+                ))
 
             if confirmation != required:
                 raise RuntimeError(
@@ -1733,6 +1749,7 @@ class DIgSILENTAgent:
                 if update_graphics
                 else []
             )
+            graphics_status["matched"] = len(graphics)
 
             graphic_locations = [
                 (graphic.GetParent(), graphic.GetFullName())
@@ -1760,6 +1777,7 @@ class DIgSILENTAgent:
                     "PowerFactory did not delete the component; "
                     "cubicles were left unchanged"
                 )
+            deleted = True
 
             for graphic in graphics:
                 try:
@@ -1795,40 +1813,54 @@ class DIgSILENTAgent:
                 )
             ]
 
+            graphics_status["deleted"] = (
+                len(graphics) - len(remaining_graphics)
+            )
+            graphics_status["remaining"] = remaining_graphics
+            cleanup_errors = []
+
             if remaining_graphics:
-                raise RuntimeError(
-                    "Component deleted, but graphical objects remain: "
+                cleanup_errors.append(
+                    "graphical objects remain: "
                     + ", ".join(remaining_graphics)
                 )
 
             if remaining_cubicles:
-                raise RuntimeError(
-                    "Component deleted, but connected cubicles remain: "
+                cleanup_errors.append(
+                    "connected cubicles remain: "
                     + ", ".join(remaining_cubicles)
                 )
-
-            graphics_refresh = "not_requested"
 
             if update_graphics:
                 try:
                     app.Rebuild()
-                    graphics_refresh = "rebuilt"
+                    graphics_status["refresh"] = "rebuilt"
                 except Exception as exc:
-                    graphics_refresh = f"failed:{exc}"
+                    graphics_status["refresh"] = f"failed:{exc}"
+                    cleanup_errors.append(
+                        f"graphical refresh failed: {exc}"
+                    )
+
+            if cleanup_errors:
+                message = "Component deleted, but " + "; ".join(
+                    cleanup_errors
+                )
+                log.error(f"Component deletion incomplete: {message}")
+                return result(False, message)
 
             message = f"Deleted {kind}: {name}"
             if update_graphics:
                 message += (
-                    f" | graphics_deleted={len(graphics)}"
-                    f" | graphics_refresh={graphics_refresh}"
+                    f" | graphics_deleted={graphics_status['deleted']}"
+                    f" | graphics_refresh={graphics_status['refresh']}"
                 )
             log.ok(message)
-            return True, message
+            return result(True, message)
 
         except Exception as exc:
             message = str(exc)
             log.error(f"Component deletion failed: {message}")
-            return False, message
+            return result(False, message)
 
     # ──────────────────────────────────────────────────────────────
     # # LOAD FLOW — run ComLdf on the currently active study case

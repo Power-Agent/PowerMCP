@@ -696,9 +696,11 @@ def delete_component(
 
     Set update_graphics to true for confirmed deletion from the currently
     active single-line diagram. Preview calls do not modify the diagram.
+    A cleanup failure can return success=false with deleted=true when the
+    network component is gone but graphical or cubicle cleanup is incomplete.
     """
     _, DIgSILENTAgent = _load_modules()
-    ok, message = _pf(
+    result = _pf(
         DIgSILENTAgent.delete_component,
         component_type,
         component_name,
@@ -707,11 +709,7 @@ def delete_component(
         open_digsilent,
         update_graphics,
     )
-    return json.dumps({
-        "success": ok,
-        "deleted": ok and bool(confirmation),
-        "message": message,
-    })
+    return json.dumps(result)
 
 
 @mcp.tool()
