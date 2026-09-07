@@ -201,6 +201,7 @@ class DIgSILENTAgent:
     _shared_project: Optional[object] = None
     _create_case_request_cache: dict[str, tuple[bool, str, float]] = {}
     _create_case_request_ttl_sec: int = 3600
+    _max_loc_name_length: int = 40
 
     @classmethod
     def _apply_show_preference(cls, app, open_digsilent: bool = True) -> None:
@@ -1118,14 +1119,23 @@ class DIgSILENTAgent:
         cubicles,
         class_name: str,
         element_name: str,
-        cubicle_names,
     ) -> bool:
         if not isinstance(buses, (list, tuple)):
             buses = (buses,)
         if not isinstance(cubicles, (list, tuple)):
             cubicles = (cubicles,)
-        if not isinstance(cubicle_names, (list, tuple)):
-            cubicle_names = (cubicle_names,)
+        try:
+            retained_element_name = (
+                str(element.GetAttribute("loc_name"))
+                if element is not None
+                else element_name
+            )
+            retained_cubicle_names = tuple(
+                str(cubicle.GetAttribute("loc_name"))
+                for cubicle in cubicles
+            )
+        except Exception:
+            return False
 
         for created_object in (element, *cubicles):
             if created_object is not None:
@@ -1140,7 +1150,7 @@ class DIgSILENTAgent:
             )
             element_exists = any(
                 str(obj.GetAttribute("loc_name")).casefold()
-                == element_name.casefold()
+                == retained_element_name.casefold()
                 for obj in remaining_elements
             )
             cubicle_exists = any(
@@ -1151,9 +1161,39 @@ class DIgSILENTAgent:
                         bus.GetContents("*.StaCubic", 1) or []
                     )
                 )
-                for bus, cubicle_name in zip(buses, cubicle_names)
+                for bus, cubicle_name in zip(
+                    buses,
+                    retained_cubicle_names,
+                )
             )
             return not element_exists and not cubicle_exists
+        except Exception:
+            return False
+
+    @classmethod
+    def _generated_cubicle_names(cls, element_name: str, count: int):
+        return tuple(
+            (
+                f"{element_name} Cubicle"
+                + (f" {index}" if count > 1 else "")
+            )[:cls._max_loc_name_length]
+            for index in range(1, count + 1)
+        )
+
+    @classmethod
+    def _is_generated_cubicle(cls, cubicle, expected_name: str) -> bool:
+        try:
+            if str(cubicle.GetAttribute("loc_name")) != expected_name:
+                return False
+            contents = cubicle.GetContents("*", 0) or []
+            if len(contents) != 1:
+                return False
+            switch = contents[0]
+            return (
+                switch.GetClassName() == "StaSwitch"
+                and str(switch.GetAttribute("loc_name")) == "Switch"
+                and switch.GetAttribute("aUsage") == "cbk"
+            )
         except Exception:
             return False
 
@@ -1203,10 +1243,9 @@ class DIgSILENTAgent:
                 "The two terminals must use different buses"
             )
 
-        cubicle_names = tuple(
-            f"{element_name} Cubicle"
-            + (f" {index}" if len(buses) > 1 else "")
-            for index in range(1, len(buses) + 1)
+        cubicle_names = cls._generated_cubicle_names(
+            element_name,
+            len(buses),
         )
 
         for bus, cubicle_name in zip(buses, cubicle_names):
@@ -1302,7 +1341,6 @@ class DIgSILENTAgent:
                     tuple(cubicles),
                     class_name,
                     element_name,
-                    cubicle_names,
                 )
                 message += f" | rolled_back={rolled_back}"
 
@@ -1444,6 +1482,12 @@ class DIgSILENTAgent:
             return False, "parameters must be an object"
         if not name:
             return False, "component_name must not be empty"
+        if len(name) > cls._max_loc_name_length:
+            return (
+                False,
+                "component_name must be at most "
+                f"{cls._max_loc_name_length} characters",
+            )
 
         required, optional = schemas[kind]
         supplied = set(parameters)
@@ -1726,6 +1770,24 @@ class DIgSILENTAgent:
                     if cubicle is not None and cubicle not in cubicles:
                         cubicles.append(cubicle)
 
+            expected_cubicle_names = cls._generated_cubicle_names(
+                name,
+                len(connection_attributes),
+            )
+            generated_cubicles = [
+                cubicle
+                for cubicle, expected_name in zip(
+                    cubicles,
+                    expected_cubicle_names,
+                )
+                if cls._is_generated_cubicle(cubicle, expected_name)
+            ]
+            preserved_cubicles = [
+                cubicle
+                for cubicle in cubicles
+                if cubicle not in generated_cubicles
+            ]
+
             required = f"DELETE {kind} {name}"
 
             if not confirmation:
@@ -1741,7 +1803,7 @@ class DIgSILENTAgent:
 
             cubicle_locations = [
                 (cubicle.GetParent(), cubicle.GetFullName())
-                for cubicle in cubicles
+                for cubicle in generated_cubicles
             ]
 
             graphics = (
@@ -1785,7 +1847,7 @@ class DIgSILENTAgent:
                 except Exception:
                     pass
 
-            for cubicle in cubicles:
+            for cubicle in generated_cubicles:
                 try:
                     cubicle.Delete()
                 except Exception:
@@ -1849,6 +1911,10 @@ class DIgSILENTAgent:
                 return result(False, message)
 
             message = f"Deleted {kind}: {name}"
+            if preserved_cubicles:
+                message += (
+                    f" | preserved_cubicles={len(preserved_cubicles)}"
+                )
             if update_graphics:
                 message += (
                     f" | graphics_deleted={graphics_status['deleted']}"

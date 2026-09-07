@@ -150,6 +150,17 @@ def _load_modules():
     return SimulationConfig, DIgSILENTAgent
 
 
+def _read_only_application(agent):
+    """Connect without opening the PowerFactory window."""
+    try:
+        return agent._get_application(open_digsilent=False), None
+    except Exception as exc:
+        return None, {
+            "success": False,
+            "message": f"PowerFactory connection failed: {exc}",
+        }
+
+
 def _to_json(obj: Any) -> str:
     """Recursively sanitise and serialise a result dict to a JSON string."""
     import math
@@ -224,12 +235,9 @@ def get_active_project() -> str:
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
         project = app.GetActiveProject()
         if project is None:
             return {
@@ -250,12 +258,9 @@ def get_active_study_case() -> str:
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
         study_case = app.GetActiveStudyCase()
         if study_case is None:
             return {
@@ -280,12 +285,9 @@ def get_parameters(
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
 
         variable_names = list(
             dict.fromkeys(name.strip() for name in variables if name.strip())
@@ -382,12 +384,9 @@ def list_objects(object_query: str = "*.ElmTerm", max_results: int = 100) -> str
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
         objects = app.GetCalcRelevantObjects(object_query) or []
         limit = max(1, min(int(max_results), 1000))
         results = [
@@ -443,12 +442,9 @@ def list_components(
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
 
         components = {}
 
@@ -493,12 +489,9 @@ def list_study_cases(max_results: int = 100) -> str:
     _, DIgSILENTAgent = _load_modules()
 
     def _impl():
-        app = DIgSILENTAgent._shared_app
-        if app is None:
-            return {
-                "success": False,
-                "message": "PowerFactory is not connected",
-            }
+        app, error = _read_only_application(DIgSILENTAgent)
+        if error:
+            return error
         folder = app.GetProjectFolder("study")
         if folder is None:
             return {

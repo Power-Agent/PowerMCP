@@ -24,6 +24,12 @@ sys.modules["fastmcp"] = fastmcp
 class FakeAgent:
     _shared_app = None
 
+    @classmethod
+    def _get_application(cls, open_digsilent=True):
+        if cls._shared_app is None:
+            raise RuntimeError("PowerFactory is unavailable")
+        return cls._shared_app
+
 
 agent_module = ModuleType("Agent_DIgSILENT")
 agent_module.SimulationConfig = object
@@ -83,6 +89,59 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_read_only_tools_connect_on_cold_start(self):
+        project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
+        case = FakeObject(
+            "Case 1",
+            "IntCase",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase",
+        )
+        bus = FakeObject(
+            "Bus 01",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 01.ElmTerm",
+            {"uknom": 345.0, "outserv": 0},
+        )
+        app = FakeApplication(
+            project=project,
+            active_case=case,
+            study_cases=[case],
+            objects={"*.ElmTerm": [bus]},
+        )
+        FakeAgent._shared_app = None
+
+        with patch.object(
+            FakeAgent,
+            "_get_application",
+            return_value=app,
+        ) as get_application:
+            results = [
+                json.loads(mcp_module.get_active_project()),
+                json.loads(mcp_module.get_active_study_case()),
+                json.loads(mcp_module.get_parameters(
+                    "*.ElmTerm",
+                    ["uknom"],
+                )),
+                json.loads(mcp_module.list_objects("*.ElmTerm")),
+                json.loads(mcp_module.list_components("buses")),
+                json.loads(mcp_module.list_study_cases()),
+            ]
+
+        self.assertTrue(all(result["success"] for result in results))
+        self.assertEqual(get_application.call_count, 6)
+        for call in get_application.call_args_list:
+            self.assertFalse(call.kwargs["open_digsilent"])
+
+        with patch.object(
+            FakeAgent,
+            "_get_application",
+            side_effect=RuntimeError("PowerFactory is unavailable"),
+        ):
+            failure = json.loads(mcp_module.get_active_project())
+
+        self.assertFalse(failure["success"])
+        self.assertIn("PowerFactory is unavailable", failure["message"])
+
     def test_delete_component_preserves_partial_deletion_result(self):
         expected = {
             "success": False,

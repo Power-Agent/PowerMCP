@@ -122,6 +122,9 @@ Supported component parameters:
 | `line` | `bus1_name`, `bus2_name`, `template_line`, `length_km` | — |
 | `transformer` | `high_voltage_bus_name`, `low_voltage_bus_name`, `template_transformer` | — |
 
+Component names are limited to 40 characters, matching PowerFactory's
+`loc_name` limit.
+
 Each generated connection cubicle contains one closed circuit breaker
 (`StaSwitch`, `aUsage="cbk"`, `on_off=1`). Set `update_graphics=true` to
 request insertion into the active single-line diagram.
@@ -155,10 +158,12 @@ required confirmation phrase:
 DELETE <component_type> <exact component name>
 ```
 
-Confirmed deletion removes the exact component and its generated cubicles and
-circuit breakers. A bus cannot be deleted while it still has connected
-cubicles. Set `update_graphics=true` to remove the corresponding diagram object
-and rebuild the active view.
+Confirmed deletion removes the exact component. A connection cubicle is removed
+only when its generated name and sole generated circuit breaker both match;
+cubicles containing relays, instrument transformers, or other objects are
+preserved. A bus cannot be deleted while it still has connected cubicles. Set
+`update_graphics=true` to remove the corresponding diagram object and rebuild
+the active view.
 
 The response reports component deletion separately from cleanup. In particular,
 `success=false` with `deleted=true` means the network component was removed but

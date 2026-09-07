@@ -63,10 +63,16 @@ class FakeObject:
         return self.parent
 
     def GetContents(self, query, recursive):
+        if query == "*":
+            return [
+                obj
+                for objects in self.objects.values()
+                for obj in objects
+            ]
         return list(self[query.rsplit(".", 1)[-1]])
 
     def CreateObject(self, class_name, name):
-        obj = FakeObject(self, class_name, name)
+        obj = FakeObject(self, class_name, name[:40])
         self[class_name].append(obj)
         return obj
 
@@ -694,6 +700,32 @@ class ComponentCreationTest(unittest.TestCase):
             "Unsupported parameter(s)",
         )
 
+        self.assert_failed(
+            self.add_component(
+                "bus",
+                "B" * 41,
+                {"nominal_voltage_kv": 110.0},
+            ),
+            "at most 40 characters",
+        )
+
+    def test_rollback_uses_retained_cubicle_name(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        grid.reject_attribute = "plini"
+
+        self.assert_failed(
+            self.add_component(
+                "load",
+                "L" * 40,
+                {"bus_name": "Bus 01", "active_power_mw": 1.0},
+                open_digsilent=False,
+            ),
+            "rolled_back=True",
+        )
+
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertEqual(buses["Bus 01"]["StaCubic"], [])
+
     def test_delete_component_updates_active_diagram(self):
         grid, buses, _, _ = self.network(("Bus 01",))
 
@@ -911,6 +943,34 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertTrue(result["success"], result["message"])
         self.assertTrue(result["deleted"])
         self.assertNotIn(buses["Bus 01"], grid["ElmTerm"])
+
+    def test_delete_component_preserves_protected_cubicle(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        cubicle = buses["Bus 01"].CreateObject(
+            "StaCubic",
+            "Protected Load Cubicle",
+        )
+        switch = cubicle.CreateObject("StaSwitch", "Switch")
+        switch.SetAttribute("aUsage", "cbk")
+        switch.SetAttribute("on_off", 1)
+        relay = cubicle.CreateObject("ElmRelay", "Distance Relay")
+        load = grid.CreateObject("ElmLod", "Protected Load")
+        load.SetAttribute("bus1", cubicle)
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Protected Load",
+            confirmation="DELETE load Protected Load",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertIn("preserved_cubicles=1", result["message"])
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertIn(cubicle, buses["Bus 01"]["StaCubic"])
+        self.assertIn(switch, cubicle["StaSwitch"])
+        self.assertIn(relay, cubicle["ElmRelay"])
 
 
 if __name__ == "__main__":
