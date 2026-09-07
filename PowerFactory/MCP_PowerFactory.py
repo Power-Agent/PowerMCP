@@ -187,7 +187,9 @@ def _to_json(obj: Any) -> str:
             return [_clean(v) for v in o]
         if isinstance(o, float):
             return None if (math.isnan(o) or math.isinf(o)) else o
-        return o
+        if isinstance(o, (str, int, bool, type(None))):
+            return o
+        return str(o)
 
     return json.dumps(_clean(obj), indent=2, ensure_ascii=False)
 

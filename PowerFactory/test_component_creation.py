@@ -726,6 +726,60 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertEqual(grid["ElmLod"], [])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])
 
+    def test_add_component_parameter_edge_cases(self):
+        template = ("G 01.ElmSym", "ElmSym", "TypSym")
+        grid, buses, _, _ = self.network(("0",), template)
+
+        ok, message = self.add_component(
+            "load",
+            "Null Reactive Load",
+            {
+                "bus_name": 0,
+                "active_power_mw": 1.0,
+                "reactive_power_mvar": None,
+            },
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+        self.assertEqual(grid["ElmLod"][0].GetAttribute("qlini"), 0.0)
+        self.assertIs(
+            grid["ElmLod"][0].GetAttribute("bus1"),
+            buses["0"]["StaCubic"][0],
+        )
+
+        ok, message = self.add_component(
+            "generator",
+            "Null Reactive Generator",
+            {
+                "bus_name": "0",
+                "template_generator": template[0],
+                "active_power_mw": 1.0,
+                "reactive_power_mvar": None,
+            },
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+        self.assertEqual(grid["ElmSym"][-1].GetAttribute("qgini"), 0.0)
+
+        self.assert_failed(
+            self.add_component(
+                "load",
+                "Boolean Load",
+                {"bus_name": "0", "active_power_mw": True},
+                open_digsilent=False,
+            ),
+            "active_power_mw must be a number",
+        )
+        self.assert_failed(
+            self.add_component(
+                "bus",
+                "Boolean Bus",
+                {"nominal_voltage_kv": True},
+                open_digsilent=False,
+            ),
+            "nominal_voltage_kv must be a number",
+        )
+
     def test_delete_component_updates_active_diagram(self):
         grid, buses, _, _ = self.network(("Bus 01",))
 
@@ -971,6 +1025,32 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertIn(cubicle, buses["Bus 01"]["StaCubic"])
         self.assertIn(switch, cubicle["StaSwitch"])
         self.assertIn(relay, cubicle["ElmRelay"])
+
+    def test_delete_component_uses_retained_name_casing(self):
+        grid, buses, _, _ = self.network(("bus a",))
+
+        preview = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus A",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(preview["success"], preview["message"])
+        self.assertIn(
+            "confirmation_required=DELETE bus bus a",
+            preview["message"],
+        )
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus A",
+            confirmation="DELETE bus bus a",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(buses["bus a"], grid["ElmTerm"])
 
 
 if __name__ == "__main__":

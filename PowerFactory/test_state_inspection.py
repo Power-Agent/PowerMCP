@@ -89,6 +89,36 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_get_parameters_serializes_object_lists(self):
+        reference = FakeObject(
+            "Bus 02",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 02.ElmTerm",
+        )
+        bus = FakeObject(
+            "Bus 01",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 01.ElmTerm",
+            {"references": [reference]},
+        )
+        FakeAgent._shared_app = FakeApplication(
+            project=None,
+            active_case=None,
+            study_cases=[],
+            objects={"*.ElmTerm": [bus]},
+        )
+
+        result = json.loads(mcp_module.get_parameters(
+            "*.ElmTerm",
+            ["references"],
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            result["results"][0]["values"]["references"],
+            [str(reference)],
+        )
+
     def test_read_only_tools_connect_on_cold_start(self):
         project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
         case = FakeObject(

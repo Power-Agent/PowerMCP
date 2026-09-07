@@ -125,6 +125,9 @@ Supported component parameters:
 Component names are limited to 40 characters, matching PowerFactory's
 `loc_name` limit.
 
+An explicit `null` for optional reactive power is treated as an omitted value
+and defaults to zero. Boolean values are not accepted for numeric parameters.
+
 Each generated connection cubicle contains one closed circuit breaker
 (`StaSwitch`, `aUsage="cbk"`, `on_off=1`). Set `update_graphics=true` to
 request insertion into the active single-line diagram.
@@ -157,6 +160,9 @@ required confirmation phrase:
 ```text
 DELETE <component_type> <exact component name>
 ```
+
+Name lookup is case-insensitive. The confirmation phrase uses PowerFactory's
+retained spelling and must be copied exactly from the preview.
 
 Confirmed deletion removes the exact component. A connection cubicle is removed
 only when its generated name and sole generated circuit breaker both match;

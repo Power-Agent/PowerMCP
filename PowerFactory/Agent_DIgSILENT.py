@@ -1508,14 +1508,26 @@ class DIgSILENTAgent:
             )
 
         def required_text(key):
-            value = str(parameters[key] or "").strip()
+            raw_value = parameters[key]
+            value = "" if raw_value is None else str(raw_value).strip()
             if not value:
                 raise RuntimeError(f"{key} must not be empty")
             return value
 
-        def number(key, *, positive=False, non_negative=False):
+        def number(
+            key,
+            *,
+            positive=False,
+            non_negative=False,
+            default=None,
+        ):
+            raw_value = parameters.get(key)
+            if raw_value is None and default is not None:
+                raw_value = default
+            if isinstance(raw_value, bool):
+                raise RuntimeError(f"{key} must be a number")
             try:
-                value = float(parameters.get(key, 0.0))
+                value = float(raw_value)
             except (TypeError, ValueError) as exc:
                 raise RuntimeError(f"{key} must be a number") from exc
             if positive and (not math.isfinite(value) or value <= 0):
@@ -1542,7 +1554,7 @@ class DIgSILENTAgent:
                 buses, connections = (required_text("bus_name"),), ("bus1",)
                 attributes = {
                     "plini": number("active_power_mw", non_negative=True),
-                    "qlini": number("reactive_power_mvar"),
+                    "qlini": number("reactive_power_mvar", default=0.0),
                     "outserv": outserv,
                 }
             elif kind == "generator":
@@ -1555,7 +1567,7 @@ class DIgSILENTAgent:
                 )
                 attributes = {
                     "pgini": number("active_power_mw", non_negative=True),
-                    "qgini": number("reactive_power_mvar"),
+                    "qgini": number("reactive_power_mvar", default=0.0),
                     "outserv": outserv,
                 }
             elif kind == "line":
@@ -1740,7 +1752,8 @@ class DIgSILENTAgent:
                 for obj in (
                     grid.GetContents(f"*.{class_name}", 1) or []
                 )
-                if str(obj.GetAttribute("loc_name")) == name
+                if str(obj.GetAttribute("loc_name")).casefold()
+                == name.casefold()
             ]
             if not matches:
                 raise RuntimeError(
@@ -1753,6 +1766,7 @@ class DIgSILENTAgent:
                 )
 
             component = matches[0]
+            name = str(component.GetAttribute("loc_name"))
             cubicles = []
 
             if kind == "bus":
