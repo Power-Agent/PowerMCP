@@ -1106,7 +1106,7 @@ class DIgSILENTAgent:
             if not matches:
                 raise RuntimeError(
                     "PowerFactory did not retain the "
-                    f"{labels[attribute]}"
+                    f"{labels.get(attribute, attribute)}"
                 )
 
         return actual

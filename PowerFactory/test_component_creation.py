@@ -122,6 +122,18 @@ class FakePowerFactory:
 
 
 class ComponentCreationTest(unittest.TestCase):
+    def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
+        element = FakeObject(None, "ElmTerm", "Bus")
+        element.attributes["custom_attribute"] = 0
+        element.reject_attribute = "custom_attribute"
+
+        with self.assertRaisesRegex(RuntimeError, "custom_attribute"):
+            agent_module.DIgSILENTAgent._set_and_verify_attributes(
+                element,
+                {"custom_attribute": 1},
+                "Bus",
+            )
+
     def setUp(self):
         self.original_pf = agent_module.pf
         self.original_app = agent_module.DIgSILENTAgent._shared_app
