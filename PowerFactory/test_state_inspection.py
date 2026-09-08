@@ -71,8 +71,10 @@ class FakeObject:
         self.full_name = full_name
         self.attributes = {"loc_name": name}
         self.attributes.update(attributes or {})
+        self.attribute_reads = []
 
     def GetAttribute(self, attribute):
+        self.attribute_reads.append(attribute)
         return self.attributes[attribute]
 
     def GetClassName(self):
@@ -96,6 +98,7 @@ class FakeApplication:
         self.active_case = active_case
         self.study_folder = FakeFolder(study_cases)
         self.objects = objects
+        self.object_queries = []
 
     def GetActiveProject(self):
         return self.project
@@ -104,6 +107,7 @@ class FakeApplication:
         return self.active_case
 
     def GetCalcRelevantObjects(self, query):
+        self.object_queries.append(query)
         return self.objects.get(query, [])
 
     def GetProjectFolder(self, folder_name):
@@ -333,6 +337,12 @@ class StateInspectionTest(unittest.TestCase):
                 r"\user\test.IntPrj\Grid\Trf 02 - 30.ElmTr2",
                 {"outserv": 1},
             )
+            unsupported = FakeObject(
+                "Shunt 1",
+                "ElmShnt",
+                r"\user\test.IntPrj\Grid\Shunt 1.ElmShnt",
+                {"outserv": 0},
+            )
 
             FakeAgent._shared_app = FakeApplication(
                 project=None,
@@ -344,6 +354,7 @@ class StateInspectionTest(unittest.TestCase):
                     "*.ElmTr2": [transformer],
                     "*.ElmTr3": [],
                     "*.ElmCoup": [],
+                    "*.Elm*": [bus, line, transformer, unsupported],
                 },
             )
 
@@ -376,11 +387,24 @@ class StateInspectionTest(unittest.TestCase):
                 transformers["results"][0]["out_of_service"]
             )
 
+            transformer.attribute_reads.clear()
             limited = json.loads(
                 mcp_module.list_components("branches", max_results=1)
             )
             self.assertEqual(limited["total_count"], 2)
             self.assertEqual(limited["returned_count"], 1)
+            self.assertNotIn("outserv", transformer.attribute_reads)
+            self.assertNotIn("loc_name", transformer.attribute_reads)
+
+            all_components = json.loads(
+                mcp_module.list_components("all", max_results=10)
+            )
+            self.assertEqual(all_components["total_count"], 3)
+            self.assertEqual(all_components["queries"], ["*.Elm*"])
+            self.assertEqual(
+                FakeAgent._shared_app.object_queries[-1:],
+                ["*.Elm*"],
+            )
 
             unsupported = json.loads(
                 mcp_module.list_components("unknown")

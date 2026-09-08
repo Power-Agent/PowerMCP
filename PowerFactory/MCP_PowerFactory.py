@@ -382,6 +382,11 @@ _COMPONENT_QUERIES = {
     "external_grids": ("*.ElmXnet",),
     "switches": ("*.ElmCoup",),
 }
+_COMPONENT_CLASSES = {
+    query.rsplit(".", 1)[-1]
+    for queries in _COMPONENT_QUERIES.values()
+    for query in queries
+}
 
 @mcp.tool()
 def list_objects(object_query: str = "*.ElmTerm", max_results: int = 100) -> str:
@@ -426,11 +431,7 @@ def list_components(
     )
 
     if category == "all":
-        queries = tuple(dict.fromkeys(
-            query
-            for category_queries in _COMPONENT_QUERIES.values()
-            for query in category_queries
-        ))
+        queries = ("*.Elm*",)
     else:
         queries = _COMPONENT_QUERIES.get(category)
 
@@ -455,35 +456,36 @@ def list_components(
 
         for query in queries:
             for obj in app.GetCalcRelevantObjects(query) or []:
-                full_name = obj.GetFullName()
-
-                if full_name in components:
+                if (
+                    category == "all"
+                    and obj.GetClassName() not in _COMPONENT_CLASSES
+                ):
                     continue
+                full_name = obj.GetFullName()
+                components.setdefault(full_name, obj)
 
-                try:
-                    out_of_service = bool(
-                        obj.GetAttribute("outserv")
-                    )
-                except Exception:
-                    out_of_service = None
+        limit = max(1, min(int(max_results), 1000))
+        results = []
+        for full_name, obj in list(components.items())[:limit]:
+            try:
+                out_of_service = bool(obj.GetAttribute("outserv"))
+            except Exception:
+                out_of_service = None
 
-                components[full_name] = {
+            results.append({
                     "name": obj.GetAttribute("loc_name"),
                     "class_name": obj.GetClassName(),
                     "full_name": full_name,
                     "out_of_service": out_of_service,
-                }
-
-        results = list(components.values())
-        limit = max(1, min(int(max_results), 1000))
+            })
 
         return {
             "success": True,
             "component_type": category,
             "queries": list(queries),
-            "total_count": len(results),
-            "returned_count": min(len(results), limit),
-            "results": results[:limit],
+            "total_count": len(components),
+            "returned_count": len(results),
+            "results": results,
         }
 
     return _to_json(_pf(_impl))
