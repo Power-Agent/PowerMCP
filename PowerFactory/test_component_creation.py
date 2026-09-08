@@ -39,6 +39,7 @@ class FakeObject:
         self.attributes = {"loc_name": name, **DEFAULTS.get(class_name, {})}
         self.objects = {}
         self.reject_attribute = None
+        self.content_queries = []
 
     def __getitem__(self, class_name):
         return self.objects.setdefault(class_name, [])
@@ -69,6 +70,7 @@ class FakeObject:
         return self.parent
 
     def GetContents(self, query, recursive):
+        self.content_queries.append(query)
         if query == "*":
             return [
                 obj
@@ -1138,6 +1140,8 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertTrue(result["success"], result["message"])
         self.assertTrue(result["deleted"])
         self.assertNotIn(buses["bus a"], grid["ElmTerm"])
+        self.assertIn("Bus A.ElmTerm", grid.content_queries)
+        self.assertNotIn("*.ElmTerm", grid.content_queries)
 
     def test_delete_confirmation_is_bound_to_grid(self):
         grid_a = FakeObject(None, "ElmNet", "Grid A")

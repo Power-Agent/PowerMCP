@@ -1006,6 +1006,18 @@ class DIgSILENTAgent:
     # COMPONENT MANAGEMENT
     # ──────────────────────────────────────────────────────────────
     @staticmethod
+    def _find_named_contents(parent, name: str, class_name: str):
+        requested = str(name or "").strip()
+        return [
+            obj
+            for obj in (
+                parent.GetContents(f"{requested}.{class_name}", 1) or []
+            )
+            if str(obj.GetAttribute("loc_name")).casefold()
+            == requested.casefold()
+        ]
+
+    @staticmethod
     def _select_grid(app, grid_name: str):
         grids = app.GetCalcRelevantObjects("*.ElmNet") or []
         if not grids:
@@ -1045,14 +1057,11 @@ class DIgSILENTAgent:
     @staticmethod
     def _select_bus(grid, bus_name: str):
         requested = str(bus_name or "").strip()
-        buses = grid.GetContents("*.ElmTerm", 1) or []
-
-        matches = [
-            bus
-            for bus in buses
-            if str(bus.GetAttribute("loc_name")).casefold()
-            == requested.casefold()
-        ]
+        matches = DIgSILENTAgent._find_named_contents(
+            grid,
+            requested,
+            "ElmTerm",
+        )
 
         if not matches:
             raise RuntimeError(
@@ -1166,8 +1175,9 @@ class DIgSILENTAgent:
 
         return actual
 
-    @staticmethod
+    @classmethod
     def _rollback_connected_element(
+        cls,
         grid,
         buses,
         element,
@@ -1200,21 +1210,16 @@ class DIgSILENTAgent:
                     pass
 
         try:
-            remaining_elements = (
-                grid.GetContents(f"*.{class_name}", 1) or []
-            )
-            element_exists = any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == retained_element_name.casefold()
-                for obj in remaining_elements
-            )
+            element_exists = bool(cls._find_named_contents(
+                grid,
+                retained_element_name,
+                class_name,
+            ))
             cubicle_exists = any(
-                any(
-                    str(obj.GetAttribute("loc_name")).casefold()
-                    == cubicle_name.casefold()
-                    for obj in (
-                        bus.GetContents("*.StaCubic", 1) or []
-                    )
+                cls._find_named_contents(
+                    bus,
+                    cubicle_name,
+                    "StaCubic",
                 )
                 for bus, cubicle_name in zip(
                     buses,
@@ -1266,14 +1271,7 @@ class DIgSILENTAgent:
     ):
         grid = cls._select_grid(app, grid_name)
 
-        existing_elements = (
-            grid.GetContents(f"*.{class_name}", 1) or []
-        )
-        if any(
-            str(obj.GetAttribute("loc_name")).casefold()
-            == element_name.casefold()
-            for obj in existing_elements
-        ):
+        if cls._find_named_contents(grid, element_name, class_name):
             raise RuntimeError(
                 f"{element_label} already exists in the selected grid: "
                 f"{element_name}"
@@ -1304,13 +1302,10 @@ class DIgSILENTAgent:
         )
 
         for bus, cubicle_name in zip(buses, cubicle_names):
-            existing_cubicles = (
-                bus.GetContents("*.StaCubic", 1) or []
-            )
-            if any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == cubicle_name.casefold()
-                for obj in existing_cubicles
+            if cls._find_named_contents(
+                bus,
+                cubicle_name,
+                "StaCubic",
             ):
                 raise RuntimeError(
                     f"Cubicle already exists on bus: {cubicle_name}"
@@ -1727,14 +1722,7 @@ class DIgSILENTAgent:
             class_name = spec["class_name"]
             connection_attributes = spec["connections"]
 
-            matches = [
-                obj
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-                if str(obj.GetAttribute("loc_name")).casefold()
-                == name.casefold()
-            ]
+            matches = cls._find_named_contents(grid, name, class_name)
             if not matches:
                 raise RuntimeError(
                     f"{kind.capitalize()} not found in the selected grid: "
@@ -1826,12 +1814,11 @@ class DIgSILENTAgent:
 
             component.Delete()
 
-            still_exists = any(
-                str(obj.GetAttribute("loc_name")) == name
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-            )
+            still_exists = bool(cls._find_named_contents(
+                grid,
+                name,
+                class_name,
+            ))
             if still_exists:
                 raise RuntimeError(
                     "PowerFactory did not delete the component; "
