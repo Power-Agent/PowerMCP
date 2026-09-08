@@ -860,7 +860,7 @@ class ComponentCreationTest(unittest.TestCase):
             result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Graphical Test Load",
-                confirmation="DELETE load Graphical Test Load",
+                confirmation=f"DELETE load {created_load.GetFullName()}",
                 open_digsilent=False,
                 update_graphics=True,
             )
@@ -921,9 +921,7 @@ class ComponentCreationTest(unittest.TestCase):
             result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Stubborn Graphical Test Load",
-                confirmation=(
-                    "DELETE load Stubborn Graphical Test Load"
-                ),
+                confirmation=f"DELETE load {stubborn_load.GetFullName()}",
                 open_digsilent=False,
                 update_graphics=True,
             )
@@ -969,7 +967,8 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertTrue(result["success"], result["message"])
         self.assertFalse(result["deleted"])
         self.assertIn(
-            "confirmation_required=DELETE line MCP Test Line",
+            f"confirmation_required=DELETE line "
+            f"{grid['ElmLne'][-1].GetFullName()}",
             result["message"],
         )
         self.assertEqual(len(grid["ElmLne"]), 2)
@@ -988,7 +987,9 @@ class ComponentCreationTest(unittest.TestCase):
             agent_module.DIgSILENTAgent.delete_component(
                 "bus",
                 "Bus 01",
-                confirmation="DELETE bus Bus 01",
+                confirmation=(
+                    f"DELETE bus {buses['Bus 01'].GetFullName()}"
+                ),
                 open_digsilent=False,
             ),
             "connected cubicles",
@@ -997,7 +998,9 @@ class ComponentCreationTest(unittest.TestCase):
         result = agent_module.DIgSILENTAgent.delete_component(
             "line",
             "MCP Test Line",
-            confirmation="DELETE line MCP Test Line",
+            confirmation=(
+                f"DELETE line {grid['ElmLne'][-1].GetFullName()}"
+            ),
             open_digsilent=False,
         )
         self.assertTrue(result["success"], result["message"])
@@ -1009,7 +1012,7 @@ class ComponentCreationTest(unittest.TestCase):
         result = agent_module.DIgSILENTAgent.delete_component(
             "bus",
             "Bus 01",
-            confirmation="DELETE bus Bus 01",
+            confirmation=f"DELETE bus {buses['Bus 01'].GetFullName()}",
             open_digsilent=False,
         )
         self.assertTrue(result["success"], result["message"])
@@ -1032,7 +1035,7 @@ class ComponentCreationTest(unittest.TestCase):
         result = agent_module.DIgSILENTAgent.delete_component(
             "load",
             "Protected Load",
-            confirmation="DELETE load Protected Load",
+            confirmation=f"DELETE load {load.GetFullName()}",
             open_digsilent=False,
         )
 
@@ -1055,20 +1058,62 @@ class ComponentCreationTest(unittest.TestCase):
 
         self.assertTrue(preview["success"], preview["message"])
         self.assertIn(
-            "confirmation_required=DELETE bus bus a",
+            f"confirmation_required=DELETE bus "
+            f"{buses['bus a'].GetFullName()}",
             preview["message"],
         )
 
         result = agent_module.DIgSILENTAgent.delete_component(
             "bus",
             "Bus A",
-            confirmation="DELETE bus bus a",
+            confirmation=f"DELETE bus {buses['bus a'].GetFullName()}",
             open_digsilent=False,
         )
 
         self.assertTrue(result["success"], result["message"])
         self.assertTrue(result["deleted"])
         self.assertNotIn(buses["bus a"], grid["ElmTerm"])
+
+    def test_delete_confirmation_is_bound_to_grid(self):
+        grid_a = FakeObject(None, "ElmNet", "Grid A")
+        grid_b = FakeObject(None, "ElmNet", "Grid B")
+        load_a = grid_a.CreateObject("ElmLod", "Shared Load")
+        load_b = grid_b.CreateObject("ElmLod", "Shared Load")
+        self.use_application(FakeApplication([grid_a, grid_b]))
+
+        preview = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid A",
+            open_digsilent=False,
+        )
+        token_a = f"DELETE load {load_a.GetFullName()}"
+        self.assertIn(
+            f"confirmation_required={token_a}",
+            preview["message"],
+        )
+
+        wrong_grid = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid B",
+            confirmation=token_a,
+            open_digsilent=False,
+        )
+        self.assertFalse(wrong_grid["success"])
+        self.assertFalse(wrong_grid["deleted"])
+        self.assertIn(load_b, grid_b["ElmLod"])
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid B",
+            confirmation=f"DELETE load {load_b.GetFullName()}",
+            open_digsilent=False,
+        )
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(load_b, grid_b["ElmLod"])
 
 
 if __name__ == "__main__":

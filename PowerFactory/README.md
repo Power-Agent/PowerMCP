@@ -162,11 +162,12 @@ Calling `delete_component` without confirmation returns a preview and the
 required confirmation phrase:
 
 ```text
-DELETE <component_type> <exact component name>
+DELETE <component_type> <full PowerFactory object path>
 ```
 
-Name lookup is case-insensitive. The confirmation phrase uses PowerFactory's
-retained spelling and must be copied exactly from the preview.
+Name lookup is case-insensitive. The confirmation phrase contains the full
+PowerFactory object path, binds the confirmation to the previewed grid, and
+must be copied exactly from the preview.
 
 Confirmed deletion removes the exact component. A connection cubicle is removed
 only when its generated name and sole generated circuit breaker both match;

@@ -1801,7 +1801,7 @@ class DIgSILENTAgent:
                 if cubicle not in generated_cubicles
             ]
 
-            required = f"DELETE {kind} {name}"
+            required = f"DELETE {kind} {component.GetFullName()}"
 
             if not confirmation:
                 return result(True, (
