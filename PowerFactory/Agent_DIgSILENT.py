@@ -202,6 +202,100 @@ class DIgSILENTAgent:
     _create_case_request_cache: dict[str, tuple[bool, str, float]] = {}
     _create_case_request_ttl_sec: int = 3600
     _max_loc_name_length: int = 40
+    _component_specs = {
+        "bus": {
+            "class_name": "ElmTerm",
+            "label": "Bus",
+            "required": {"nominal_voltage_kv"},
+            "optional": set(),
+            "bus_parameters": (),
+            "bus_details": (),
+            "connections": (),
+            "template": None,
+            "numbers": (
+                ("uknom", "nominal_voltage_kv", "positive", None),
+            ),
+        },
+        "load": {
+            "class_name": "ElmLod",
+            "label": "Load",
+            "required": {"bus_name", "active_power_mw"},
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": None,
+            "numbers": (
+                ("plini", "active_power_mw", "non_negative", None),
+                ("qlini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "generator": {
+            "class_name": "ElmSym",
+            "label": "Generator",
+            "required": {
+                "bus_name",
+                "template_generator",
+                "active_power_mw",
+            },
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": (
+                "template_generator",
+                "generator",
+                "synchronous-machine type",
+            ),
+            "numbers": (
+                ("pgini", "active_power_mw", "non_negative", None),
+                ("qgini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "line": {
+            "class_name": "ElmLne",
+            "label": "Line",
+            "required": {
+                "bus1_name",
+                "bus2_name",
+                "template_line",
+                "length_km",
+            },
+            "optional": set(),
+            "bus_parameters": ("bus1_name", "bus2_name"),
+            "bus_details": ("bus1", "bus2"),
+            "connections": ("bus1", "bus2"),
+            "template": ("template_line", "line", "line type"),
+            "numbers": (
+                ("dline", "length_km", "positive", None),
+            ),
+        },
+        "transformer": {
+            "class_name": "ElmTr2",
+            "label": "Transformer",
+            "required": {
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+                "template_transformer",
+            },
+            "optional": set(),
+            "bus_parameters": (
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+            ),
+            "bus_details": (
+                "high_voltage_bus",
+                "low_voltage_bus",
+            ),
+            "connections": ("bushv", "buslv"),
+            "template": (
+                "template_transformer",
+                "transformer",
+                "transformer type",
+            ),
+            "numbers": (),
+        },
+    }
 
     @classmethod
     def _apply_show_preference(cls, app, open_digsilent: bool = True) -> None:
@@ -1413,40 +1507,12 @@ class DIgSILENTAgent:
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
 
-        schemas = {
-            "bus": ({"nominal_voltage_kv"}, set()),
-            "load": (
-                {"bus_name", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "generator": (
-                {"bus_name", "template_generator", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "line": (
-                {
-                    "bus1_name",
-                    "bus2_name",
-                    "template_line",
-                    "length_km",
-                },
-                set(),
-            ),
-            "transformer": (
-                {
-                    "high_voltage_bus_name",
-                    "low_voltage_bus_name",
-                    "template_transformer",
-                },
-                set(),
-            ),
-        }
-
-        if kind not in schemas:
+        spec = cls._component_specs.get(kind)
+        if spec is None:
             return (
                 False,
                 f"Unsupported component type: {component_type}. "
-                f"Supported types: {', '.join(schemas)}",
+                f"Supported types: {', '.join(cls._component_specs)}",
             )
 
         if not isinstance(parameters, dict):
@@ -1460,7 +1526,8 @@ class DIgSILENTAgent:
                 f"{cls._max_loc_name_length} characters",
             )
 
-        required, optional = schemas[kind]
+        required = spec["required"]
+        optional = spec["optional"]
         supplied = set(parameters)
         missing = sorted(required - supplied)
         unexpected = sorted(supplied - required - optional)
@@ -1510,74 +1577,33 @@ class DIgSILENTAgent:
             return value
 
         try:
-            template = None
+            class_name = spec["class_name"]
+            label = spec["label"]
+            buses = tuple(
+                required_text(parameter)
+                for parameter in spec["bus_parameters"]
+            )
+            connections = spec["connections"]
             outserv = int(bool(out_of_service))
-
-            if kind == "bus":
-                class_name, label = "ElmTerm", "Bus"
-                buses, connections = (), ()
-                attributes = {
-                    "uknom": number("nominal_voltage_kv", positive=True),
-                    "outserv": outserv,
-                }
-            elif kind == "load":
-                class_name, label = "ElmLod", "Load"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                attributes = {
-                    "plini": number("active_power_mw", non_negative=True),
-                    "qlini": number("reactive_power_mvar", default=0.0),
-                    "outserv": outserv,
-                }
-            elif kind == "generator":
-                class_name, label = "ElmSym", "Generator"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                template = (
-                    required_text("template_generator"),
-                    "generator",
-                    "synchronous-machine type",
+            attributes = {"outserv": outserv}
+            for attribute, parameter, rule, default in spec["numbers"]:
+                attributes[attribute] = number(
+                    parameter,
+                    positive=rule == "positive",
+                    non_negative=rule == "non_negative",
+                    default=default,
                 )
-                attributes = {
-                    "pgini": number("active_power_mw", non_negative=True),
-                    "qgini": number("reactive_power_mvar", default=0.0),
-                    "outserv": outserv,
-                }
-            elif kind == "line":
-                class_name, label = "ElmLne", "Line"
-                buses = (
-                    required_text("bus1_name"),
-                    required_text("bus2_name"),
-                )
-                connections = ("bus1", "bus2")
-                template = (
-                    required_text("template_line"),
-                    "line",
-                    "line type",
-                )
-                attributes = {
-                    "dline": number("length_km", positive=True),
-                    "outserv": outserv,
-                }
-            else:
-                class_name, label = "ElmTr2", "Transformer"
-                buses = (
-                    required_text("high_voltage_bus_name"),
-                    required_text("low_voltage_bus_name"),
-                )
-                connections = ("bushv", "buslv")
-                template = (
-                    required_text("template_transformer"),
-                    "transformer",
-                    "transformer type",
-                )
-                attributes = {"outserv": outserv}
 
             if len(buses) == 2 and buses[0].casefold() == buses[1].casefold():
                 raise RuntimeError(f"{label} buses must be different")
 
             app = cls._get_application(open_digsilent)
             template_query = ""
-            if template:
-                template_query, template_label, type_label = template
+            if spec["template"]:
+                template_parameter, template_label, type_label = (
+                    spec["template"]
+                )
+                template_query = required_text(template_parameter)
                 attributes["typ_id"] = cls._get_template_type(
                     app,
                     template_query,
@@ -1613,52 +1639,40 @@ class DIgSILENTAgent:
 
             full_name = created.GetFullName()
             service_state = bool(int(actual["outserv"]))
-            if kind == "bus":
+            if not buses:
                 voltage = float(actual["uknom"])
                 grid_label = str(grid.GetAttribute("loc_name"))
                 log.ok(
                     f"Created bus '{name}' in grid '{grid_label}' "
                     f"at {voltage} kV"
                 )
-                details = f"nominal_voltage_kv={voltage}"
-            elif kind == "load":
-                log.ok(f"Created load '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | "
-                    f"active_power_mw={float(actual['plini'])} | "
-                    f"reactive_power_mvar={float(actual['qlini'])}"
-                )
-            elif kind == "generator":
-                log.ok(f"Created generator '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | template={template_query} | "
-                    f"active_power_mw={float(actual['pgini'])} | "
-                    f"reactive_power_mvar={float(actual['qgini'])}"
-                )
-            elif kind == "line":
+            elif len(buses) == 1:
                 log.ok(
-                    f"Created line '{name}' between "
-                    f"'{buses[0]}' and '{buses[1]}'"
-                )
-                details = (
-                    f"bus1={buses[0]} | bus2={buses[1]} | "
-                    f"template={template_query} | "
-                    f"length_km={float(actual['dline'])}"
+                    f"Created {kind} '{name}' on bus '{buses[0]}'"
                 )
             else:
                 log.ok(
-                    f"Created transformer '{name}' between "
+                    f"Created {kind} '{name}' between "
                     f"'{buses[0]}' and '{buses[1]}'"
                 )
-                details = (
-                    f"high_voltage_bus={buses[0]} | "
-                    f"low_voltage_bus={buses[1]} | "
-                    f"template={template_query}"
+
+            details = [
+                f"{detail_name}={bus_name}"
+                for detail_name, bus_name in zip(
+                    spec["bus_details"],
+                    buses,
                 )
+            ]
+            if template_query:
+                details.append(f"template={template_query}")
+            details.extend(
+                f"{parameter}={float(actual[attribute])}"
+                for attribute, parameter, _, _ in spec["numbers"]
+            )
 
             return (
                 True,
-                f"Created {kind}: {full_name} | {details} | "
+                f"Created {kind}: {full_name} | {' | '.join(details)} | "
                 f"out_of_service={service_state} | "
                 f"graphics={graphics_status}",
             )
@@ -1679,13 +1693,6 @@ class DIgSILENTAgent:
         update_graphics: bool = False,
     ) -> dict[str, Any]:
         """Preview or delete one exactly named supported grid component."""
-        component_types = {
-            "bus": ("ElmTerm", ()),
-            "load": ("ElmLod", ("bus1",)),
-            "generator": ("ElmSym", ("bus1",)),
-            "line": ("ElmLne", ("bus1", "bus2")),
-            "transformer": ("ElmTr2", ("bushv", "buslv")),
-        }
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
         deleted = False
@@ -1705,10 +1712,11 @@ class DIgSILENTAgent:
                 "message": message,
             }
 
-        if kind not in component_types:
+        spec = cls._component_specs.get(kind)
+        if spec is None:
             return result(False, (
                 "component_type must be one of: "
-                + ", ".join(component_types)
+                + ", ".join(cls._component_specs)
             ))
         if not name:
             return result(False, "component_name must not be empty")
@@ -1716,7 +1724,8 @@ class DIgSILENTAgent:
         try:
             app = cls._get_application(open_digsilent)
             grid = cls._select_grid(app, grid_name)
-            class_name, connection_attributes = component_types[kind]
+            class_name = spec["class_name"]
+            connection_attributes = spec["connections"]
 
             matches = [
                 obj
