@@ -6,7 +6,7 @@ These files support `POWERFACTORY_MCP_FUNCTION_TEST_REPORT.md`.
 - **Verbatim extract:** an unchanged operation-and-response excerpt from a complete captured transcript.
 - **Compiled evidence record:** assembled from raw responses supplied individually during verification; it is evidence, but not represented as a continuous terminal capture.
 
-The PowerFactory account and project paths are retained in verbatim MCP output for auditability. The main report uses anonymized paths for presentation.
+PowerFactory account identifiers are replaced with `<user>` in committed records.
 
 | ID | File | Classification |
 |---|---|---|

@@ -65,7 +65,7 @@ Typical result:
 {
   "success": true,
   "name": "test",
-  "full_name": "\\ic84yhos.IntUser\\test.IntPrj"
+  "full_name": "\\<user>.IntUser\\test.IntPrj"
 }
 ```
 

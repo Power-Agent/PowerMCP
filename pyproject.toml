@@ -135,7 +135,14 @@ packages = ["powermcp"]
 "PSSE"         = "powermcp/_servers/PSSE"
 "PSLF"         = "powermcp/_servers/PSLF"
 "PowerWorld"   = "powermcp/_servers/PowerWorld"
-"PowerFactory" = "powermcp/_servers/PowerFactory"
+"PowerFactory/Agent_DIgSILENT.py" = "powermcp/_servers/PowerFactory/Agent_DIgSILENT.py"
+"PowerFactory/IEEE39.pfd" = "powermcp/_servers/PowerFactory/IEEE39.pfd"
+"PowerFactory/INSTALL.txt" = "powermcp/_servers/PowerFactory/INSTALL.txt"
+"PowerFactory/MCP_PowerFactory.py" = "powermcp/_servers/PowerFactory/MCP_PowerFactory.py"
+"PowerFactory/README.md" = "powermcp/_servers/PowerFactory/README.md"
+"PowerFactory/functions_overview.txt" = "powermcp/_servers/PowerFactory/functions_overview.txt"
+"PowerFactory/requirements.txt" = "powermcp/_servers/PowerFactory/requirements.txt"
+"PowerFactory/simulation_config.example.json" = "powermcp/_servers/PowerFactory/simulation_config.example.json"
 "LTSpice"      = "powermcp/_servers/LTSpice"
 "PLEXOSDB"     = "powermcp/_servers/PLEXOSDB"
 
@@ -152,4 +159,6 @@ include = [
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
+    "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
+    "**/PowerFactory/test_*.py",
 ]
