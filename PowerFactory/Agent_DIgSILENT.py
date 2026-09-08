@@ -1780,9 +1780,13 @@ class DIgSILENTAgent:
             cubicles = []
 
             if kind == "bus":
-                connected = (
-                    component.GetContents("*.StaCubic", 1) or []
-                )
+                connected = [
+                    cubicle
+                    for cubicle in (
+                        component.GetContents("*.StaCubic", 1) or []
+                    )
+                    if cubicle.GetAttribute("obj_id") is not None
+                ]
                 if connected:
                     raise RuntimeError(
                         "Bus has connected cubicles; delete its connected "

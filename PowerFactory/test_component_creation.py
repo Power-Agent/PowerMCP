@@ -6,6 +6,7 @@ import Agent_DIgSILENT as agent_module
 
 DEFAULTS = {
     "ElmTerm": {"uknom": 0.0, "outserv": 0},
+    "StaCubic": {"obj_id": None},
     "StaSwitch": {"aUsage": "", "on_off": 0},
     "ElmLod": {"bus1": None, "plini": 0.0, "qlini": 0.0, "outserv": 0},
     "ElmSym": {
@@ -51,6 +52,11 @@ class FakeObject:
             root = root.parent
         if name != root.reject_attribute:
             self.attributes[name] = value
+            if (
+                name in {"bus1", "bus2", "bushv", "buslv"}
+                and value is not None
+            ):
+                value.SetAttribute("obj_id", self)
 
     def GetClassName(self):
         return self.class_name
@@ -77,6 +83,10 @@ class FakeObject:
         return obj
 
     def Delete(self):
+        for name in ("bus1", "bus2", "bushv", "buslv"):
+            cubicle = self.attributes.get(name)
+            if cubicle is not None:
+                cubicle.SetAttribute("obj_id", None)
         self.parent[self.class_name].remove(self)
 
 
@@ -1073,6 +1083,22 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertIn(cubicle, buses["Bus 01"]["StaCubic"])
         self.assertIn(switch, cubicle["StaSwitch"])
         self.assertIn(relay, cubicle["ElmRelay"])
+
+    def test_delete_bus_ignores_orphan_cubicle(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        bus = buses["Bus 01"]
+        bus.CreateObject("StaCubic", "Orphan Cubicle")
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus 01",
+            confirmation=f"DELETE bus {bus.GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(bus, grid["ElmTerm"])
 
     def test_delete_component_uses_retained_name_casing(self):
         grid, buses, _, _ = self.network(("bus a",))
