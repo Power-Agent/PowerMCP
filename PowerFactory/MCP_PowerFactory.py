@@ -135,12 +135,15 @@ def _pf(fn, *args, **kwargs):
     return _pf_executor.submit(fn, *args, **kwargs).result()
 
 
-def _agent_result(method_name: str, *args) -> str:
+def _agent_result(method_name: str, *args, structured: bool = False) -> str:
     _, DIgSILENTAgent = _load_modules()
-    ok, message = _pf(
+    result = _pf(
         getattr(DIgSILENTAgent, method_name),
         *args,
     )
+    if structured:
+        return json.dumps(result)
+    ok, message = result
     return json.dumps({"success": ok, "message": message})
 
 
@@ -550,9 +553,7 @@ def import_project(
     if not file_path:
         return json.dumps({"success": False, "message": "file_path is required"})
     file_path = checked_path(file_path, purpose="file_path")
-    _, DIgSILENTAgent = _load_modules()
-    ok, msg = _pf(DIgSILENTAgent.import_project, file_path, open_digsilent)
-    return json.dumps({"success": ok, "message": msg})
+    return _agent_result("import_project", file_path, open_digsilent)
 
 
 @mcp.tool()
@@ -586,18 +587,17 @@ def create_study_case(
     str
         JSON string with success flag and message.
     """
-    SimulationConfig, DIgSILENTAgent = _load_modules()
+    SimulationConfig, _ = _load_modules()
     path = checked_path(cfg_path, purpose="cfg_path") if cfg_path else _default_cfg_path()
     cfg = SimulationConfig.from_json(path)
-    ok, msg = _pf(
-        DIgSILENTAgent.create_study_case,
+    return _agent_result(
+        "create_study_case",
         cfg.project_path,
         case_name,
         base_study_case,
         open_digsilent,
         request_id,
     )
-    return json.dumps({"success": ok, "message": msg})
 
 
 @mcp.tool()
@@ -627,9 +627,13 @@ def modify_parameter(
     str
         JSON string with success flag and message.
     """
-    _, DIgSILENTAgent = _load_modules()
-    ok, msg = _pf(DIgSILENTAgent.modify_parameter, object_name, variable, new_value, open_digsilent)
-    return json.dumps({"success": ok, "message": msg})
+    return _agent_result(
+        "modify_parameter",
+        object_name,
+        variable,
+        new_value,
+        open_digsilent,
+    )
 
 
 @mcp.tool()
@@ -694,17 +698,16 @@ def delete_component(
     A cleanup failure can return success=false with deleted=true when the
     network component is gone but graphical or cubicle cleanup is incomplete.
     """
-    _, DIgSILENTAgent = _load_modules()
-    result = _pf(
-        DIgSILENTAgent.delete_component,
+    return _agent_result(
+        "delete_component",
         component_type,
         component_name,
         grid_name,
         confirmation,
         open_digsilent,
         update_graphics,
+        structured=True,
     )
-    return json.dumps(result)
 
 
 @mcp.tool()
@@ -756,8 +759,13 @@ def run_loadflow(
                 }
             )
 
-    ok, msg = _pf(DIgSILENTAgent.load_flow, open_digsilent, save_csv, output_dir, run_label)
-    return json.dumps({"success": ok, "message": msg})
+    return _agent_result(
+        "load_flow",
+        open_digsilent,
+        save_csv,
+        output_dir,
+        run_label,
+    )
 
 
 @mcp.tool()
@@ -775,9 +783,7 @@ def run_short_circuit(open_digsilent: bool = True) -> str:
     str
         JSON string with success flag and message.
     """
-    _, DIgSILENTAgent = _load_modules()
-    ok, msg = _pf(DIgSILENTAgent.short_circuit, open_digsilent)
-    return json.dumps({"success": ok, "message": msg})
+    return _agent_result("short_circuit", open_digsilent)
 
 
 @mcp.tool()

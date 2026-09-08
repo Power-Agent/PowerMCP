@@ -111,6 +111,22 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_agent_result_serializes_tuple_result(self):
+        with patch.object(
+            FakeAgent,
+            "short_circuit",
+            return_value=(True, "Short-circuit calculation OK"),
+            create=True,
+        ):
+            result = json.loads(
+                mcp_module._agent_result("short_circuit", False)
+            )
+
+        self.assertEqual(result, {
+            "success": True,
+            "message": "Short-circuit calculation OK",
+        })
+
     def test_get_parameters_serializes_object_lists(self):
         reference = FakeObject(
             "Bus 02",
