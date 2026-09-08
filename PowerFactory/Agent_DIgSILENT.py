@@ -289,22 +289,9 @@ class DIgSILENTAgent:
     def connect(self) -> tuple[bool, str]:
         log.section("STEP 1 — Connect to PowerFactory")
         try:
-            global pf
             open_digsilent = bool(getattr(self.cfg, "open_digsilent", 1))
-            if pf is None:
-                _ensure_powerfactory_on_path()
-                import powerfactory as pf
-            if DIgSILENTAgent._shared_app is None:
-                self.app = pf.GetApplicationExt()
-                if self.app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                self._apply_show_preference(self.app, open_digsilent)
-                DIgSILENTAgent._shared_app = self.app
-                log.ok("PowerFactory application obtained and shown")
-            else:
-                self.app = DIgSILENTAgent._shared_app
-                self._apply_show_preference(self.app, open_digsilent)
-                log.ok("Reusing existing PowerFactory application in this process")
+            self.app = self._get_application(open_digsilent)
+            log.ok("PowerFactory application obtained")
         except Exception as e:
             log.error(f"Cannot connect to PowerFactory: {e}")
             return False, str(e)
@@ -799,24 +786,11 @@ class DIgSILENTAgent:
         (success, message)
         """
         file_path = checked_path(file_path, purpose="file_path")
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         if not os.path.isfile(file_path):
             return False, f"File not found: {file_path}"
 
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             Pfdimport = app.GetFromStudyCase("ComPfdimport")
             if Pfdimport is None:
@@ -868,21 +842,8 @@ class DIgSILENTAgent:
         -------
         (success, message)
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             objects = app.GetCalcRelevantObjects(object_name)
             if not objects:
@@ -2097,20 +2058,8 @@ class DIgSILENTAgent:
         run_label: str = "run_001",
     ) -> tuple[bool, str]:
         """Run a load flow (ComLdf) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             ldf = app.GetFromStudyCase('ComLdf')
             if ldf is None:
@@ -2139,20 +2088,8 @@ class DIgSILENTAgent:
     @classmethod
     def short_circuit(cls, open_digsilent: bool = True) -> tuple[bool, str]:
         """Run a short-circuit calculation (ComShc) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             shc = app.GetFromStudyCase('ComShc')
             if shc is None:
@@ -2188,11 +2125,6 @@ class DIgSILENTAgent:
         If request_id is provided and repeated, the cached result is returned
         without executing creation/activation logic again.
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
             case_name = (case_name or "").strip()
             base_study_case = (base_study_case or "").strip() or "0. Base"
@@ -2214,15 +2146,7 @@ class DIgSILENTAgent:
                     log.warn(f"create_study_case replay ignored for request_id='{request_id}'")
                     return ok, replay_msg
 
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             if cls._shared_project_path != project_path:
                 project = app.ActivateProject(project_path)
