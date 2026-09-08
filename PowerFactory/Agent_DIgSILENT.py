@@ -1366,11 +1366,18 @@ class DIgSILENTAgent:
 
         existing_start_elements = list(start_elements.All() or [])
 
+        def restore_state():
+            try:
+                start_elements.Clear()
+                for existing in existing_start_elements:
+                    start_elements.AddRef(existing)
+            finally:
+                desktop.Freeze()
+
+        desktop.Unfreeze()
         try:
             start_elements.Clear()
             start_elements.AddRef(component)
-
-            desktop.Unfreeze()
 
             layout.iAction = 1
             layout.insertionMode = 0
@@ -1381,10 +1388,14 @@ class DIgSILENTAgent:
                     f"Diagram Layout Tool failed with error code {result}"
                 )
             app.Rebuild()
-        finally:
-            start_elements.Clear()
-            for existing in existing_start_elements:
-                start_elements.AddRef(existing)
+        except BaseException:
+            try:
+                restore_state()
+            except Exception:
+                pass
+            raise
+        else:
+            restore_state()
 
         graphics = cls._find_component_graphics(app, component)
         if not graphics:

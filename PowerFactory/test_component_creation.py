@@ -256,6 +256,7 @@ class ComponentCreationTest(unittest.TestCase):
             )
 
         desktop.Unfreeze.assert_called_once_with()
+        desktop.Freeze.assert_called_once_with()
         app.Rebuild.assert_called_once_with()
         self.assertEqual(layout.iAction, 1)
         self.assertEqual(layout.insertionMode, 0)
@@ -266,6 +267,32 @@ class ComponentCreationTest(unittest.TestCase):
         layout.GetAttribute.assert_called_once_with(
             "neighborStartElems",
         )
+
+    def test_update_active_diagram_preserves_original_error(self):
+        app = Mock()
+        desktop = Mock()
+        layout = Mock()
+        start_elements = Mock()
+        component = Mock()
+
+        app.GetDesktop.return_value = desktop
+        app.GetFromStudyCase.return_value = layout
+        layout.GetAttribute.return_value = start_elements
+        layout.Execute.side_effect = RuntimeError("layout failed")
+        start_elements.All.return_value = []
+        start_elements.Clear.side_effect = [
+            None,
+            RuntimeError("restore failed"),
+        ]
+
+        with self.assertRaisesRegex(RuntimeError, "layout failed"):
+            agent_module.DIgSILENTAgent._update_active_diagram(
+                app,
+                component,
+            )
+
+        desktop.Unfreeze.assert_called_once_with()
+        desktop.Freeze.assert_called_once_with()
 
     def test_update_active_diagram_requires_configured_start_set(self):
         app = Mock()
