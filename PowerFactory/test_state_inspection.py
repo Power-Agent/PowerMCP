@@ -6,19 +6,12 @@ from types import ModuleType
 from unittest.mock import patch
 
 
-fastmcp = ModuleType("fastmcp")
-
-
 class FakeFastMCP:
     def __init__(self, *args, **kwargs):
         pass
 
     def tool(self):
         return lambda function: function
-
-
-fastmcp.FastMCP = FakeFastMCP
-sys.modules["fastmcp"] = fastmcp
 
 
 class FakeAgent:
@@ -31,16 +24,45 @@ class FakeAgent:
         return cls._shared_app
 
 
-agent_module = ModuleType("Agent_DIgSILENT")
-agent_module.SimulationConfig = object
-agent_module.DIgSILENTAgent = FakeAgent
-sys.modules["Agent_DIgSILENT"] = agent_module
+mcp_module = None
+module_patch = None
 
-original_print = builtins.print
-import MCP_PowerFactory as mcp_module
-builtins.print = original_print
 
-mcp_module._pf = lambda function, *args, **kwargs: function(*args, **kwargs)
+def setUpModule():
+    global mcp_module, module_patch
+
+    mcpserver = ModuleType("mcp.server.mcpserver")
+    mcpserver.MCPServer = FakeFastMCP
+
+    agent_module = ModuleType("Agent_DIgSILENT")
+    agent_module.SimulationConfig = object
+    agent_module.DIgSILENTAgent = FakeAgent
+
+    module_patch = patch.dict(
+        sys.modules,
+        {
+            "Agent_DIgSILENT": agent_module,
+            "mcp.server.mcpserver": mcpserver,
+        },
+    )
+    module_patch.start()
+
+    original_print = builtins.print
+    try:
+        import MCP_PowerFactory as module
+    finally:
+        builtins.print = original_print
+
+    module._pf = lambda function, *args, **kwargs: function(
+        *args,
+        **kwargs,
+    )
+    mcp_module = module
+
+
+def tearDownModule():
+    sys.modules.pop("MCP_PowerFactory", None)
+    module_patch.stop()
 
 
 class FakeObject:
