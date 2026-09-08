@@ -948,7 +948,7 @@ class DIgSILENTAgent:
             return False, str(e)
 
     # ──────────────────────────────────────────────────────────────
-    # ADD BUS - create a verified ElmTerm in an active grid
+    # COMPONENT MANAGEMENT
     # ──────────────────────────────────────────────────────────────
     @staticmethod
     def _select_grid(app, grid_name: str):
@@ -1957,7 +1957,7 @@ class DIgSILENTAgent:
             return result(False, message)
 
     # ──────────────────────────────────────────────────────────────
-    # # LOAD FLOW — run ComLdf on the currently active study case
+    # LOAD FLOW — run ComLdf on the currently active study case
     # ──────────────────────────────────────────────────────────────
 
     @classmethod

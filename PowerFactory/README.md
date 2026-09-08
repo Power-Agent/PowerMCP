@@ -84,12 +84,6 @@ Output folder:  CSV results · PNG plots · optional .pfd export
 | `DIgSILENTAgent.import_project` | Imports a `.pfd` file into the running PowerFactory session. |
 | `DIgSILENTAgent.create_study_case` | Creates or reuses a study case by exact name. |
 | `DIgSILENTAgent.modify_parameter` | Sets an attribute on all objects returned by `GetCalcRelevantObjects`. |
-| `DIgSILENTAgent.get_active_project` | Returns the active project identity. |
-| `DIgSILENTAgent.get_active_study_case` | Returns the active study-case identity. |
-| `DIgSILENTAgent.get_parameters` | Reads selected object attributes. |
-| `DIgSILENTAgent.list_objects` | Lists objects using a PowerFactory query. |
-| `DIgSILENTAgent.list_components` | Lists friendly component categories. |
-| `DIgSILENTAgent.list_study_cases` | Lists available study cases and marks the active one. |
 | `DIgSILENTAgent.add_component` | Creates and verifies supported network components and their connections. |
 | `DIgSILENTAgent.delete_component` | Performs guarded exact-name component deletion and cleanup. |
 | `DIgSILENTAgent.short_circuit` | Standalone ComShc execution. |
@@ -173,8 +167,8 @@ Confirmed deletion removes the exact component. A connection cubicle is removed
 only when its generated name and sole generated circuit breaker both match;
 cubicles containing relays, instrument transformers, or other objects are
 preserved. A bus cannot be deleted while it still has connected cubicles. Set
-`update_graphics=true` to remove the corresponding diagram object and rebuild
-the active view.
+`update_graphics=true` to remove matching diagram objects from every single-line
+diagram in the active project and rebuild the active view.
 
 The response reports component deletion separately from cleanup. In particular,
 `success=false` with `deleted=true` means the network component was removed but
