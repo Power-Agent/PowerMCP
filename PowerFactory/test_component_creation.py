@@ -832,14 +832,6 @@ class ComponentCreationTest(unittest.TestCase):
         )
         self.assertTrue(ok, message)
 
-        class FakeDesktop:
-            def __init__(self):
-                self.unfrozen = False
-
-            def Unfreeze(self):
-                self.unfrozen = True
-
-        desktop = FakeDesktop()
         app = agent_module.DIgSILENTAgent._shared_app
 
         project = app.GetActiveProject()
@@ -866,9 +858,8 @@ class ComponentCreationTest(unittest.TestCase):
             patch.object(
                 app,
                 "GetDesktop",
-                return_value=desktop,
                 create=True,
-            ),
+            ) as get_desktop,
             patch.object(
                 app,
                 "Rebuild",
@@ -886,7 +877,7 @@ class ComponentCreationTest(unittest.TestCase):
 
         self.assertTrue(result["success"], result["message"])
         self.assertTrue(result["deleted"])
-        self.assertTrue(desktop.unfrozen)
+        get_desktop.assert_not_called()
         rebuild.assert_called_once_with()
 
         self.assertEqual(result["graphics"]["deleted"], 1)
@@ -922,9 +913,8 @@ class ComponentCreationTest(unittest.TestCase):
             patch.object(
                 app,
                 "GetDesktop",
-                return_value=desktop,
                 create=True,
-            ),
+            ) as get_desktop,
             patch.object(
                 stubborn_graphic,
                 "Delete",
@@ -954,6 +944,7 @@ class ComponentCreationTest(unittest.TestCase):
             [stubborn_graphic.GetFullName()],
         )
         self.assertEqual(result["graphics"]["refresh"], "rebuilt")
+        get_desktop.assert_not_called()
         rebuild.assert_called_once_with()
         self.assertEqual(grid["ElmLod"], [])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])

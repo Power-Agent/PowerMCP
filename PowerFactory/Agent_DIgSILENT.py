@@ -1790,14 +1790,6 @@ class DIgSILENTAgent:
                 for graphic in graphics
             ]
 
-            if update_graphics:
-                desktop = app.GetDesktop()
-                if desktop is None:
-                    raise RuntimeError(
-                        "No active PowerFactory graphics desktop"
-                    )
-                desktop.Unfreeze()
-
             component.Delete()
 
             still_exists = bool(cls._find_named_contents(
