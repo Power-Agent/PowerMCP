@@ -153,14 +153,21 @@ def _load_modules():
     return SimulationConfig, DIgSILENTAgent
 
 
-def _read_only_application(agent):
-    """Connect without opening the PowerFactory window."""
+def _read_only_result(agent, operation):
+    """Run a read-only operation and return failures as result data."""
     try:
-        return agent._get_application(open_digsilent=False), None
+        app = agent._get_application(open_digsilent=False)
     except Exception as exc:
-        return None, {
+        return {
             "success": False,
             "message": f"PowerFactory connection failed: {exc}",
+        }
+    try:
+        return operation(app)
+    except Exception as exc:
+        return {
+            "success": False,
+            "message": f"PowerFactory read failed: {exc}",
         }
 
 
@@ -239,10 +246,7 @@ def get_active_project() -> str:
     """Return the currently active PowerFactory project."""
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
+    def _impl(app):
         project = app.GetActiveProject()
         if project is None:
             return {
@@ -255,17 +259,14 @@ def get_active_project() -> str:
             "full_name": project.GetFullName(),
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
 def get_active_study_case() -> str:
     """Return the currently active PowerFactory study case."""
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
+    def _impl(app):
         study_case = app.GetActiveStudyCase()
         if study_case is None:
             return {
@@ -278,7 +279,7 @@ def get_active_study_case() -> str:
             "full_name": study_case.GetFullName(),
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
 def get_parameters(
@@ -289,11 +290,7 @@ def get_parameters(
     """Return selected attributes for calculation-relevant objects."""
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
-
+    def _impl(app):
         variable_names = list(
             dict.fromkeys(name.strip() for name in variables if name.strip())
         )
@@ -349,7 +346,7 @@ def get_parameters(
             "results": results,
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 _COMPONENT_QUERIES = {
     "buses": ("*.ElmTerm",),
@@ -393,10 +390,7 @@ def list_objects(object_query: str = "*.ElmTerm", max_results: int = 100) -> str
     """List calculation-relevant PowerFactory objects."""
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
+    def _impl(app):
         objects = app.GetCalcRelevantObjects(object_query) or []
         limit = max(1, min(int(max_results), 1000))
         results = [
@@ -415,7 +409,7 @@ def list_objects(object_query: str = "*.ElmTerm", max_results: int = 100) -> str
             "results": results,
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
 def list_components(
@@ -447,11 +441,7 @@ def list_components(
 
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
-
+    def _impl(app):
         components = {}
 
         for query in queries:
@@ -488,17 +478,14 @@ def list_components(
             "results": results,
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
 def list_study_cases(max_results: int = 100) -> str:
     """List the study cases in the active PowerFactory project."""
     _, DIgSILENTAgent = _load_modules()
 
-    def _impl():
-        app, error = _read_only_application(DIgSILENTAgent)
-        if error:
-            return error
+    def _impl(app):
         folder = app.GetProjectFolder("study")
         if folder is None:
             return {
@@ -526,7 +513,7 @@ def list_study_cases(max_results: int = 100) -> str:
             "results": results,
         }
 
-    return _to_json(_pf(_impl))
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
 def import_project(

@@ -214,6 +214,19 @@ class StateInspectionTest(unittest.TestCase):
         self.assertFalse(failure["success"])
         self.assertIn("PowerFactory is unavailable", failure["message"])
 
+        with (
+            patch.object(FakeAgent, "_get_application", return_value=app),
+            patch.object(
+                app,
+                "GetActiveProject",
+                side_effect=RuntimeError("project lookup failed"),
+            ),
+        ):
+            failure = json.loads(mcp_module.get_active_project())
+
+        self.assertFalse(failure["success"])
+        self.assertIn("project lookup failed", failure["message"])
+
     def test_delete_component_preserves_partial_deletion_result(self):
         expected = {
             "success": False,
