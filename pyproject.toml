@@ -46,10 +46,10 @@ dependencies = [
     "mcp>=2,<3",
     # powerio supplies the conversion server, package model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses APIs introduced in powerio 0.9.0.
+    # PowerMCP uses the powerio 0.9 API; 0.x minor releases may break it.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.9.0,<1",
+    "powerio[mcp,matrix]>=0.9.0,<0.10",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
