@@ -236,7 +236,7 @@ class ComponentCreationTest(unittest.TestCase):
             "Graphical Failure Bus",
         )
 
-    def test_update_active_diagram_uses_k_neighbourhood(self):
+    def test_update_active_diagram_uses_automatic_insertion(self):
         app = Mock()
         desktop = Mock()
         layout = Mock()
@@ -246,28 +246,9 @@ class ComponentCreationTest(unittest.TestCase):
             "ElmTerm",
             "Graphical Test Bus",
         )
-        existing_start = FakeObject(
-            None,
-            "ElmLod",
-            "Load 03",
-        )
-
-        references = [existing_start]
-        executed_references = []
-
-        start_elements = Mock()
-        start_elements.All.side_effect = lambda: list(references)
-        start_elements.Clear.side_effect = references.clear
-        start_elements.AddRef.side_effect = references.append
-
-        def execute():
-            executed_references[:] = references
-            return 0
-
-        layout.Execute.side_effect = execute
+        layout.Execute.return_value = 0
         app.GetDesktop.return_value = desktop
         app.GetFromStudyCase.return_value = layout
-        layout.GetAttribute.return_value = start_elements
 
         with patch.object(
             agent_module.DIgSILENTAgent,
@@ -283,31 +264,21 @@ class ComponentCreationTest(unittest.TestCase):
         desktop.Freeze.assert_called_once_with()
         app.Rebuild.assert_called_once_with()
         self.assertEqual(layout.iAction, 1)
-        self.assertEqual(layout.insertionMode, 0)
-        self.assertEqual(executed_references, [component])
-        self.assertEqual(references, [existing_start])
+        self.assertEqual(layout.insertionMode, 1)
         find_graphics.assert_called_once_with(app, component)
         app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
-        layout.GetAttribute.assert_called_once_with(
-            "neighborStartElems",
-        )
+        layout.GetAttribute.assert_not_called()
 
     def test_update_active_diagram_preserves_original_error(self):
         app = Mock()
         desktop = Mock()
         layout = Mock()
-        start_elements = Mock()
         component = Mock()
 
         app.GetDesktop.return_value = desktop
         app.GetFromStudyCase.return_value = layout
-        layout.GetAttribute.return_value = start_elements
         layout.Execute.side_effect = RuntimeError("layout failed")
-        start_elements.All.return_value = []
-        start_elements.Clear.side_effect = [
-            None,
-            RuntimeError("restore failed"),
-        ]
+        desktop.Freeze.side_effect = RuntimeError("restore failed")
 
         with self.assertRaisesRegex(RuntimeError, "layout failed"):
             agent_module.DIgSILENTAgent._update_active_diagram(
@@ -318,16 +289,14 @@ class ComponentCreationTest(unittest.TestCase):
         desktop.Unfreeze.assert_called_once_with()
         desktop.Freeze.assert_called_once_with()
 
-    def test_update_active_diagram_requires_configured_start_set(self):
+    def test_update_active_diagram_requires_layout_tool(self):
         app = Mock()
         app.GetDesktop.return_value = Mock()
-        layout = Mock()
-        layout.GetAttribute.return_value = None
-        app.GetFromStudyCase.return_value = layout
+        app.GetFromStudyCase.return_value = None
 
         with self.assertRaisesRegex(
             RuntimeError,
-            "K-neighbourhood start-element set is not configured",
+            "Diagram Layout Tool is unavailable",
         ):
             agent_module.DIgSILENTAgent._update_active_diagram(
                 app,
@@ -335,7 +304,6 @@ class ComponentCreationTest(unittest.TestCase):
             )
 
         app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
-        layout.GetAttribute.assert_called_once_with("neighborStartElems")
 
     def test_add_component_bus_validation_and_rollback(self):
         grid, _, _, _ = self.network()
@@ -1097,6 +1065,37 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertIn(cubicle, buses["Bus 01"]["StaCubic"])
         self.assertIn(switch, cubicle["StaSwitch"])
         self.assertIn(relay, cubicle["ElmRelay"])
+
+    def test_delete_component_cleans_trimmed_generated_cubicle_name(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        name = "Diagram Automatic Insert Test 20260909B"
+
+        ok, message = self.add_component(
+            "load",
+            name,
+            {"bus_name": "Bus 01", "active_power_mw": 1.0},
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+
+        cubicle = buses["Bus 01"]["StaCubic"][0]
+        cubicle.SetAttribute(
+            "loc_name",
+            str(cubicle.GetAttribute("loc_name")).rstrip(),
+        )
+        load = grid["ElmLod"][0]
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            name,
+            confirmation=f"DELETE load {load.GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn("preserved_cubicles", result["message"])
+        self.assertEqual(buses["Bus 01"]["StaCubic"], [])
 
     def test_delete_bus_ignores_orphan_cubicle(self):
         grid, buses, _, _ = self.network(("Bus 01",))

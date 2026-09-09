@@ -302,7 +302,7 @@ Tests cover:
 9. Closed circuit-breaker creation in each generated connection cubicle.
 10. Friendly component discovery.
 11. Active project, active study case, multi-parameter reading, raw object discovery, and study-case discovery.
-12. K-neighbourhood diagram-layout selection, execution, restoration, and rebuild.
+12. Automatic diagram insertion without K-neighbourhood relayout, desktop restoration, and rebuild.
 
 The `[ERROR]` messages printed during unit testing are expected negative-path logs. The tests deliberately trigger invalid inputs and simulated PowerFactory failures, then verify that the operation returns failure and rolls back safely. The unittest outcome remained `OK`.
 

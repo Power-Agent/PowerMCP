@@ -1243,7 +1243,10 @@ class DIgSILENTAgent:
     @classmethod
     def _is_generated_cubicle(cls, cubicle, expected_name: str) -> bool:
         try:
-            if str(cubicle.GetAttribute("loc_name")) != expected_name:
+            if (
+                str(cubicle.GetAttribute("loc_name")).strip()
+                != expected_name.strip()
+            ):
                 return False
             contents = cubicle.GetContents("*", 0) or []
             if len(contents) != 1:
@@ -1407,30 +1410,13 @@ class DIgSILENTAgent:
         if layout is None:
             raise RuntimeError("Diagram Layout Tool is unavailable")
 
-        start_elements = layout.GetAttribute("neighborStartElems")
-        if start_elements is None:
-            raise RuntimeError(
-                "Diagram Layout Tool K-neighbourhood start-element set "
-                "is not configured in the active study case"
-            )
-
-        existing_start_elements = list(start_elements.All() or [])
-
         def restore_state():
-            try:
-                start_elements.Clear()
-                for existing in existing_start_elements:
-                    start_elements.AddRef(existing)
-            finally:
-                desktop.Freeze()
+            desktop.Freeze()
 
         desktop.Unfreeze()
         try:
-            start_elements.Clear()
-            start_elements.AddRef(component)
-
             layout.iAction = 1
-            layout.insertionMode = 0
+            layout.insertionMode = 1
 
             result = layout.Execute()
             if result not in (0, None):

@@ -126,9 +126,8 @@ Each generated connection cubicle contains one closed circuit breaker
 (`StaSwitch`, `aUsage="cbk"`, `on_off=1`). Set `update_graphics=true` to
 request insertion into the active single-line diagram.
 
-The active study case must already contain the Diagram Layout Tool's configured
-K-neighbourhood start-element set; open and configure that tool once per study
-case before requesting graphical insertion.
+Graphical updates use the Diagram Layout Tool's automatic insertion mode so
+existing diagram objects are not re-laid out as a K-neighbourhood.
 
 If graphical insertion fails, the network component remains created and the
 tool returns `success=false` with the graphical error. Check the returned
