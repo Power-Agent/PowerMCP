@@ -54,8 +54,8 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - [x] `optimize_investment` - Run capacity expansion optimization
 - [x] `import_from_csv_folder` - Import network from CSV files
 - [x] `export_to_csv_folder` - Export network to CSV format
-- [x] `import_case_from_any` - Import any PowerIO-readable case or one selected `.pio.json` package state to NetCDF
-- [x] `import_case_from_json` - Import PowerIO model JSON or one selected `.pio.json` package state to NetCDF
+- [x] `import_case_from_any` - Import any PowerIO-readable case, or one selected entry of a PowerIO IR collection, to NetCDF
+- [x] `import_case_from_json` - Import serialized PowerIO IR, or one selected entry of it, to NetCDF
 - [x] `run_contingency_analysis` - N-1 contingency analysis
 
 # Future functionalities

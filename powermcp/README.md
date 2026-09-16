@@ -1,9 +1,9 @@
-# `powermcp` — package & CLI
+# `powermcp`: package and CLI
 
 This folder is the **PowerMCP core package**: the CLI installer (`powermcp install`),
 the launcher (`powermcp run`), the central config (`~/.powermcp/config.toml`), the tool
 registry, and the MCP client-config writers. The actual MCP servers live in the
-top-level tool dirs (`PSSE/`, `pandapower/`, …) and are shipped into the wheel under
+top-level tool dirs (`PSSE/`, `pandapower/`, ...) and are shipped into the wheel under
 `powermcp/_servers/` at build time.
 
 This guide shows how to **install** and **test** the packaged version.
@@ -19,9 +19,9 @@ pip install powermcp
 ```
 
 The base install includes **pandapower**, **PyPSA**, and the canonical **PowerIO**
-conversion server. PowerIO `.pio.json` packages can be passed directly to the
-solver import tools, with explicit operating-point or study-commit selection
-when a package contains stored state data. Everything else is opt-in via an extra:
+conversion server. PowerIO IR modules can be passed directly to the solver
+import tools, with explicit `time_index` or `scenario_id` selection when a
+module carries a collection. Everything else is opt-in via an extra:
 
 ```bash
 pip install "powermcp[psse]"            # one tool
@@ -41,7 +41,7 @@ pip install "powermcp[all]"             # everything
 | `andes` | ANDES | GPL-3.0; installed only as an optional pip extra, never vendored |
 | `egret` | Egret | + needs an external solver (ipopt/Gurobi) |
 | `opendss` | OpenDSS | |
-| `surge` | surge | **Python 3.12–3.14 only** |
+| `surge` | surge | **Python 3.12 to 3.14 only** |
 | `hope` | HOPE | + needs Julia at runtime |
 | `genx` | GenX | + needs a GenX.jl checkout; case submission needs SLURM `sbatch` |
 | `ltspice` | LTSpice | executable **auto-detected** (override with `ltspice.exe`) |
@@ -66,7 +66,7 @@ The interactive wizard:
 4. writes the MCP client config for **Claude Desktop**, **Claude Code**, and the **Codex CLI**.
 
 > In the interactive picker you must press **SPACE to toggle each tool**, then ENTER to
-> confirm — pressing ENTER alone keeps only the preselected core tools. If your terminal
+> confirm. Pressing ENTER alone keeps only the preselected core tools. If your terminal
 > doesn't render the checkbox well, use `--tools`/`--all` below instead.
 
 **Choose tools non-interactively** (recommended when scripting or if the picker misbehaves):
@@ -85,7 +85,7 @@ or configured (and any already present in the targeted client config), so confir
 **preserves and updates** your existing setup instead of resetting to core. Paths such as
 LTSpice's are auto-detected and pre-filled, so you can usually just press Enter.
 
-Useful flags: `--dry-run` (preview, write nothing — not even `config.toml`),
+Useful flags: `--dry-run` (preview, write nothing, not even `config.toml`),
 `--yes` (non-interactive core only), `--tools <ids>` / `--all` (pick tools without the
 picker), `--clients claude-desktop,codex` (choose which clients; `none` to skip).
 
@@ -114,17 +114,17 @@ powermcp config set powerfactory.python_path "...\DIgSILENT\PowerFactory 2024\Py
 powermcp config set hope.repo_root  "C:\src\HOPE"
 ```
 
-Resolution order for each key is **environment variable** (`POWERMCP_PSSE_BIN`, …) →
-**config.toml** → **legacy default** → a clear "run `powermcp install`" error.
+Resolution order for each key is **environment variable** (`POWERMCP_PSSE_BIN`, ...),
+then **config.toml**, then **legacy default**, then a clear "run `powermcp install`" error.
 
 > **LTSpice is auto-detected** in standard install locations (modern ADI, legacy LTC, Wine),
-> so `ltspice.exe` usually doesn't need to be set at all — the server resolver falls back to
-> detection (env/config → auto-detect → legacy), and the wizard pre-fills the detected path.
+> so `ltspice.exe` usually doesn't need to be set at all; the server resolver falls back to
+> detection (env or config, then auto-detect, then legacy), and the wizard pre-fills the detected path.
 > Set it only for a non-standard install.
 
 ### Use PowerMCP in Claude Desktop
 
-Claude Desktop has no CLI — it reads a JSON config file. Let the installer write/merge it:
+Claude Desktop has no CLI; it reads a JSON config file. Let the installer write/merge it:
 
 ```bash
 powermcp install --clients claude-desktop
@@ -139,7 +139,7 @@ servers you already have (and backing the file up once). The file lives at:
 
 Preview without writing anything: `powermcp install --clients claude-desktop --dry-run`.
 
-**Manual setup** — open that file (in Claude Desktop: **Settings → Developer → Edit Config**)
+**Manual setup**: open that file (in Claude Desktop: **Settings > Developer > Edit Config**)
 and add entries under `mcpServers`. Use the **absolute interpreter path**: Claude Desktop is a
 GUI app and does *not* inherit your shell PATH, so a bare `python`/`powermcp` usually won't be
 found.
@@ -162,17 +162,17 @@ found.
 (JSON needs escaped backslashes on Windows. Find the interpreter with
 `python -c "import sys; print(sys.executable)"`.)
 
-**Apply & verify:** fully **quit and reopen** Claude Desktop — closing the window isn't enough;
+**Apply and verify:** fully **quit and reopen** Claude Desktop; closing the window isn't enough,
 exit it from the system tray / menu bar, then relaunch. The PowerMCP tools then appear under the
-tools (🔨) control in the message box, and **Settings → Developer** lists each server with its
+tools (🔨) control in the message box, and **Settings > Developer** lists each server with its
 connection status.
 
-**Closed-source tools:** set the path first (`powermcp config set …`), confirm with
+**Closed-source tools:** set the path first (`powermcp config set ...`), confirm with
 `powermcp doctor`, then restart Claude Desktop.
 
 ### Use PowerMCP in Claude Code
 
-**Option A — let the installer do it (recommended):**
+**Option A, let the installer do it (recommended):**
 
 ```bash
 powermcp install --clients claude-code
@@ -183,7 +183,7 @@ This adds one MCP server per selected tool to the **user scope** of Claude Code
 Each entry uses the absolute interpreter path (`<python> -m powermcp run <tool>`) so
 Claude Code can always launch it. Re-running is idempotent and prunes tools you deselect.
 
-**Option B — add them manually with the Claude Code CLI:**
+**Option B, add them manually with the Claude Code CLI:**
 
 ```bash
 # --scope user = available everywhere; the `--` separates Claude's flags from the command
@@ -207,14 +207,14 @@ claude mcp get powermcp_pandapower  # show one server's details
 ```
 
 Inside a Claude Code session, run `/mcp` to see connected servers and their tools, then
-just ask — e.g. *"create an empty pandapower network and run a power flow."*
+just ask, for example *"create an empty pandapower network and run a power flow."*
 
-**Scopes:** `--scope user` (you, everywhere — what the installer uses) ·
-`--scope project` (shared via a checked-in `.mcp.json`, prompts teammates for approval) ·
+**Scopes:** `--scope user` (you, everywhere, which is what the installer uses);
+`--scope project` (shared via a checked-in `.mcp.json`, prompts teammates for approval);
 `--scope local` (this project only, private to you).
 
 **Closed-source tools:** set the software path first (e.g.
-`powermcp config set psse.python_lib "…\PSSPY311"`) and confirm with `powermcp doctor`
+`powermcp config set psse.python_lib "...\PSSPY311"`) and confirm with `powermcp doctor`
 before adding the server, otherwise the tool will report an actionable error on first call.
 
 **To remove a server:** `claude mcp remove powermcp_pandapower --scope user`.
@@ -235,10 +235,10 @@ python PSSE/psse_mcp.py     # uses ~/.powermcp/config.toml if present, else lega
 
 ## 4. Test the package (developers)
 
-The test suite lives in [`../tests`](../tests) (more than 900 tests). It needs no licensed software —
+The test suite lives in [`../tests`](../tests). It needs no licensed software,
 vendor engines are stubbed, and server launches are checked with the stdio loop monkeypatched.
 
-### A. Quick loop — editable install
+### A. Quick loop: editable install
 
 ```bash
 python -m venv .venv
@@ -249,7 +249,7 @@ pytest -q
 
 `pip install -e .` picks up source edits live, so re-run `pytest` after each change.
 
-### B. Full gate — build the wheel and test the installed artifact
+### B. Full gate: build the wheel and test the installed artifact
 
 This is what CI should run: it proves the wheel ships correctly and resolves paths in the
 **installed (wheel) layout**, which differs from the editable/checkout layout.
@@ -261,7 +261,7 @@ build-env\Scripts\python -m build           # writes dist/powermcp-*.whl (+ sdis
 
 # 2) install the wheel into a clean venv
 python -m venv test-env
-test-env\Scripts\python -m pip install dist\powermcp-0.3.0-py3-none-any.whl pytest
+test-env\Scripts\python -m pip install dist\powermcp-*.whl pytest
 
 # 3) run the suite against the INSTALLED package (run from a dir without the repo on the path)
 copy ..\tests to a temp dir, then:  test-env\Scripts\python -m pytest <tempdir>\tests -q
@@ -298,12 +298,12 @@ yellow = a path/config is missing; it also reminds you which tools need external
 | `test_vendor_import.py` | PSS/E & PSLF import **without** the software and init the engine exactly once |
 | `test_clients.py` | idempotent merge, foreign-server preservation, prune, backup, Codex TOML |
 | `test_wizard.py` | tool selection (`--tools`/`--all`, preselection of installed/configured tools), Windows/surge filtering, non-interactive handling |
-| `test_doctor.py` | dependency/path status, namespace-shadow guard |
+| `test_doctor.py` | dependency/path status, namespace-shadow check |
 | `test_detect.py` | LTSpice executable auto-detection across install layouts |
 
 > **Licensed tools (PSS/E, PSLF, PowerFactory, PSCAD, PowerWorld, LTSpice)** can't run in CI.
 > The suite verifies they *import safely* and produce actionable errors; running an actual
-> tool requires the software installed and a `powermcp config set …` path, then
+> tool requires the software installed and a `powermcp config set ...` path, then
 > `powermcp doctor` and a live `powermcp run <tool>` from your MCP client.
 
 ---
