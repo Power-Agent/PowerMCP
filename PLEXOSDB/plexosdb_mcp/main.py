@@ -34,6 +34,7 @@ site-packages. See ``powermcp/registry.py``'s ``plexosdb`` entry.
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -47,13 +48,16 @@ _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
     sys.path.insert(0, _repo_root)
 try:
-    from powermcp.sandbox import PathNotAllowed, checked_path
+    from powermcp.errors import run_tool, tool_success
+    from powermcp.sandbox import checked_path
 finally:
     if _repo_root_added:
         sys.path.remove(_repo_root)
 del _repo_root, _repo_root_added
 
 from plexosdb_mcp import server as _server
+
+logger = logging.getLogger(__name__)
 
 # -- thin re-export of plexosdb-mcp's own server -------------------------- #
 MCPServerState = _server.MCPServerState
@@ -120,8 +124,10 @@ def translate_to_sienna(
 
     Returns
     -------
-    dict with ``ok``, ``output_path``, and a ``component_types`` count summary
-    of the translated Sienna system.
+    ``{"status": "success", "output_path": ..., "model_name": ...,
+    "component_types": {...}}`` with a component count per type in the
+    translated Sienna system, or ``{"status": "error", "message": ...}`` for a
+    refused path or any r2x failure.
 
     Notes
     -----
@@ -140,41 +146,47 @@ def translate_to_sienna(
     PLEXOSDB/README.md for the install command and both upstream issues
     (NatLabRockies/R2X#299, epri-dev/plexos2duckdb#3).
     """
-    try:
+
+    def run() -> dict[str, Any]:
+        nonlocal xml_path, output_path
+
         xml_path = checked_path(xml_path, purpose="xml_path")
         output_path = checked_path(output_path, purpose="output_path", for_write=True)
-    except PathNotAllowed as exc:
-        return {"ok": False, "error": str(exc)}
 
-    from r2x_core import PluginContext
-    from r2x_plexos import PLEXOSConfig, PLEXOSParser
-    from r2x_plexos_to_sienna import PlexosToSiennaConfig, plexos_to_sienna
-    from r2x_sienna import SiennaExporter, SiennaExporterConfig
+        from r2x_core import PluginContext
+        from r2x_plexos import PLEXOSConfig, PLEXOSParser
+        from r2x_plexos_to_sienna import PlexosToSiennaConfig, plexos_to_sienna
+        from r2x_sienna import SiennaExporter, SiennaExporterConfig
 
-    plexos_config = PLEXOSConfig(fpath=xml_path, model_name=model_name, horizon_year=horizon_year)
-    parse_ctx = PluginContext(config=plexos_config)
-    parse_ctx = PLEXOSParser.from_context(parse_ctx).run()
+        plexos_config = PLEXOSConfig(
+            fpath=xml_path, model_name=model_name, horizon_year=horizon_year
+        )
+        parse_ctx = PluginContext(config=plexos_config)
+        parse_ctx = PLEXOSParser.from_context(parse_ctx).run()
 
-    sienna_system = plexos_to_sienna(parse_ctx.system, PlexosToSiennaConfig())
+        sienna_system = plexos_to_sienna(parse_ctx.system, PlexosToSiennaConfig())
 
-    export_config = SiennaExporterConfig(
-        output_path=output_path,
-        system_base_power=system_base_power,
-        scenario=scenario,
-    )
-    export_ctx = PluginContext(config=export_config, system=sienna_system)
-    SiennaExporter.from_context(export_ctx).run()
+        export_config = SiennaExporterConfig(
+            output_path=output_path,
+            system_base_power=system_base_power,
+            scenario=scenario,
+        )
+        export_ctx = PluginContext(config=export_config, system=sienna_system)
+        SiennaExporter.from_context(export_ctx).run()
 
-    component_types = {
-        component_type.__name__: len(list(sienna_system.get_components(component_type)))
-        for component_type in sienna_system.get_component_types()
-    }
-    return {
-        "ok": True,
-        "output_path": output_path,
-        "model_name": model_name,
-        "component_types": component_types,
-    }
+        component_types = {
+            component_type.__name__: len(
+                list(sienna_system.get_components(component_type))
+            )
+            for component_type in sienna_system.get_component_types()
+        }
+        return tool_success(
+            output_path=output_path,
+            model_name=model_name,
+            component_types=component_types,
+        )
+
+    return run_tool(run, logger=logger)
 
 
 @mcp.tool()
@@ -202,49 +214,63 @@ def compare_solutions(
 
     Returns
     -------
-    dict with per-component-type counts for each side and the set of
-    component types whose count differs between them.
+    ``{"status": "success", "model_a": ..., "model_b": ..., "differences":
+    ..., "identical": ...}`` with per-component-type counts for each side and
+    the component types whose count differs, or ``{"status": "error",
+    "message": ...}`` for a refused path or any r2x failure.
 
     Notes
     -----
     Uses the same ``r2x_plexos>=0.3.0`` pin documented on ``translate_to_sienna``,
     which fixes the upstream Horizon-resolution bug this connector previously hit.
     """
-    try:
+
+    def run() -> dict[str, Any]:
+        nonlocal xml_path_a, xml_path_b
+
         xml_path_a = checked_path(xml_path_a, purpose="xml_path_a")
         xml_path_b = checked_path(xml_path_b, purpose="xml_path_b")
-    except PathNotAllowed as exc:
-        return {"ok": False, "error": str(exc)}
 
-    from r2x_core import PluginContext
-    from r2x_plexos import PLEXOSConfig, PLEXOSParser
+        from r2x_core import PluginContext
+        from r2x_plexos import PLEXOSConfig, PLEXOSParser
 
-    def _component_counts(xml_path: str, model_name: str) -> dict[str, int]:
-        config = PLEXOSConfig(fpath=xml_path, model_name=model_name)
-        ctx = PluginContext(config=config)
-        ctx = PLEXOSParser.from_context(ctx).run()
-        return {
-            component_type.__name__: len(list(ctx.system.get_components(component_type)))
-            for component_type in ctx.system.get_component_types()
+        def component_counts(xml_path: str, model_name: str) -> dict[str, int]:
+            config = PLEXOSConfig(fpath=xml_path, model_name=model_name)
+            ctx = PluginContext(config=config)
+            ctx = PLEXOSParser.from_context(ctx).run()
+            return {
+                component_type.__name__: len(
+                    list(ctx.system.get_components(component_type))
+                )
+                for component_type in ctx.system.get_component_types()
+            }
+
+        counts_a = component_counts(xml_path_a, model_name_a)
+        counts_b = component_counts(xml_path_b, model_name_b)
+
+        all_types = sorted(set(counts_a) | set(counts_b))
+        differences = {
+            t: {"a": counts_a.get(t, 0), "b": counts_b.get(t, 0)}
+            for t in all_types
+            if counts_a.get(t, 0) != counts_b.get(t, 0)
         }
 
-    counts_a = _component_counts(xml_path_a, model_name_a)
-    counts_b = _component_counts(xml_path_b, model_name_b)
+        return tool_success(
+            model_a={
+                "xml_path": xml_path_a,
+                "model_name": model_name_a,
+                "component_types": counts_a,
+            },
+            model_b={
+                "xml_path": xml_path_b,
+                "model_name": model_name_b,
+                "component_types": counts_b,
+            },
+            differences=differences,
+            identical=not differences,
+        )
 
-    all_types = sorted(set(counts_a) | set(counts_b))
-    differences = {
-        t: {"a": counts_a.get(t, 0), "b": counts_b.get(t, 0)}
-        for t in all_types
-        if counts_a.get(t, 0) != counts_b.get(t, 0)
-    }
-
-    return {
-        "ok": True,
-        "model_a": {"xml_path": xml_path_a, "model_name": model_name_a, "component_types": counts_a},
-        "model_b": {"xml_path": xml_path_b, "model_name": model_name_b, "component_types": counts_b},
-        "differences": differences,
-        "identical": not differences,
-    }
+    return run_tool(run, logger=logger)
 
 
 if __name__ == "__main__":

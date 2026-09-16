@@ -104,7 +104,7 @@ result = translate_to_sienna(
     model_name="Base",           # a PLEXOS Model object name — see list_models
     output_path="/tmp/out/system.json",
 )
-# {"ok": True, "output_path": ..., "model_name": "Base",
+# {"status": "success", "output_path": ..., "model_name": "Base",
 #  "component_types": {"ACBus": 12, "ThermalStandard": 4, ...}}
 ```
 
@@ -122,6 +122,20 @@ PLEXOS models the same way and diffs their component-type counts — useful for
 comparing two scenarios of a study, or a study before/after an edit made through
 plexosdb-mcp's own CRUD tools. It does not solve anything (no PLEXOS license is
 present); solving is the paired `SIENNA` connector's job.
+
+## Tool results
+
+Both tools return the shape the whole distribution uses:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+A refused path and every r2x failure arrive the same way, so a missing model
+name, an unreadable XML study or a failed export reads as a message rather than
+as an MCP protocol error. The unexpected ones are logged with their traceback
+on stderr, which keeps stdout free for the JSON-RPC channel.
 
 ## Known upstream issues (tracked, and worked around)
 
