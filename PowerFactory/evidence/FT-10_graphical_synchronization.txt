@@ -1,0 +1,114 @@
+Evidence ID: FT-10
+Title: Single-line diagram insertion, deletion, and refresh
+Date: 1 September 2026
+Classification: Compiled evidence record
+
+Objective:
+
+Verify that add_component and delete_component synchronize the active PowerFactory single-line diagram when update_graphics=true.
+
+Creation input:
+
+component_type: load
+component_name: Graphical Delete Fix Load 20260901B
+parameters:
+  bus_name: Bus 01
+  active_power_mw: 1.0
+  reactive_power_mvar: 0.25
+grid_name: Grid
+out_of_service: true
+open_digsilent: true
+update_graphics: true
+
+Creation result:
+
+{
+  "success": true,
+  "message": "Created load: ...Graphical Delete Fix Load 20260901B.ElmLod | bus=Bus 01 | active_power_mw=1.0 | reactive_power_mvar=0.25 | out_of_service=True | graphics=updated"
+}
+
+Observed GUI state:
+
+- The load appeared in the active single-line diagram.
+- The load was visibly out of service, matching out_of_service=true.
+
+Deletion confirmation:
+
+DELETE load Graphical Delete Fix Load 20260901B
+
+Confirmed deletion result:
+
+{
+  "success": true,
+  "deleted": true,
+  "message": "Deleted load: Graphical Delete Fix Load 20260901B | graphics_deleted=1"
+}
+
+Development observation:
+
+The underlying IntGrf object was removed, but PowerFactory initially displayed a stale symbol until the diagram was manually refreshed. The implementation was updated to call application Rebuild() after verified graphical deletion. The final automated graphical-deletion test reported:
+
+Deleted load: Graphical Test Load | graphics_deleted=1 | graphics_refresh=rebuilt
+
+Final live observation:
+
+After restarting the server with the rebuild change, the confirmed deletion removed the network-data object and the symbol disappeared from the active single-line diagram.
+
+Result: PASS
+
+Interpretation:
+
+Graphical synchronization is an optional behavior of add_component and delete_component. It is not exposed as a separate MCP tool. The update_graphics parameter defaults to false.
+
+Expanded full-coverage graphical verification (20260901F):
+
+The following in-service components were created and checked individually:
+
+- Full Coverage Bus 20260901F.ElmTerm
+- Full Coverage Line 20260901F.ElmLne
+- Full Coverage Load 20260901F.ElmLod
+- Full Coverage Generator 20260901F.ElmSym
+- Full Coverage Transformer 20260901F.ElmTr2
+
+The final read-only verification returned total_count=1 and outserv=0 for all
+five objects. A load flow was run after each addition, and the final response
+was success=true with the message "Load flow OK".
+
+Observed graphical workflow:
+
+1. Creating the isolated bus directly with update_graphics=true created its
+   IntGrf representation at the extreme upper-right of the diagram.
+2. PowerFactory fitted the viewport to include both the existing network and
+   the distant bus. The original network was not structurally rearranged, but
+   appeared compressed in the lower-left because of the expanded view.
+3. The isolated bus was deleted and recreated with update_graphics=false.
+4. Full Coverage Line 20260901F was created from Bus 01 to the new bus with
+   update_graphics=true.
+5. PowerFactory inserted the missing bus graphic and line together, anchored
+   to the existing network near Bus 01. The diagram retained a useful scale.
+6. The load, generator, and transformer were subsequently visible in the
+   active diagram following their individual creation calls.
+
+Expanded result: PASS WITH DOCUMENTED LIMITATION
+
+Connected insertion and graphical deletion were verified successfully. Direct
+graphical insertion of a standalone, unconnected bus is functional, but its
+automatic position may be far from the existing network. Creating the bus
+without graphics and inserting it together with its connecting line produced
+the preferred graphical result without changing the MCP implementation.
+
+Expanded graphical cleanup verification:
+
+All five Full Coverage 20260901F objects were previewed and then deleted in
+dependency-safe order with update_graphics=true. Each confirmed response
+reported one deleted graphical object and a rebuilt view:
+
+- Load: graphics_deleted=1 | graphics_refresh=rebuilt
+- Generator: graphics_deleted=1 | graphics_refresh=rebuilt
+- Transformer: graphics_deleted=1 | graphics_refresh=rebuilt
+- Line: graphics_deleted=1 | graphics_refresh=rebuilt
+- Bus: graphics_deleted=1 | graphics_refresh=rebuilt
+
+Exact-name queries subsequently returned total_count=0 for all five network
+objects. This extends the graphical-deletion evidence from a single load to
+every component type supported by delete_component.

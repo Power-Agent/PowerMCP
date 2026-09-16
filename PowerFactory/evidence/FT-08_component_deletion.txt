@@ -1,0 +1,45 @@
+Evidence ID: FT-08
+Title: Guarded deletion for all supported component types
+Date: 20-22 August 2026
+Classification: Compiled evidence record assembled from individually supplied raw MCP responses
+
+The preview responses demonstrated the required exact confirmation. The following confirmed responses demonstrate successful deletion of all five supported types.
+
+1. load preview
+{"result":"{\"success\": true, \"deleted\": false, \"message\": \"Preview only: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Load 20260820C.ElmLod | confirmation_required=DELETE load Unified AI Load 20260820C\"}"}
+
+2. load deletion
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted load: Unified AI Load 20260820C\"}"}
+
+3. line preview
+{"result":"{\"success\": true, \"deleted\": false, \"message\": \"Preview only: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Line 20260820C.ElmLne | confirmation_required=DELETE line Unified AI Line 20260820C\"}"}
+
+4. line deletion
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted line: Unified AI Line 20260820C\"}"}
+
+5. bus preview
+{"result":"{\"success\": true, \"deleted\": false, \"message\": \"Preview only: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Bus 20260820C.ElmTerm | confirmation_required=DELETE bus Unified AI Bus 20260820C\"}"}
+
+6. bus deletion
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted bus: Unified AI Bus 20260820C\"}"}
+
+7. generator preview
+{"result":"{\"success\": true, \"deleted\": false, \"message\": \"Preview only: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Generator 20260820C.ElmSym | confirmation_required=DELETE generator Unified AI Generator 20260820C\"}"}
+
+8. generator deletion
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted generator: Unified AI Generator 20260820C\"}"}
+
+9. transformer preview
+{"result":"{\"success\": true, \"deleted\": false, \"message\": \"Preview only: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Transformer 20260820C.ElmTr2 | confirmation_required=DELETE transformer Unified AI Transformer 20260820C\"}"}
+
+10. transformer deletion
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted transformer: Unified AI Transformer 20260820C\"}"}
+
+Additional guard observations:
+
+- Missing confirmation returned preview-only output.
+- Incorrect confirmation returned success=false without deleting the target.
+- A connected bus was rejected until its line and load were removed.
+- Re-creation with the same exact name succeeded after deletion, confirming cubicle cleanup.
+
+Conclusion: PASS

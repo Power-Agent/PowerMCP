@@ -23,6 +23,14 @@ Implemented MCP tools
 - run_simulation: executes the configured load flow, RMS simulation, CSV export, plotting, and optional PFD export pipeline.
 - run_custom_case: runs one fault scenario supplied at call time.
 - read_results_csv: returns the latest RMS CSV or a specific file.
+- get_active_project: returns the active PowerFactory project.
+- get_active_study_case: returns the active study case.
+- get_parameters: reads selected attributes from matching objects.
+- list_objects: lists objects using a PowerFactory object query.
+- list_components: lists objects using friendly equipment categories.
+- list_study_cases: lists study cases and identifies the active case.
+- add_component: creates a bus, load, generator, line, or transformer; connected equipment receives generated cubicle(s) and closed circuit breaker(s), and update_graphics can synchronize the active diagram.
+- delete_component: previews or confirms exact-name component deletion, including generated cubicle, switchgear, and requested graphical cleanup.
 
 Implemented simulation engine behavior
 --------------------------------------
@@ -43,6 +51,8 @@ Implemented simulation engine behavior
 - DIgSILENTAgent.short_circuit: runs ComShc.
 - DIgSILENTAgent.run_pipeline: orchestrates the full workflow and returns a structured report.
 - DIgSILENTAgent.close: closes PowerFactory and clears shared handles.
+- DIgSILENTAgent.add_component: validates, creates, connects, verifies, and rolls back supported network components.
+- DIgSILENTAgent.delete_component: performs guarded exact-name deletion and verifies connection and optional graphical cleanup.
 
 Path handling
 -------------

@@ -1,0 +1,65 @@
+Evidence ID: FT-09
+Title: Absence checks and post-cleanup calculations
+Date: 22 August 2026
+Classification: Verbatim transcript supplied after live execution
+
+1. delete_component transformer
+Input:
+{
+  "component_type": "transformer",
+  "component_name": "MCP Verification Transformer 20260822A",
+  "grid_name": "Grid",
+  "confirmation": "DELETE transformer MCP Verification Transformer 20260822A",
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted transformer: MCP Verification Transformer 20260822A\"}"}
+
+2. delete_component generator
+Input:
+{
+  "component_type": "generator",
+  "component_name": "MCP Verification Generator 20260822A",
+  "grid_name": "Grid",
+  "confirmation": "DELETE generator MCP Verification Generator 20260822A",
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"deleted\": true, \"message\": \"Deleted generator: MCP Verification Generator 20260822A\"}"}
+
+3. transformer absence check
+Input:
+{
+  "object_query": "MCP Verification Transformer 20260822A.ElmTr2",
+  "max_results": 5
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"MCP Verification Transformer 20260822A.ElmTr2\",\n  \"total_count\": 0,\n  \"returned_count\": 0,\n  \"results\": []\n}"}
+
+4. generator absence check
+Input:
+{
+  "object_query": "MCP Verification Generator 20260822A.ElmSym",
+  "max_results": 5
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"MCP Verification Generator 20260822A.ElmSym\",\n  \"total_count\": 0,\n  \"returned_count\": 0,\n  \"results\": []\n}"}
+
+5. run_loadflow
+Input:
+{
+  "open_digsilent": true,
+  "save_csv": false
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Load flow OK\"}"}
+
+6. run_short_circuit
+Input:
+{
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Short-circuit calculation OK\"}"}
+
+Conclusion: PASS

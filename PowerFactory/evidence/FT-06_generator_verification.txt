@@ -1,0 +1,42 @@
+Evidence ID: FT-06
+Title: In-service generator creation and retained-state verification
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation generator/transformer transcript
+
+1. add_component generator
+Input:
+{
+  "component_type": "generator",
+  "component_name": "MCP Verification Generator 20260822A",
+  "parameters": {
+    "bus_name": "Bus 01",
+    "template_generator": "G 01.ElmSym",
+    "active_power_mw": 1,
+    "reactive_power_mvar": 0
+  },
+  "grid_name": "Grid",
+  "out_of_service": false,
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Created generator: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\MCP Verification Generator 20260822A.ElmSym | bus=Bus 01 | template=G 01.ElmSym | active_power_mw=1.0 | reactive_power_mvar=0.0 | out_of_service=False\"}"}
+
+2. get_parameters generator
+Input:
+{
+  "object_query": "MCP Verification Generator 20260822A.ElmSym",
+  "variables": ["pgini", "qgini", "outserv", "bus1", "typ_id"],
+  "max_results": 5
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"MCP Verification Generator 20260822A.ElmSym\",\n  \"variables\": [\n    \"pgini\",\n    \"qgini\",\n    \"outserv\",\n    \"bus1\",\n    \"typ_id\"\n  ],\n  \"total_count\": 1,\n  \"returned_count\": 1,\n  \"results\": [\n    {\n      \"name\": \"MCP Verification Generator 20260822A\",\n      \"class_name\": \"ElmSym\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\MCP Verification Generator 20260822A.ElmSym\",\n      \"values\": {\n        \"pgini\": 1.0,\n        \"qgini\": 0.0,\n        \"outserv\": 0,\n        \"bus1\": \"<l3>\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 01.ElmTerm\\\\MCP Verification Generator 20260822A Cub.StaCubic</l3>\",\n        \"typ_id\": \"<l3>\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Library.IntPrjfolder\\\\Equipment Type Library.IntPrjfolder\\\\Generator Types.IntPrjfolder\\\\Type Gen 01.TypSym</l3>\"\n      }\n    }\n  ]\n}"}
+
+3. run_loadflow
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Load flow OK\"}"}
+
+4. run_short_circuit
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Short-circuit calculation OK\"}"}
+
+Conclusion: PASS

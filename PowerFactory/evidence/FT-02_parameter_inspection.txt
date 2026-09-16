@@ -1,0 +1,17 @@
+Evidence ID: FT-02
+Title: Multi-parameter inspection
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation discovery transcript
+
+Operation: get_parameters
+Input:
+{
+  "object_query": "Bus 01.ElmTerm",
+  "variables": ["uknom", "outserv"],
+  "max_results": 5
+}
+
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"Bus 01.ElmTerm\",\n  \"variables\": [\n    \"uknom\",\n    \"outserv\"\n  ],\n  \"total_count\": 1,\n  \"returned_count\": 1,\n  \"results\": [\n    {\n      \"name\": \"Bus 01\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 01.ElmTerm\",\n      \"values\": {\n        \"uknom\": 345.0,\n        \"outserv\": 0\n      }\n    }\n  ]\n}"}
+
+Conclusion: PASS

@@ -1,0 +1,24 @@
+Evidence ID: FT-03
+Title: Raw object and friendly component discovery
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation discovery transcript
+
+1. list_objects
+Input:
+{
+  "object_query": "*.ElmTerm",
+  "max_results": 3
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"*.ElmTerm\",\n  \"total_count\": 39,\n  \"returned_count\": 3,\n  \"results\": [\n    {\n      \"name\": \"Bus 08\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\"\n    },\n    {\n      \"name\": \"Bus 07\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 07.ElmTerm\"\n    },\n    {\n      \"name\": \"Bus 05\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 05.ElmTerm\"\n    }\n  ]\n}"}
+
+2. list_components
+Input:
+{
+  "component_type": "buses",
+  "max_results": 3
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"component_type\": \"buses\",\n  \"queries\": [\n    \"*.ElmTerm\"\n  ],\n  \"total_count\": 39,\n  \"returned_count\": 3,\n  \"results\": [\n    {\n      \"name\": \"Bus 08\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\",\n      \"out_of_service\": false\n    },\n    {\n      \"name\": \"Bus 07\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 07.ElmTerm\",\n      \"out_of_service\": false\n    },\n    {\n      \"name\": \"Bus 05\",\n      \"class_name\": \"ElmTerm\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 05.ElmTerm\",\n      \"out_of_service\": false\n    }\n  ]\n}"}
+
+Conclusion: PASS

@@ -1,0 +1,15 @@
+Evidence ID: FT-04
+Title: Study-case discovery
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation discovery transcript
+
+Operation: list_study_cases
+Input:
+{
+  "max_results": 20
+}
+
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"total_count\": 7,\n  \"returned_count\": 7,\n  \"results\": [\n    {\n      \"name\": \"0. Base\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\0. Base.IntCase\",\n      \"is_active\": false\n    },\n    {\n      \"name\": \"Case 1\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\",\n      \"is_active\": true\n    },\n    {\n      \"name\": \"MCP_Test_RMS\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\MCP_Test_RMS.IntCase\",\n      \"is_active\": false\n    },\n    {\n      \"name\": \"MCP_Test_GenSwitch\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\MCP_Test_GenSwitch.IntCase\",\n      \"is_active\": false\n    },\n    {\n      \"name\": \"MCP_Test_LineFault\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\MCP_Test_LineFault.IntCase\",\n      \"is_active\": false\n    },\n    {\n      \"name\": \"AI_Validation_LineFault\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\AI_Validation_LineFault.IntCase\",\n      \"is_active\": false\n    },\n    {\n      \"name\": \"MCP_Branch_LoadFlow\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\MCP_Branch_LoadFlow.IntCase\",\n      \"is_active\": false\n    }\n  ]\n}"}
+
+Conclusion: PASS

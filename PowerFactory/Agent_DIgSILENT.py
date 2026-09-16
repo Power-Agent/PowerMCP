@@ -6,6 +6,7 @@
 Author
 ------
   Andrea Pomarico
+  Aswin Krishna Poyil
   
 """
 
@@ -946,7 +947,891 @@ class DIgSILENTAgent:
             return False, str(e)
 
     # ──────────────────────────────────────────────────────────────
-    # LOAD FLOW — run ComLdf on the currently active study case
+    # ADD BUS - create a verified ElmTerm in an active grid
+    # ──────────────────────────────────────────────────────────────
+    @staticmethod
+    def _select_grid(app, grid_name: str):
+        grids = app.GetCalcRelevantObjects("*.ElmNet") or []
+        if not grids:
+            raise RuntimeError("No calculation-relevant grids were found")
+
+        requested = str(grid_name or "").strip()
+        if requested:
+            matches = [
+                grid
+                for grid in grids
+                if str(grid.GetAttribute("loc_name")).casefold()
+                == requested.casefold()
+            ]
+            if matches:
+                return matches[0]
+
+            available = ", ".join(
+                str(grid.GetAttribute("loc_name"))
+                for grid in grids
+            )
+            raise RuntimeError(
+                f"Grid not found: {requested}. Available grids: {available}"
+            )
+
+        if len(grids) == 1:
+            return grids[0]
+
+        available = ", ".join(
+            str(grid.GetAttribute("loc_name"))
+            for grid in grids
+        )
+        raise RuntimeError(
+            "Multiple grids are active; provide grid_name. "
+            f"Available grids: {available}"
+        )
+
+    @staticmethod
+    def _select_bus(grid, bus_name: str):
+        requested = str(bus_name or "").strip()
+        buses = grid.GetContents("*.ElmTerm", 1) or []
+
+        matches = [
+            bus
+            for bus in buses
+            if str(bus.GetAttribute("loc_name")).casefold()
+            == requested.casefold()
+        ]
+
+        if not matches:
+            raise RuntimeError(
+                f"Bus not found in the selected grid: {requested}"
+            )
+        if len(matches) > 1:
+            raise RuntimeError(
+                f"Multiple buses matched: {requested}"
+            )
+
+        return matches[0]
+
+    @classmethod
+    def _get_application(cls, open_digsilent: bool = True):
+        global pf
+        if pf is None:
+            _ensure_powerfactory_on_path()
+            import powerfactory as pf
+
+        if cls._shared_app is None:
+            app = pf.GetApplicationExt()
+            if app is None:
+                raise RuntimeError("GetApplicationExt() returned None")
+            cls._shared_app = app
+        else:
+            app = cls._shared_app
+
+        cls._apply_show_preference(app, open_digsilent)
+        return app
+
+    @staticmethod
+    def _get_template_type(
+        app,
+        template_query: str,
+        class_name: str,
+        label: str,
+        type_label: str,
+    ):
+        templates = (
+            app.GetCalcRelevantObjects(template_query) or []
+        )
+        if not templates:
+            raise RuntimeError(
+                f"Template {label} not found: {template_query}"
+            )
+        if len(templates) > 1:
+            raise RuntimeError(
+                f"Multiple template {label}s matched: {template_query}"
+            )
+
+        template = templates[0]
+        if template.GetClassName() != class_name:
+            raise RuntimeError(
+                f"template_{label} must reference an {class_name}"
+            )
+
+        template_type = template.GetAttribute("typ_id")
+        if template_type is None:
+            raise RuntimeError(
+                f"Template {label} has no {type_label}"
+            )
+        return template_type
+
+    @staticmethod
+    def _set_and_verify_attributes(element, expected, component_label):
+        import math
+
+        labels = {
+            "uknom": "nominal voltage",
+            "outserv": "service state",
+            "plini": "active power",
+            "qlini": "reactive power",
+            "pgini": "active power",
+            "qgini": "reactive power",
+            "dline": "line length",
+            "typ_id": f"{component_label.lower()} type",
+        }
+
+        for attribute, value in expected.items():
+            element.SetAttribute(attribute, value)
+
+        actual = {}
+        for attribute, expected_value in expected.items():
+            actual_value = element.GetAttribute(attribute)
+            actual[attribute] = actual_value
+
+            try:
+                if isinstance(expected_value, float):
+                    matches = math.isclose(
+                        float(actual_value),
+                        expected_value,
+                        rel_tol=1e-9,
+                        abs_tol=1e-9,
+                    )
+                elif hasattr(expected_value, "GetFullName"):
+                    matches = (
+                        actual_value is not None
+                        and actual_value.GetFullName()
+                        == expected_value.GetFullName()
+                    )
+                else:
+                    matches = actual_value == expected_value
+            except Exception:
+                matches = False
+
+            if not matches:
+                raise RuntimeError(
+                    "PowerFactory did not retain the "
+                    f"{labels[attribute]}"
+                )
+
+        return actual
+
+    @staticmethod
+    def _rollback_connected_element(
+        grid,
+        buses,
+        element,
+        cubicles,
+        class_name: str,
+        element_name: str,
+        cubicle_names,
+    ) -> bool:
+        if not isinstance(buses, (list, tuple)):
+            buses = (buses,)
+        if not isinstance(cubicles, (list, tuple)):
+            cubicles = (cubicles,)
+        if not isinstance(cubicle_names, (list, tuple)):
+            cubicle_names = (cubicle_names,)
+
+        for created_object in (element, *cubicles):
+            if created_object is not None:
+                try:
+                    created_object.Delete()
+                except Exception:
+                    pass
+
+        try:
+            remaining_elements = (
+                grid.GetContents(f"*.{class_name}", 1) or []
+            )
+            element_exists = any(
+                str(obj.GetAttribute("loc_name")).casefold()
+                == element_name.casefold()
+                for obj in remaining_elements
+            )
+            cubicle_exists = any(
+                any(
+                    str(obj.GetAttribute("loc_name")).casefold()
+                    == cubicle_name.casefold()
+                    for obj in (
+                        bus.GetContents("*.StaCubic", 1) or []
+                    )
+                )
+                for bus, cubicle_name in zip(buses, cubicle_names)
+            )
+            return not element_exists and not cubicle_exists
+        except Exception:
+            return False
+
+    @classmethod
+    def _create_connected_element(
+        cls,
+        app,
+        class_name: str,
+        element_label: str,
+        element_name: str,
+        bus_names,
+        grid_name: str,
+        attributes=None,
+        connection_attributes=("bus1",),
+    ):
+        grid = cls._select_grid(app, grid_name)
+
+        existing_elements = (
+            grid.GetContents(f"*.{class_name}", 1) or []
+        )
+        if any(
+            str(obj.GetAttribute("loc_name")).casefold()
+            == element_name.casefold()
+            for obj in existing_elements
+        ):
+            raise RuntimeError(
+                f"{element_label} already exists in the selected grid: "
+                f"{element_name}"
+            )
+
+        bus_names = tuple(bus_names)
+        connection_attributes = tuple(connection_attributes)
+        if len(bus_names) != len(connection_attributes):
+            raise RuntimeError(
+                "Bus names and connection attributes must have equal length"
+            )
+
+        buses = tuple(
+            cls._select_bus(grid, bus_name)
+            for bus_name in bus_names
+        )
+        if (
+            len(buses) > 1
+            and len({bus.GetFullName() for bus in buses}) != len(buses)
+        ):
+            raise RuntimeError(
+                "The two terminals must use different buses"
+            )
+
+        cubicle_names = tuple(
+            f"{element_name} Cubicle"
+            + (f" {index}" if len(buses) > 1 else "")
+            for index in range(1, len(buses) + 1)
+        )
+
+        for bus, cubicle_name in zip(buses, cubicle_names):
+            existing_cubicles = (
+                bus.GetContents("*.StaCubic", 1) or []
+            )
+            if any(
+                str(obj.GetAttribute("loc_name")).casefold()
+                == cubicle_name.casefold()
+                for obj in existing_cubicles
+            ):
+                raise RuntimeError(
+                    f"Cubicle already exists on bus: {cubicle_name}"
+                )
+
+        cubicles = []
+        element = None
+
+        try:
+            for bus, cubicle_name in zip(buses, cubicle_names):
+                cubicle = bus.CreateObject(
+                    "StaCubic",
+                    cubicle_name,
+                )
+                if cubicle is None:
+                    raise RuntimeError(
+                        "Could not create cubicle on bus: "
+                        f"{bus.GetAttribute('loc_name')}"
+                    )
+                cubicles.append(cubicle)
+
+                switch = cubicle.CreateObject("StaSwitch", "Switch")
+                if switch is None:
+                    raise RuntimeError(
+                        "Could not create circuit-breaker in cubicle: "
+                        f"{cubicle_name}"
+                    )
+
+                switch.SetAttribute("aUsage", "cbk")
+                switch.SetAttribute("on_off", 1)
+
+                if (
+                    switch.GetAttribute("aUsage") != "cbk"
+                    or switch.GetAttribute("on_off") != 1
+                ):
+                    raise RuntimeError(
+                        "PowerFactory did not retain the circuit-breaker settings"
+                    )
+
+            element = grid.CreateObject(class_name, element_name)
+            if element is None:
+                raise RuntimeError(
+                    f"Could not create {element_label.lower()}: "
+                    f"{element_name}"
+                )
+
+            for attribute, cubicle in zip(
+                connection_attributes,
+                cubicles,
+            ):
+                element.SetAttribute(attribute, cubicle)
+                actual_cubicle = element.GetAttribute(attribute)
+                if (
+                    actual_cubicle is None
+                    or actual_cubicle.GetFullName()
+                    != cubicle.GetFullName()
+                ):
+                    raise RuntimeError(
+                        "PowerFactory did not retain the bus connection"
+                    )
+
+            actual = cls._set_and_verify_attributes(
+                element,
+                attributes or {},
+                element_label,
+            )
+            if str(element.GetAttribute("loc_name")) != element_name:
+                raise RuntimeError(
+                    "PowerFactory did not retain the "
+                    f"{element_label.lower()} name"
+                )
+
+            return grid, buses, element, actual
+
+        except Exception as exc:
+            message = str(exc)
+
+            if element is not None or cubicles:
+                rolled_back = cls._rollback_connected_element(
+                    grid,
+                    buses,
+                    element,
+                    tuple(cubicles),
+                    class_name,
+                    element_name,
+                    cubicle_names,
+                )
+                message += f" | rolled_back={rolled_back}"
+
+            raise RuntimeError(message) from exc
+
+    @classmethod
+    def _update_active_diagram(cls, app, component) -> None:
+        """Insert and verify a component in the active diagram."""
+        desktop = app.GetDesktop()
+        if desktop is None:
+            raise RuntimeError("No active PowerFactory graphics desktop")
+
+        layout = app.GetFromStudyCase("ComSgllayout")
+        if layout is None:
+            raise RuntimeError("Diagram Layout Tool is unavailable")
+
+        start_elements = app.GetFromStudyCase(
+            "Set - SGL Layout - K-neighbourhood.SetSelect"
+        )
+        if start_elements is None:
+            raise RuntimeError(
+                "Diagram Layout Tool start-element set is unavailable"
+            )
+
+        existing_start_elements = list(start_elements.All() or [])
+
+        try:
+            start_elements.Clear()
+            start_elements.AddRef(component)
+
+            desktop.Unfreeze()
+
+            layout.iAction = 1
+            layout.insertionMode = 0
+
+            result = layout.Execute()
+            if result not in (0, None):
+                raise RuntimeError(
+                    f"Diagram Layout Tool failed with error code {result}"
+                )
+            app.Rebuild()
+        finally:
+            start_elements.Clear()
+            for existing in existing_start_elements:
+                start_elements.AddRef(existing)
+
+        graphics = cls._find_component_graphics(app, component)
+        if not graphics:
+            raise RuntimeError(
+                "Diagram Layout Tool did not insert the created component"
+            )
+
+    @staticmethod
+    def _find_component_graphics(app, component):
+        """Find every diagram object representing the component."""
+        project = app.GetActiveProject()
+        if project is None:
+            raise RuntimeError("No active PowerFactory project")
+
+        component_full_name = component.GetFullName()
+        matches = []
+
+        for diagram in project.GetContents("*.IntGrfnet", 1) or []:
+            for graphic in diagram.GetContents("*.IntGrf", 1) or []:
+                try:
+                    data_object = graphic.GetAttribute("pDataObj")
+                except Exception:
+                    continue
+
+                if data_object is None:
+                    continue
+
+                try:
+                    is_match = (
+                        data_object.GetFullName() == component_full_name
+                    )
+                except Exception:
+                    is_match = False
+
+                if is_match:
+                    matches.append(graphic)
+
+        return matches
+
+    @classmethod
+    def add_component(
+        cls,
+        component_type: str,
+        component_name: str,
+        parameters: dict,
+        grid_name: str = "",
+        out_of_service: bool = False,
+        open_digsilent: bool = True,
+        update_graphics: bool = False,
+    ) -> tuple[bool, str]:
+        """Create one supported component, verifying and rolling it back."""
+        import math
+
+        kind = str(component_type or "").strip().lower()
+        name = str(component_name or "").strip()
+
+        schemas = {
+            "bus": ({"nominal_voltage_kv"}, set()),
+            "load": (
+                {"bus_name", "active_power_mw"},
+                {"reactive_power_mvar"},
+            ),
+            "generator": (
+                {"bus_name", "template_generator", "active_power_mw"},
+                {"reactive_power_mvar"},
+            ),
+            "line": (
+                {
+                    "bus1_name",
+                    "bus2_name",
+                    "template_line",
+                    "length_km",
+                },
+                set(),
+            ),
+            "transformer": (
+                {
+                    "high_voltage_bus_name",
+                    "low_voltage_bus_name",
+                    "template_transformer",
+                },
+                set(),
+            ),
+        }
+
+        if kind not in schemas:
+            return (
+                False,
+                f"Unsupported component type: {component_type}. "
+                f"Supported types: {', '.join(schemas)}",
+            )
+
+        if not isinstance(parameters, dict):
+            return False, "parameters must be an object"
+        if not name:
+            return False, "component_name must not be empty"
+
+        required, optional = schemas[kind]
+        supplied = set(parameters)
+        missing = sorted(required - supplied)
+        unexpected = sorted(supplied - required - optional)
+
+        if missing:
+            return (
+                False,
+                f"Missing parameter(s) for {kind}: {', '.join(missing)}",
+            )
+
+        if unexpected:
+            return (
+                False,
+                f"Unsupported parameter(s) for {kind}: "
+                f"{', '.join(unexpected)}",
+            )
+
+        def required_text(key):
+            value = str(parameters[key] or "").strip()
+            if not value:
+                raise RuntimeError(f"{key} must not be empty")
+            return value
+
+        def number(key, *, positive=False, non_negative=False):
+            try:
+                value = float(parameters.get(key, 0.0))
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(f"{key} must be a number") from exc
+            if positive and (not math.isfinite(value) or value <= 0):
+                raise RuntimeError(f"{key} must be a finite positive number")
+            if non_negative and (not math.isfinite(value) or value < 0):
+                raise RuntimeError(f"{key} must be finite and non-negative")
+            if not positive and not non_negative and not math.isfinite(value):
+                raise RuntimeError(f"{key} must be finite")
+            return value
+
+        try:
+            template = None
+            outserv = int(bool(out_of_service))
+
+            if kind == "bus":
+                class_name, label = "ElmTerm", "Bus"
+                buses, connections = (), ()
+                attributes = {
+                    "uknom": number("nominal_voltage_kv", positive=True),
+                    "outserv": outserv,
+                }
+            elif kind == "load":
+                class_name, label = "ElmLod", "Load"
+                buses, connections = (required_text("bus_name"),), ("bus1",)
+                attributes = {
+                    "plini": number("active_power_mw", non_negative=True),
+                    "qlini": number("reactive_power_mvar"),
+                    "outserv": outserv,
+                }
+            elif kind == "generator":
+                class_name, label = "ElmSym", "Generator"
+                buses, connections = (required_text("bus_name"),), ("bus1",)
+                template = (
+                    required_text("template_generator"),
+                    "generator",
+                    "synchronous-machine type",
+                )
+                attributes = {
+                    "pgini": number("active_power_mw", non_negative=True),
+                    "qgini": number("reactive_power_mvar"),
+                    "outserv": outserv,
+                }
+            elif kind == "line":
+                class_name, label = "ElmLne", "Line"
+                buses = (
+                    required_text("bus1_name"),
+                    required_text("bus2_name"),
+                )
+                connections = ("bus1", "bus2")
+                template = (
+                    required_text("template_line"),
+                    "line",
+                    "line type",
+                )
+                attributes = {
+                    "dline": number("length_km", positive=True),
+                    "outserv": outserv,
+                }
+            else:
+                class_name, label = "ElmTr2", "Transformer"
+                buses = (
+                    required_text("high_voltage_bus_name"),
+                    required_text("low_voltage_bus_name"),
+                )
+                connections = ("bushv", "buslv")
+                template = (
+                    required_text("template_transformer"),
+                    "transformer",
+                    "transformer type",
+                )
+                attributes = {"outserv": outserv}
+
+            if len(buses) == 2 and buses[0].casefold() == buses[1].casefold():
+                raise RuntimeError(f"{label} buses must be different")
+
+            app = cls._get_application(open_digsilent)
+            template_query = ""
+            if template:
+                template_query, template_label, type_label = template
+                attributes["typ_id"] = cls._get_template_type(
+                    app,
+                    template_query,
+                    class_name,
+                    template_label,
+                    type_label,
+                )
+
+            grid, _, created, actual = cls._create_connected_element(
+                app,
+                class_name,
+                label,
+                name,
+                buses,
+                grid_name,
+                attributes=attributes,
+                connection_attributes=connections,
+            )
+
+            graphics_status = "not_requested"
+
+            if update_graphics:
+                try:
+                    cls._update_active_diagram(app, created)
+                    graphics_status = "updated"
+                except Exception as exc:
+                    message = (
+                        f"{label} '{name}' was created, but graphical "
+                        f"update failed: {exc}"
+                    )
+                    log.error(message)
+                    return False, message
+
+            full_name = created.GetFullName()
+            service_state = bool(int(actual["outserv"]))
+            if kind == "bus":
+                voltage = float(actual["uknom"])
+                grid_label = str(grid.GetAttribute("loc_name"))
+                log.ok(
+                    f"Created bus '{name}' in grid '{grid_label}' "
+                    f"at {voltage} kV"
+                )
+                details = f"nominal_voltage_kv={voltage}"
+            elif kind == "load":
+                log.ok(f"Created load '{name}' on bus '{buses[0]}'")
+                details = (
+                    f"bus={buses[0]} | "
+                    f"active_power_mw={float(actual['plini'])} | "
+                    f"reactive_power_mvar={float(actual['qlini'])}"
+                )
+            elif kind == "generator":
+                log.ok(f"Created generator '{name}' on bus '{buses[0]}'")
+                details = (
+                    f"bus={buses[0]} | template={template_query} | "
+                    f"active_power_mw={float(actual['pgini'])} | "
+                    f"reactive_power_mvar={float(actual['qgini'])}"
+                )
+            elif kind == "line":
+                log.ok(
+                    f"Created line '{name}' between "
+                    f"'{buses[0]}' and '{buses[1]}'"
+                )
+                details = (
+                    f"bus1={buses[0]} | bus2={buses[1]} | "
+                    f"template={template_query} | "
+                    f"length_km={float(actual['dline'])}"
+                )
+            else:
+                log.ok(
+                    f"Created transformer '{name}' between "
+                    f"'{buses[0]}' and '{buses[1]}'"
+                )
+                details = (
+                    f"high_voltage_bus={buses[0]} | "
+                    f"low_voltage_bus={buses[1]} | "
+                    f"template={template_query}"
+                )
+
+            return (
+                True,
+                f"Created {kind}: {full_name} | {details} | "
+                f"out_of_service={service_state} | "
+                f"graphics={graphics_status}",
+            )
+
+        except Exception as exc:
+            message = str(exc)
+            log.error(f"{kind.capitalize()} creation failed: {message}")
+            return False, message
+
+    @classmethod
+    def delete_component(
+        cls,
+        component_type: str,
+        component_name: str,
+        grid_name: str = "",
+        confirmation: str = "",
+        open_digsilent: bool = True,
+        update_graphics: bool = False,
+    ) -> tuple[bool, str]:
+        """Preview or delete one exactly named supported grid component."""
+        component_types = {
+            "bus": ("ElmTerm", ()),
+            "load": ("ElmLod", ("bus1",)),
+            "generator": ("ElmSym", ("bus1",)),
+            "line": ("ElmLne", ("bus1", "bus2")),
+            "transformer": ("ElmTr2", ("bushv", "buslv")),
+        }
+        kind = str(component_type or "").strip().lower()
+        name = str(component_name or "").strip()
+
+        if kind not in component_types:
+            return False, (
+                "component_type must be one of: "
+                + ", ".join(component_types)
+            )
+        if not name:
+            return False, "component_name must not be empty"
+
+        try:
+            app = cls._get_application(open_digsilent)
+            grid = cls._select_grid(app, grid_name)
+            class_name, connection_attributes = component_types[kind]
+
+            matches = [
+                obj
+                for obj in (
+                    grid.GetContents(f"*.{class_name}", 1) or []
+                )
+                if str(obj.GetAttribute("loc_name")) == name
+            ]
+            if not matches:
+                raise RuntimeError(
+                    f"{kind.capitalize()} not found in the selected grid: "
+                    f"{name}"
+                )
+            if len(matches) > 1:
+                raise RuntimeError(
+                    f"Multiple {kind}s matched the exact name: {name}"
+                )
+
+            component = matches[0]
+            cubicles = []
+
+            if kind == "bus":
+                connected = (
+                    component.GetContents("*.StaCubic", 1) or []
+                )
+                if connected:
+                    raise RuntimeError(
+                        "Bus has connected cubicles; delete its connected "
+                        "components first"
+                    )
+            else:
+                for attribute in connection_attributes:
+                    cubicle = component.GetAttribute(attribute)
+                    if cubicle is not None and cubicle not in cubicles:
+                        cubicles.append(cubicle)
+
+            required = f"DELETE {kind} {name}"
+
+            if not confirmation:
+                return True, (
+                    f"Preview only: {component.GetFullName()} | "
+                    f"confirmation_required={required}"
+                )
+
+            if confirmation != required:
+                raise RuntimeError(
+                    f"confirmation must exactly match: {required}"
+                )
+
+            cubicle_locations = [
+                (cubicle.GetParent(), cubicle.GetFullName())
+                for cubicle in cubicles
+            ]
+
+            graphics = (
+                cls._find_component_graphics(app, component)
+                if update_graphics
+                else []
+            )
+
+            graphic_locations = [
+                (graphic.GetParent(), graphic.GetFullName())
+                for graphic in graphics
+            ]
+
+            if update_graphics:
+                desktop = app.GetDesktop()
+                if desktop is None:
+                    raise RuntimeError(
+                        "No active PowerFactory graphics desktop"
+                    )
+                desktop.Unfreeze()
+
+            component.Delete()
+
+            still_exists = any(
+                str(obj.GetAttribute("loc_name")) == name
+                for obj in (
+                    grid.GetContents(f"*.{class_name}", 1) or []
+                )
+            )
+            if still_exists:
+                raise RuntimeError(
+                    "PowerFactory did not delete the component; "
+                    "cubicles were left unchanged"
+                )
+
+            for graphic in graphics:
+                try:
+                    graphic.Delete()
+                except Exception:
+                    pass
+
+            for cubicle in cubicles:
+                try:
+                    cubicle.Delete()
+                except Exception:
+                    pass
+
+            remaining_graphics = [
+                full_name
+                for parent, full_name in graphic_locations
+                if any(
+                    obj.GetFullName() == full_name
+                    for obj in (
+                        parent.GetContents("*.IntGrf", 1) or []
+                    )
+                )
+            ]
+
+            remaining_cubicles = [
+                full_name
+                for parent, full_name in cubicle_locations
+                if any(
+                    obj.GetFullName() == full_name
+                    for obj in (
+                        parent.GetContents("*.StaCubic", 1) or []
+                    )
+                )
+            ]
+
+            if remaining_graphics:
+                raise RuntimeError(
+                    "Component deleted, but graphical objects remain: "
+                    + ", ".join(remaining_graphics)
+                )
+
+            if remaining_cubicles:
+                raise RuntimeError(
+                    "Component deleted, but connected cubicles remain: "
+                    + ", ".join(remaining_cubicles)
+                )
+
+            graphics_refresh = "not_requested"
+
+            if update_graphics:
+                try:
+                    app.Rebuild()
+                    graphics_refresh = "rebuilt"
+                except Exception as exc:
+                    graphics_refresh = f"failed:{exc}"
+
+            message = f"Deleted {kind}: {name}"
+            if update_graphics:
+                message += (
+                    f" | graphics_deleted={len(graphics)}"
+                    f" | graphics_refresh={graphics_refresh}"
+                )
+            log.ok(message)
+            return True, message
+
+        except Exception as exc:
+            message = str(exc)
+            log.error(f"Component deletion failed: {message}")
+            return False, message
+
+    # ──────────────────────────────────────────────────────────────
+    # # LOAD FLOW — run ComLdf on the currently active study case
     # ──────────────────────────────────────────────────────────────
 
     @classmethod

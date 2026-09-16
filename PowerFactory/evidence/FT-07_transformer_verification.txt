@@ -1,0 +1,41 @@
+Evidence ID: FT-07
+Title: In-service transformer creation and retained-state verification
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation generator/transformer transcript
+
+1. add_component transformer
+Input:
+{
+  "component_type": "transformer",
+  "component_name": "MCP Verification Transformer 20260822A",
+  "parameters": {
+    "high_voltage_bus_name": "Bus 02",
+    "low_voltage_bus_name": "Bus 30",
+    "template_transformer": "Trf 02 - 30.ElmTr2"
+  },
+  "grid_name": "Grid",
+  "out_of_service": false,
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Created transformer: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\MCP Verification Transformer 20260822A.ElmTr2 | high_voltage_bus=Bus 02 | low_voltage_bus=Bus 30 | template=Trf 02 - 30.ElmTr2 | out_of_service=False\"}"}
+
+2. get_parameters transformer
+Input:
+{
+  "object_query": "MCP Verification Transformer 20260822A.ElmTr2",
+  "variables": ["outserv", "bushv", "buslv", "typ_id"],
+  "max_results": 5
+}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"query\": \"MCP Verification Transformer 20260822A.ElmTr2\",\n  \"variables\": [\n    \"outserv\",\n    \"bushv\",\n    \"buslv\",\n    \"typ_id\"\n  ],\n  \"total_count\": 1,\n  \"returned_count\": 1,\n  \"results\": [\n    {\n      \"name\": \"MCP Verification Transformer 20260822A\",\n      \"class_name\": \"ElmTr2\",\n      \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\MCP Verification Transformer 20260822A.ElmTr2\",\n      \"values\": {\n        \"outserv\": 0,\n        \"bushv\": \"<l3>\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 02.ElmTerm\\\\MCP Verification Transformer 20260822A C.StaCubic</l3>\",\n        \"buslv\": \"<l3>\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 30.ElmTerm\\\\MCP Verification Transformer 20260822A C.StaCubic</l3>\",\n        \"typ_id\": \"<l3>\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Library.IntPrjfolder\\\\Equipment Type Library.IntPrjfolder\\\\Transformer Types.IntPrjfolder\\\\Trf Type 02 - 30 YNy0.TypTr2</l3>\"\n      }\n    }\n  ]\n}"}
+
+3. run_loadflow
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Load flow OK\"}"}
+
+4. run_short_circuit
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Short-circuit calculation OK\"}"}
+
+Conclusion: PASS

@@ -1,0 +1,63 @@
+Evidence ID: FT-05
+Title: In-service bus, line, and load creation
+Date: 20 August 2026
+Classification: Compiled evidence record assembled from individually supplied raw MCP responses
+
+1. add_component bus
+Input:
+{
+  "component_type": "bus",
+  "component_name": "Unified AI Bus 20260820C",
+  "parameters": {"nominal_voltage_kv": 345.0},
+  "grid_name": "Grid",
+  "out_of_service": false,
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Created bus: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Bus 20260820C.ElmTerm | nominal_voltage_kv=345.0 | out_of_service=False\"}"}
+
+2. add_component line
+Input:
+{
+  "component_type": "line",
+  "component_name": "Unified AI Line 20260820C",
+  "parameters": {
+    "bus1_name": "Bus 01",
+    "bus2_name": "Unified AI Bus 20260820C",
+    "template_line": "Line 01 - 02.ElmLne",
+    "length_km": 1.0
+  },
+  "grid_name": "Grid",
+  "out_of_service": false,
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Created line: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Line 20260820C.ElmLne | bus1=Bus 01 | bus2=Unified AI Bus 20260820C | template=Line 01 - 02.ElmLne | length_km=1.0 | out_of_service=False\"}"}
+
+3. add_component load
+Input:
+{
+  "component_type": "load",
+  "component_name": "Unified AI Load 20260820C",
+  "parameters": {
+    "bus_name": "Unified AI Bus 20260820C",
+    "active_power_mw": 1.0,
+    "reactive_power_mvar": 0.25
+  },
+  "grid_name": "Grid",
+  "out_of_service": false,
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Created load: \\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Unified AI Load 20260820C.ElmLod | bus=Unified AI Bus 20260820C | active_power_mw=1.0 | reactive_power_mvar=0.25 | out_of_service=False\"}"}
+
+4. run_loadflow
+Input:
+{
+  "open_digsilent": true,
+  "save_csv": false
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Load flow OK\"}"}
+
+Conclusion: PASS

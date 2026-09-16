@@ -1,0 +1,42 @@
+Evidence ID: UT-01
+Title: Compilation and automated tests
+Date: 1 September 2026
+Classification: Compiled evidence record
+
+Command:
+
+& $Python -m py_compile `
+    .\Agent_DIgSILENT.py `
+    .\MCP_PowerFactory.py `
+    .\test_component_creation.py `
+    .\test_state_inspection.py
+
+& $Python -m unittest -v `
+    test_component_creation `
+    test_state_inspection
+
+Tests recorded as passing:
+
+1. test_add_component_bus_validation_and_rollback
+2. test_add_component_generator_validation_and_rollback
+3. test_add_component_line_validation_and_rollback
+4. test_add_component_load_validation_and_rollback
+5. test_add_component_transformer_validation_and_rollback
+6. test_add_component_updates_active_diagram
+7. test_add_component_validation
+8. test_delete_component_requires_confirmation_and_cleans_connections
+9. test_delete_component_updates_active_diagram
+10. test_update_active_diagram_uses_k_neighbourhood
+11. test_list_components
+12. test_state_and_discovery_tools
+
+Final unittest result:
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.006s
+
+OK
+
+Interpretation:
+
+The [ERROR] lines printed during the test run were expected negative-path logs from deliberate duplicate, invalid-input, missing-object, confirmation, and rollback tests. The unittest runner's final result was OK. The line-creation test additionally verified one closed `StaSwitch` circuit breaker (`aUsage="cbk"`, `on_off=1`) in each endpoint cubicle. The graphical tests verified requested insertion, K-neighbourhood layout execution, graphical-object deletion, and application rebuild.

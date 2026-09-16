@@ -1,0 +1,31 @@
+Evidence ID: FT-01
+Title: Active project and study-case context
+Date: 22 August 2026
+Classification: Verbatim extract from the captured eight-operation discovery transcript
+
+1. ping
+Input: {}
+Raw response:
+{"result":"pong"}
+
+2. create_study_case
+Input:
+{
+  "case_name": "Case 1",
+  "base_study_case": "0. Base",
+  "open_digsilent": true
+}
+Raw response:
+{"result":"{\"success\": true, \"message\": \"Study case already existed and was activated: Case 1\"}"}
+
+3. get_active_project
+Input: {}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"name\": \"test\",\n  \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\"\n}"}
+
+4. get_active_study_case
+Input: {}
+Raw response:
+{"result":"{\n  \"success\": true,\n  \"name\": \"Case 1\",\n  \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\"\n}"}
+
+Conclusion: PASS
