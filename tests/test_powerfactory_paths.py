@@ -52,13 +52,13 @@ def test_powerfactory_server_creates_nested_configured_output(tmp_path, monkeypa
             self.cfg = cfg
 
         def run_pipeline(self):
-            return {"success": True, "output_dir": self.cfg.output_dir}
+            return {"status": "success", "output_dir": self.cfg.output_dir}
 
     monkeypatch.setattr(server, "_load_modules", lambda: (Config, Agent))
     monkeypatch.setattr(server, "_pf", lambda function, *args: function(*args))
 
     result = json.loads(server.run_simulation(cfg_path=str(config)))
 
-    assert result["success"] is True
+    assert result["status"] == "success"
     assert result["output_dir"] == str(generated)
     assert generated.is_dir()
