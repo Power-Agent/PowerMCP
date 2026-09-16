@@ -870,7 +870,7 @@ def test_powerio_to_opendss_composition(monkeypatch, tmp_path):
     assert dss_path.exists()
 
     result = configuration.compile_opendss_file(str(dss_path))
-    assert result["success"] is True
+    assert result["status"] == "success"
     assert result["payload"]["dss_file"] == str(dss_path)
 
 
@@ -889,7 +889,7 @@ def test_opendss_without_containment_does_not_scan_the_parent_tree(
 
     result = configuration.compile_opendss_file(str(dss_path))
 
-    assert result["success"] is True
+    assert result["status"] == "success"
 
 
 # ---- 0.11 boundary: powerio_ir, typed edits, lowering, response tail -----------

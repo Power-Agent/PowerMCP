@@ -1,7 +1,5 @@
 """FastMCP factory: register all domain tools."""
 
-import core.engine  # noqa: F401 — ensure DSS + dss_tools wired before tools run
-
 from mcp.server.mcpserver import MCPServer as FastMCP
 
 from opendss_tools.configuration import register_configuration_tools
