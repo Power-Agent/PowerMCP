@@ -1,7 +1,7 @@
 # PowerMCP ⚡
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.10%20to%203.14-blue.svg)](https://www.python.org/downloads/)
 
 PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
 
@@ -66,7 +66,7 @@ Check out these helpful tutorials to get started with MCP:
 
 ## 📦 Installation
 
-PowerMCP installs as a single Python package with an interactive CLI. Python 3.10+ is required.
+PowerMCP installs as a single Python package with an interactive CLI. Python 3.10 through 3.14 is supported.
 
 ```bash
 pip install powermcp
