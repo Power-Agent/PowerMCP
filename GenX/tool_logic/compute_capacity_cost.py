@@ -11,6 +11,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from powermcp.errors import tool_error, tool_success
+
 
 def resolve_scenario(scenario_path: str, period: int = 1, marker: str | None = None) -> str:
     """
@@ -86,8 +88,7 @@ def compute_capacity_cost(
 
     for path in (dem_path, resmar_path, capres_path):
         if not os.path.isfile(path):
-            return {"success": False,
-                    "message": f"Missing required file: {path}"}
+            return tool_error(f"Missing required file: {path}")
 
     dem_in = pd.read_csv(dem_path)
     resmar = pd.read_csv(resmar_path)
@@ -106,9 +107,8 @@ def compute_capacity_cost(
     else:
         unknown = sorted(set(capres_regions) - set(available_regions))
         if unknown:
-            return {"success": False,
-                    "message": f"Invalid CapRes region(s) {unknown}. "
-                               f"Available regions: {available_regions}"}
+            return tool_error(f"Invalid CapRes region(s) {unknown}. "
+                              f"Available regions: {available_regions}")
 
     total_cost = 0.0
     for capres_num in capres_regions:
@@ -134,28 +134,25 @@ def compute_capacity_cost(
     else:
         invalid = sorted(set(zones) - set(available_zones))
         if invalid:
-            return {"success": False,
-                    "message": f"Invalid zone(s) {invalid}. "
-                               f"Available zones: {available_zones}"}
+            return tool_error(f"Invalid zone(s) {invalid}. "
+                              f"Available zones: {available_zones}")
         denom_zones = sorted(zones)
 
     peak_demand = dem_in[[f"Demand_MW_z{z}" for z in denom_zones]].sum(axis=1).values.max()
     if peak_demand <= 0:
-        return {"success": False,
-                "message": f"Peak demand across zone(s) {denom_zones} is "
-                           f"{peak_demand}; a capacity price cannot be "
-                           f"computed against zero demand."}
+        return tool_error(f"Peak demand across zone(s) {denom_zones} is "
+                          f"{peak_demand}; a capacity price cannot be "
+                          f"computed against zero demand.")
     price_annual = total_cost / peak_demand
     price_day    = price_annual / 365
 
-    return {
-        "success":          True,
-        "scenario":         os.path.basename(scenario),
-        "scenario_path":    scenario,
-        "period":           period,
-        "capres_regions":   list(capres_regions),
-        "zones":            denom_zones,
-        "price_per_mw_day": round(float(price_day), 2),
-        "price_per_mw_yr":  round(float(price_annual), 2),
-        "peak_demand_mw":   round(float(peak_demand), 1),
-    }
+    return tool_success(
+        scenario=os.path.basename(scenario),
+        scenario_path=scenario,
+        period=period,
+        capres_regions=list(capres_regions),
+        zones=denom_zones,
+        price_per_mw_day=round(float(price_day), 2),
+        price_per_mw_yr=round(float(price_annual), 2),
+        peak_demand_mw=round(float(peak_demand), 1),
+    )

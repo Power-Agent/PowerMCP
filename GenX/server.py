@@ -11,7 +11,7 @@ they are called.
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Optional
 
 # Make the repo root importable so `from GenX.tool_logic...` works when the
 # MCP client launches this file directly (sys.path[0] is GenX/, not the root).
@@ -25,8 +25,8 @@ if _REPO_ROOT not in sys.path:
 
 from mcp.server.mcpserver import MCPServer as FastMCP
 
+from powermcp.errors import run_tool, tool_error, tool_success
 from powermcp.sandbox import (
-    PathNotAllowed,
     checked_path,
     ensure_checked_directory,
 )
@@ -53,22 +53,6 @@ from GenX.tool_logic.slurm import preview_case as _preview_case, submit_case as 
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("genx_agent")
-
-
-def _guarded(call: Callable[[], dict]) -> dict:
-    """Run a tool body, turning any failure into the shared error shape.
-
-    Without this the tools raise straight out of the server: half of them
-    returned {"success": False, ...} and half surfaced a raw MCP protocol
-    error, so a caller had two failure protocols to handle from one connector.
-    """
-    try:
-        return call()
-    except (PathNotAllowed, ValueError) as exc:
-        return {"success": False, "message": str(exc)}
-    except Exception as exc:  # noqa: BLE001 - the boundary has to hold
-        logger.exception("GenX tool failed")
-        return {"success": False, "message": f"{type(exc).__name__}: {exc}"}
 
 
 def _checked(path: str, purpose: str) -> str:
@@ -105,9 +89,9 @@ def check_capacity_setting(csv_path: str) -> dict:
     def run() -> dict:
         df = load_capacity_csv(_checked(csv_path, "csv_path"))
         # check_existing: whether StartCap > 0 (brownfield) or all StartCap = 0 (greenfield)
-        return {"success": True, **check_existing(df)}
+        return tool_success(**check_existing(df))
 
-    return _guarded(run)
+    return run_tool(run, logger=logger)
 
 
 @mcp.tool()
@@ -127,13 +111,12 @@ def summarize_capacity(csv_path: str, zones: list[int] | None = None) -> dict:
         # aggregate_capacity_by_resource returns a DataFrame; this is a
         # `-> dict` MCP tool, so it has to be serializable.
         aggregated = aggregate_capacity_by_resource(df)
-        return {
-            "success": True,
-            "zones": zones,
-            "by_resource": aggregated.to_dict(orient="records"),
-        }
+        return tool_success(
+            zones=zones,
+            by_resource=aggregated.to_dict(orient="records"),
+        )
 
-    return _guarded(run)
+    return run_tool(run, logger=logger)
 
 
 @mcp.tool()
@@ -157,11 +140,10 @@ def plot_capacity(
     def run() -> dict:
         valid_types = ["StartCap", "RetCap", "NewCap", "EndCap", "NetCap"]
         if plot_type not in valid_types:
-            return {
-                "success": False,
-                "message": f"Invalid plot_type '{plot_type}'. Must be one of: {valid_types}",
-                "file_path": None,
-            }
+            return tool_error(
+                f"Invalid plot_type '{plot_type}'. Must be one of: {valid_types}",
+                file_path=None,
+            )
 
         df = load_capacity_csv(_checked(csv_path, "csv_path"))
         if zones:
@@ -175,12 +157,11 @@ def plot_capacity(
         message_suffix = ""
         if not is_brownfield:
             if column in ["StartCap", "RetCap"]:
-                return {
-                    "success": False,
-                    "message": "In this case all StartCap = 0, so NewCap = EndCap = NetCap.",
-                    "file_path": None,
-                    "setting": "greenfield",
-                }
+                return tool_error(
+                    "In this case all StartCap = 0, so NewCap = EndCap = NetCap.",
+                    file_path=None,
+                    setting="greenfield",
+                )
             if column == "NetCap":
                 column = "EndCap"
                 message_suffix = " Note that NewCap = EndCap = NetCap in this case"
@@ -196,13 +177,13 @@ def plot_capacity(
             title=title,
         )
 
-        if result["success"]:
+        if result["status"] == "success":
             result["message"] += message_suffix
             result["setting"] = "brownfield" if is_brownfield else "greenfield"
 
         return result
 
-    return _guarded(run)
+    return run_tool(run, logger=logger)
 
 
 @mcp.tool()
@@ -216,10 +197,9 @@ def preview_genx_case(
     """
     Generate the SLURM submission script for a GenX case.
     """
-    return _guarded(
-        lambda: _preview_case(
-            case_dir, time_hours, mem_gb, cpus, case_name
-        )
+    return run_tool(
+        lambda: _preview_case(case_dir, time_hours, mem_gb, cpus, case_name),
+        logger=logger,
     )
 
 
@@ -240,10 +220,9 @@ def submit_genx_case(
 
     If the user has not stated this, ask before calling this tool.
     """
-    return _guarded(
-        lambda: _submit_case(
-            case_dir, time_hours, mem_gb, cpus, case_name
-        )
+    return run_tool(
+        lambda: _submit_case(case_dir, time_hours, mem_gb, cpus, case_name),
+        logger=logger,
     )
 
 
@@ -274,10 +253,9 @@ def compute_capacity_cost(
         zones: Zone numbers for the peak-demand denominator
             (default: all zones in Demand_data.csv).
     """
-    return _guarded(
-        lambda: _compute_capacity_cost(
-            scenario_path, period, capres_regions, zones
-        )
+    return run_tool(
+        lambda: _compute_capacity_cost(scenario_path, period, capres_regions, zones),
+        logger=logger,
     )
 
 
@@ -313,7 +291,7 @@ def plot_diurnal_generation(
         compare_case_dir: Optional second case for pairwise comparison.
         diff: Plot Case 1 - Case 2 difference (requires compare_case_dir).
     """
-    return _guarded(
+    return run_tool(
         lambda: _plot_diurnal_generation(
             case_dir,
             _checked_output_file(output_path, "output_path"),
@@ -322,7 +300,8 @@ def plot_diurnal_generation(
             labels,
             compare_case_dir,
             diff,
-        )
+        ),
+        logger=logger,
     )
 
 if __name__ == "__main__":
