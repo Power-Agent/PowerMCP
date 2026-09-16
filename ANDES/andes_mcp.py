@@ -22,6 +22,7 @@ try:
         checked_path,
         checked_read_tree,
         ensure_checked_directory,
+        staged_file_write,
     )
 finally:
     if _repo_root_added:
@@ -41,6 +42,19 @@ def _andes_runs_dir():
 def _ensure_andes_runs_dir() -> str:
     return ensure_checked_directory(
         _andes_runs_dir(), purpose="generated ANDES output root"
+    )
+
+
+def _write_case_file(destination: str, text: str) -> None:
+    """Install one MATPOWER case at ``destination`` only once it is complete.
+
+    The text lands in a private staging file first, so a write that fails part
+    way leaves any file already at ``destination`` as it was.
+    """
+    staged_file_write(
+        destination,
+        True,
+        lambda staging: Path(staging).write_text(text, encoding="utf-8"),
     )
 
 
@@ -493,12 +507,18 @@ def get_system_info() -> Dict[str, Any]:
 
 @mcp.tool()
 def load_network_from_json(
-    network_json: str,
-    out_path: str,
+    network_json: str = "",
+    out_path: str = "",
     operating_point: Optional[int] = None,
     study_commit: Optional[int] = None,
+    time_index: Optional[int] = None,
+    scenario_id: Optional[str] = None,
+    powerio_ir: str = "",
+    edits: str = "",
+    to_balanced: bool = False,
+    base_mva: float = 100.0,
 ) -> Dict[str, Any]:
-    """Stage PowerIO model JSON or one package state as MATPOWER for ANDES.
+    """Stage a selected PowerIO IR module as MATPOWER for ANDES.
 
     Accepts the ``json`` string returned by the powerio server's parse tool.
     Converts the network to MATPOWER format, writes it to out_path (use a .m
@@ -509,12 +529,26 @@ def load_network_from_json(
     Args:
         network_json: The JSON transport string from powerio
         out_path: Destination for the MATPOWER case file (.m)
-        operating_point: Optional package operating-point index to materialize
-        study_commit: Optional package study-commit index to materialize
+        operating_point: Compatibility alias for time_index
+        study_commit: Retired package selector; export a Tellegen Study state as IR
+        time_index: Explicit TimeSeries index
+        scenario_id: Explicit ScenarioSet identifier
+        powerio_ir: Serialized PowerIO IR from the powerio server (the
+            preferred spelling; network_json is its alias)
+        edits: JSON list of typed what-if edits PowerIO applies before the
+            conversion, in list order, for example
+            [{"op": "set_load_active_power", "load": "loads:0", "mw": 91.5}]
+            Consecutive updates of one class apply as one atomic batch, and a
+            bus load reallocation sees the values the edits before it produced.
+        to_balanced: Authorize the multiconductor to balanced transformation;
+            the response carries its readiness report as `lowering`
+        base_mva: System base for that transformation
 
     Returns:
         Dict with status, case_file path, component counts, and fidelity warnings
     """
+    if not out_path:
+        return {"status": "error", "message": "out_path is required"}
     try:
         out_path = checked_path(out_path, purpose="out_path", for_write=True)
     except PathNotAllowed as exc:
@@ -524,12 +558,17 @@ def load_network_from_json(
             network_json=network_json,
             operating_point=operating_point,
             study_commit=study_commit,
+            time_index=time_index,
+            scenario_id=scenario_id,
+            powerio_ir=powerio_ir,
+            edits=edits,
+            to_balanced=to_balanced,
+            base_mva=base_mva,
         )
         case = prepared.network
-        conv = case.to_format("matpower")
+        conv = prepared.emit("matpower")
         abs_out = os.path.abspath(out_path)
-        with open(abs_out, "w") as fh:
-            fh.write(conv.text)
+        _write_case_file(abs_out, conv.text)
     except Exception as e:
         return {"status": "error", "message": str(e)}
     return {
@@ -539,10 +578,9 @@ def load_network_from_json(
         "info": {
             "buses": case.n_buses,
             "branches": case.n_branches,
-            "generators": case.n_gens,
+            "generators": case.n_generators,
         },
-        "warnings": list(prepared.warnings) + list(conv.warnings),
-        **({"package": prepared.package} if prepared.package is not None else {}),
+        **prepared.response_fields(conv),
     }
 
 
@@ -553,6 +591,11 @@ def load_network_from_any(
     source_format: Optional[str] = None,
     operating_point: Optional[int] = None,
     study_commit: Optional[int] = None,
+    time_index: Optional[int] = None,
+    scenario_id: Optional[str] = None,
+    edits: str = "",
+    to_balanced: bool = False,
+    base_mva: float = 100.0,
 ) -> Dict[str, Any]:
     """Stage any powerio readable case as a MATPOWER file for ANDES.
 
@@ -566,8 +609,18 @@ def load_network_from_any(
         out_path: Destination for the MATPOWER case file (.m)
         source_format: Input format name (matpower, powermodels-json, egret-json,
             psse, powerworld); inferred from the file extension when omitted
-        operating_point: Optional package operating-point index to materialize
-        study_commit: Optional package study-commit index to materialize
+        operating_point: Compatibility alias for time_index
+        study_commit: Retired package selector; export a Tellegen Study state as IR
+        time_index: Explicit TimeSeries index
+        scenario_id: Explicit ScenarioSet identifier
+        edits: JSON list of typed what-if edits PowerIO applies before the
+            conversion, in list order, for example
+            [{"op": "set_load_active_power", "load": "loads:0", "mw": 91.5}]
+            Consecutive updates of one class apply as one atomic batch, and a
+            bus load reallocation sees the values the edits before it produced.
+        to_balanced: Authorize the multiconductor to balanced transformation;
+            the response carries its readiness report as `lowering`
+        base_mva: System base for that transformation
 
     Returns:
         Dict with status, case_file path, component counts, and fidelity warnings
@@ -586,12 +639,16 @@ def load_network_from_any(
             source_format=source_format,
             operating_point=operating_point,
             study_commit=study_commit,
+            time_index=time_index,
+            scenario_id=scenario_id,
+            edits=edits,
+            to_balanced=to_balanced,
+            base_mva=base_mva,
         )
         case = prepared.network
-        conv = case.to_format("matpower")
+        conv = prepared.emit("matpower")
         abs_out = os.path.abspath(out_path)
-        with open(abs_out, "w") as fh:
-            fh.write(conv.text)
+        _write_case_file(abs_out, conv.text)
     except FileNotFoundError:
         return {"status": "error", "message": f"File not found: {file_path}"}
     except Exception as e:
@@ -603,10 +660,9 @@ def load_network_from_any(
         "info": {
             "buses": case.n_buses,
             "branches": case.n_branches,
-            "generators": case.n_gens,
+            "generators": case.n_generators,
         },
-        "warnings": list(prepared.warnings) + list(conv.warnings),
-        **({"package": prepared.package} if prepared.package is not None else {}),
+        **prepared.response_fields(conv),
     }
 
 
