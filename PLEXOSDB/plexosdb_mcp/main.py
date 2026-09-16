@@ -10,10 +10,9 @@ PLEXOS XML database format directly via the open-source ``plexosdb`` library. Se
 PLEXOSDB/README.md for the (currently git-only) install step.
 
 This module keeps no copy of plexosdb-mcp's tool implementations -- it builds the
-upstream FastMCP server object as-is (``build_mcp_server``) and re-exports it, the
-same shape as ``powerio/powerio_mcp.py``'s ``mcp = _server.mcp``. plexosdb-mcp builds
-its server via a factory rather than a module-level singleton, so calling that
-factory once at import time is the direct analogue here.
+upstream FastMCP server object as-is (``build_mcp_server``) and re-exports it as
+``mcp``. plexosdb-mcp builds its server through a factory rather than a
+module-level singleton, so this module calls that factory once at import time.
 
 The two tools added below call r2x's real, public API directly: ``r2x_plexos.
 PLEXOSParser`` builds an r2x System from a PLEXOS XML study, ``r2x_plexos_to_sienna.

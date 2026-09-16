@@ -2,7 +2,7 @@
 
 '''
 Cluster settings (the GenX.jl checkout, SLURM defaults, module names) are
-resolved at call time from ~/.powermcp/config.toml or the environment -- see
+resolved at call time from ~/.powermcp/config.toml or the environment; see
 GenX/README.md. Nothing is read at import, so this server starts on a machine
 that has never configured GenX; the tools that need a setting say so when
 they are called.
@@ -15,6 +15,10 @@ from typing import Any, Callable, Optional
 
 # Make the repo root importable so `from GenX.tool_logic...` works when the
 # MCP client launches this file directly (sys.path[0] is GenX/, not the root).
+# The entry stays for the process lifetime: GenX carries no __init__.py, so its
+# namespace __path__ is recomputed from sys.path on every attribute lookup and
+# the lazy `from GenX.tool_logic.slurm import ...` calls inside tool_logic
+# would fail without it.
 _REPO_ROOT = str(Path(__file__).resolve().parent.parent)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)

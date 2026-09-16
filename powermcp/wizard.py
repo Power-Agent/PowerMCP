@@ -1,7 +1,7 @@
 """Interactive install wizard for `powermcp install`.
 
-Flow: select tools (pandapower + PyPSA + PowerIO pre-checked) → capture local software
-paths for closed-source tools → pip-install the chosen extras → write the
+Flow: select tools (pandapower + PyPSA + PowerIO pre-checked), capture local
+software paths for closed-source tools, pip-install the chosen extras, write the
 selected MCP client configs. Windows-only tools are hidden off Windows, and
 surge is hidden on Python versions it doesn't support.
 """
@@ -55,7 +55,7 @@ def _is_installed_or_configured(t: Tool) -> bool:
     """Whether the tool is already set up on this machine.
 
     Tools that need a local software path (PSS/E, PSLF, PowerFactory, LTSpice,
-    HOPE) count as set up only when those required paths are configured — not
+    HOPE) count as set up only when those required paths are configured, not
     merely because some Python dep is importable (e.g. PyYAML being present must
     not make HOPE look ready). Tools with no required path count as set up when
     their dependency is importable.
@@ -128,7 +128,7 @@ def run_wizard(
     client_names = _parse_clients(clients)
     selected = _resolve_selection(yes=yes, tools=tools, select_all=select_all, client_names=client_names)
     if not selected:
-        console.print("[yellow]No tools selected — nothing to do.[/]")
+        console.print("[yellow]No tools selected, nothing to do.[/]")
         return
     console.print("[bold]Selected:[/] " + ", ".join(t.name for t in selected))
     if not yes and not dry_run:  # --dry-run writes nothing, including config.toml
@@ -186,7 +186,7 @@ def _resolve_selection(
 def _interactive_select(client_names: list[str]) -> list[Tool]:
     if not _tty():
         console.print(
-            "[yellow]No interactive terminal detected — defaulting to the core tools "
+            "[yellow]No interactive terminal detected; defaulting to the core tools "
             "(pandapower, PyPSA, PowerIO). Re-run with `--tools <ids>` or `--all` to choose more.[/]"
         )
         return [TOOLS[n] for n in CORE]
@@ -207,7 +207,7 @@ def _interactive_select(client_names: list[str]) -> list[Tool]:
         picked = questionary.checkbox(
             "Select power-system tools to install:",
             choices=choices,
-            instruction="(↑/↓ move · SPACE toggles a tool · ENTER confirms — pandapower, PyPSA & PowerIO are preselected)",
+            instruction="(up/down moves, SPACE toggles a tool, ENTER confirms; pandapower, PyPSA and PowerIO are preselected)",
         ).ask()
     except Exception as exc:
         console.print(
@@ -267,7 +267,7 @@ def _capture_paths(selected: list[Tool]) -> None:
             if not answer:
                 if ck.required:
                     console.print(
-                        f"[yellow]{t.name}.{ck.key} left unset — {t.display} will report an "
+                        f"[yellow]{t.name}.{ck.key} left unset; {t.display} will report an "
                         f"actionable error until it is configured.[/]"
                     )
                 continue
@@ -283,7 +283,7 @@ def _capture_paths(selected: list[Tool]) -> None:
                         f"'{path}' does not exist as a {ck.validate}. Save anyway?", default=False
                     ).ask()
                 except Exception:
-                    keep = True  # can't prompt — keep the path the user explicitly typed
+                    keep = True  # cannot prompt; keep the path the user explicitly typed
                 if not keep:
                     continue
             data.setdefault(t.name, {})[ck.key] = str(path)
@@ -301,7 +301,7 @@ def _pip_install(selected: list[Tool], *, assume_yes: bool = False, dry_run: boo
     if assume_yes:
         proceed = True
     elif not _tty():
-        console.print(f"[yellow]Non-interactive — skipping dependency install. Run:[/] pip install {spec}")
+        console.print(f"[yellow]Non-interactive; skipping dependency install. Run:[/] pip install {spec}")
         return
     else:
         import questionary
@@ -333,7 +333,7 @@ def _write_clients(selected: list[Tool], client_names: list[str], dry_run: bool)
             except cfg.ConfigError:
                 console.print(
                     f"[yellow]Note:[/] {t.display} is configured for your MCP client(s) but "
-                    f"{t.name}.{ck.key} is not set yet — set it with `powermcp config set {t.name}.{ck.key} <path>`."
+                    f"{t.name}.{ck.key} is not set yet; set it with `powermcp config set {t.name}.{ck.key} <path>`."
                 )
     tool_names = [t.name for t in selected]
     results = configure(client_names, tool_names, dry_run=dry_run)

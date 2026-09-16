@@ -667,6 +667,8 @@ def load_network_from_any(
 
 
 if __name__ == "__main__":
-    print(f"Starting ANDES MCP Server")
-    print(f"Using storage directory: {_andes_runs_dir()}")
+    # stdout carries JSON-RPC once the server runs, so startup notes go to the
+    # logger, which writes to stderr.
+    logger.info("Starting ANDES MCP Server")
+    logger.info("Using storage directory: %s", _andes_runs_dir())
     mcp.run(transport="stdio")
