@@ -317,6 +317,7 @@ powermcp/
   runner.py       # launches a server by tool id
   registry.py     # the tool registry (single source of truth)
   config.py       # ~/.powermcp/config.toml  + get_path()
+  errors.py       # the one result shape every tool reports
   paths.py        # ~/.powermcp/runs/<tool> writable dirs
   doctor.py       # health checks
   clients/        # claude_desktop / claude_code / codex config writers

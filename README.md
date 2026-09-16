@@ -287,6 +287,24 @@ without a usable Windows console, a forced stop can retain only the previous
 saved revision. Inspect the Study before retrying. See
 [powermcp/TELLEGEN.md](powermcp/TELLEGEN.md).
 
+### Tool results
+
+Every tool in this repository reports the same shape, so one client handles all
+of them:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+A failure reaches the caller as a result, not as an MCP protocol error: a
+refused path, a rejected argument and a failure inside the simulator all arrive
+as `"status": "error"` with a message. `powermcp/errors.py` holds the helpers
+every server uses, `tool_success`, `tool_error` and `run_tool`. A tool that
+documents a key on both branches carries it on both. A few tools return
+something other than a JSON object on success, such as raw CSV text; they still
+report a failure through the shape above.
+
 ### Running from a clone (without installing)
 
 Every bundled server is still a standalone script. Clone the repo and run any server directly for use in Claude Desktop:
