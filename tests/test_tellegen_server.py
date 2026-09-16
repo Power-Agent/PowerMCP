@@ -1,7 +1,11 @@
 """Native Study adapter behavior and path checks."""
 import asyncio
+
 import pytest
-from powermcp import tellegen
+
+pytest.importorskip("powerio", minversion="0.11.3")
+
+from powermcp import tellegen  # noqa: E402
 
 
 def test_apply_is_not_an_agent_operation(monkeypatch):

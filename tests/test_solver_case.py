@@ -4,10 +4,15 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-import powerio
+
 import pytest
-from powermcp.sandbox import PathNotAllowed
-from powermcp.solver_case import resolve_solver_case, unique_diagnostics
+
+pytest.importorskip("powerio", minversion="0.11.3")
+
+import powerio  # noqa: E402
+
+from powermcp.sandbox import PathNotAllowed  # noqa: E402
+from powermcp.solver_case import resolve_solver_case, unique_diagnostics  # noqa: E402
 
 CASE9 = Path(__file__).parent / "data" / "case9.m"
 

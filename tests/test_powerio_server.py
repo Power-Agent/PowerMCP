@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio", minversion="0.11.2")
+pytest.importorskip("powerio", minversion="0.11.3")
 
 import powerio  # noqa: E402
 from powerio.mcp import server as powerio_mcp  # noqa: E402

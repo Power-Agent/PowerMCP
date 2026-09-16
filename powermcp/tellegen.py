@@ -188,7 +188,7 @@ def _module_ir(
     import powerio
     from powermcp.solver_case import (
         SolverCase, check_diagnostics, operating_point_module, select_entry,
-        value_type_name, diagnostic_messages, diagnostic_records,
+        diagnostic_messages,
     )
 
     if bool(powerio_ir) == (path is not None):
@@ -211,7 +211,7 @@ def _module_ir(
         module = operating_point_module(module)
         diagnostics.extend(module.diagnostics)
     value = module.value
-    value_type = value_type_name(module)
+    value_type = module.type_name
     # The values the native CLI consumes: a balanced network becomes the default
     # DC OPF instance, and every other kind is refused by name.
     native = (powerio.BalancedNetwork, powerio.DcOpfInstance, powerio.AcPfInstance, powerio.AcOpfInstance)
@@ -229,7 +229,7 @@ def _module_ir(
         module, network,
         tuple(dict.fromkeys(diagnostic_messages(diagnostics))),
         value_type=value_type, selection=selection,
-        diagnostics=tuple(diagnostic_records(diagnostics)),
+        diagnostics=tuple(powerio.diagnostic_records(diagnostics)),
     )
     return text, case.response_fields()
 
@@ -244,11 +244,11 @@ def _counts(records: list[dict[str, Any]]) -> dict[str, int]:
 def _module_summary(ir_text: str) -> dict[str, Any]:
     """Value type, diagnostics and solved status of a serialized module Tellegen returned."""
     import powerio
-    from powermcp.solver_case import diagnostic_messages, diagnostic_records, value_type_name
+    from powermcp.solver_case import diagnostic_messages
 
     module = powerio.deserialize(io.StringIO(ir_text))
-    records = diagnostic_records(module.diagnostics)
-    value_type = value_type_name(module)
+    records = powerio.diagnostic_records(module.diagnostics)
+    value_type = module.type_name
     summary: dict[str, Any] = {
         "value_type": value_type,
         "diagnostics": records,

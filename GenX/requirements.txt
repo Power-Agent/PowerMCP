@@ -2,6 +2,6 @@
 # `pip install "powermcp[genx]"` covers the same ground.
 mcp>=2,<3
 # GenX/server.py imports powermcp.sandbox, which re-exports powerio's path policy.
-powerio[mcp,matrix]>=0.11.2,<0.12
+powerio[mcp,matrix]>=0.11.3,<0.12
 pandas>=2.0,<3
 matplotlib>=3.7

@@ -11,7 +11,7 @@ _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
     sys.path.insert(0, _repo_root)
 try:
-    from powermcp.solver_case import resolve_solver_case, diagnostic_messages, diagnostic_records
+    from powermcp.solver_case import resolve_solver_case, diagnostic_messages
     from powermcp.sandbox import PathNotAllowed, checked_path
 finally:
     if _repo_root_added:
@@ -483,7 +483,7 @@ def export_network_to_format(to_format: str) -> Dict[str, Any]:
         "status": "success",
         "text": conv.text,
         "fidelity": conv.fidelity,
-        "diagnostics": diagnostic_records(conv.diagnostics),
+        "diagnostics": powerio.diagnostic_records(conv.diagnostics),
         "warnings": list(diagnostic_messages(conv.diagnostics)),
     }
 
