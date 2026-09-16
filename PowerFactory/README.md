@@ -19,7 +19,7 @@ Agent_DIgSILENT.py    ← Simulation engine
 DIgSILENT PowerFactory 
         │
         ▼
-Output folder:  CSV results · PNG plots · optional .pfd export
+Output folder:  CSV results, PNG plots, optional .pfd export
 ```
 
 ## Features
@@ -38,6 +38,20 @@ Output folder:  CSV results · PNG plots · optional .pfd export
 - **JSON configuration** — all simulation parameters controlled through `simulation_config.json`.
 
 ---
+
+## Tool results
+
+Every tool returns a JSON string carrying the shape the whole distribution
+uses:
+
+```json
+{"status": "success", "message": "Load flow OK"}
+{"status": "error", "message": "PowerFactory is not connected"}
+```
+
+`ping` returns the bare string `"pong"`, `get_config` returns the configuration
+file's own JSON, and `read_results_csv` returns CSV text on success; each of
+those still reports a failure through the error shape above.
 
 ## Implemented Functions
 
@@ -93,7 +107,7 @@ Output folder:  CSV results · PNG plots · optional .pfd export
 | `DIgSILENTAgent.add_component` | Creates and verifies supported network components and their connections. |
 | `DIgSILENTAgent.delete_component` | Performs guarded exact-name component deletion and cleanup. |
 | `DIgSILENTAgent.short_circuit` | Standalone ComShc execution. |
-| `DIgSILENTAgent.run_pipeline` | Orchestrates the full workflow and returns a structured status report. |
+| `DIgSILENTAgent.run_pipeline` | Orchestrates the full workflow and returns a per-step report carrying `status` and `message`. |
 | `DIgSILENTAgent.close` | Shuts down PowerFactory and clears shared handles. |
 
 ## Component Management
@@ -127,7 +141,7 @@ Each generated connection cubicle contains one closed circuit breaker
 request insertion into the active single-line diagram.
 
 If graphical insertion fails, the network component remains created and the
-tool returns `success=false` with the graphical error. Check the returned
+tool reports `"status": "error"` with the graphical error. Check the returned
 message before retrying to avoid creating a duplicate.
 
 PowerFactory may place an isolated bus far from the existing network when it

@@ -933,6 +933,7 @@ def export_tables(output_dir: str) -> Dict[str, Any]:
         net = _require_network()
 
         def write_tables(staging: str) -> Dict[str, Any]:
+            os.makedirs(staging)
             written: List[str] = []
             rows: Dict[str, int] = {}
             for fname, accessor in (

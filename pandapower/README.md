@@ -35,8 +35,8 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 
 - **create_empty_network()**: Create an empty pandapower network.
 - **load_network(file_path: str)**: Load a network from a `.json` file.
-- **load_network_from_any(...)**: Load any PowerIO-readable case or one selected `.pio.json` package state.
-- **load_network_from_json(...)**: Load PowerIO model JSON or one selected `.pio.json` package state without staging a file.
+- **load_network_from_any(...)**: Load any PowerIO-readable case, or one selected entry of a PowerIO IR collection.
+- **load_network_from_json(...)**: Load serialized PowerIO IR, or one selected entry of it, without staging a file.
 - **export_network_to_format(to_format: str)**: Export the active network through PowerIO's native writer.
 - **run_power_flow(algorithm, calculate_voltage_angles, max_iteration, tolerance_mva)**: Run power flow analysis (Newton-Raphson or Backward/Forward Sweep).
 - **run_contingency_analysis(contingency_type, elements)**: Run N-1 or N-2 contingency analysis on lines and transformers.

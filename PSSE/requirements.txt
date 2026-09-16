@@ -1,2 +1,2 @@
 mcp>=2,<3
-powerio[mcp,matrix]>=0.9.0,<1
+powerio[mcp,matrix]>=0.11.2,<0.12

@@ -133,6 +133,22 @@ Job names are restricted to `[A-Za-z0-9._-]` and every value interpolated into
 a generated SLURM script is shell-quoted: the script is piped to `sbatch` and
 runs on the cluster under your own account.
 
+## Tool results
+
+Every tool returns the shape the whole distribution uses:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+A refused path, an unknown zone or CapRes region, an invalid `plot_type`, and a
+`sbatch` that is missing or refuses the job all arrive as `"status": "error"`
+with a message naming the cause. Nothing raises out of a tool, so a caller
+reads `status` once and never has a second failure path to handle. A tool that
+documents a key on both branches, such as `plot_capacity`'s `file_path`,
+carries it on the error branch too.
+
 ## Usage
 
 Ask Claude in plain language:

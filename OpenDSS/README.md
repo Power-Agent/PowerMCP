@@ -33,7 +33,13 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 
 ## Available Tools
 
-Responses are JSON with `success` and either `payload` (tabular data) or `error`.
+Every tool returns the shape the whole distribution uses: `{"status":
+"success", "payload": ...}` with the tabular data under `payload`, or
+`{"status": "error", "message": ...}`.
+
+The OpenDSS engine loads on the first `compile_opendss_file` call, not at
+import, so the server starts and lists its tools on a machine where the engine
+is missing; the load failure then reaches the caller as an error result.
 
 ### Configuration
 

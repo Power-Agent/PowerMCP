@@ -15,6 +15,8 @@ import textwrap
 from pathlib import Path
 from typing import Any, Optional
 
+from powermcp.errors import tool_success
+
 logger = logging.getLogger(__name__)
 
 # `sbatch` is normally instant. A wedged or unreachable SLURM controller is a
@@ -228,15 +230,14 @@ def preview_case(
     case_path = find_case(case_dir)
     final_cpus = cpus if cpus is not None else slurm_defaults()["cpus"]
     script = build_script(case_path, time_hours, mem_gb, final_cpus, case_name=case_name)
-    return {
-        "success":    True,
-        "case_name":  _checked_job_name(case_name, case_path),
-        "case_path":  case_path,
-        "time_h":     time_hours,
-        "mem_gb":     mem_gb,
-        "cpus":       final_cpus,
-        "script":     script,
-    }
+    return tool_success(
+        case_name=_checked_job_name(case_name, case_path),
+        case_path=case_path,
+        time_h=time_hours,
+        mem_gb=mem_gb,
+        cpus=final_cpus,
+        script=script,
+    )
 
 
 def submit_case(
@@ -277,12 +278,11 @@ def submit_case(
         raise RuntimeError(f"sbatch failed: {result.stderr.strip()}")
 
     job_id = result.stdout.strip()
-    return {
-        "success":    True,
-        "job_id":     job_id,
-        "case_name":  _checked_job_name(case_name, case_path),
-        "case_path":  case_path,
-        "time_h":     time_hours,
-        "mem_gb":     mem_gb,
-        "cpus":       final_cpus,
-    }
+    return tool_success(
+        job_id=job_id,
+        case_name=_checked_job_name(case_name, case_path),
+        case_path=case_path,
+        time_h=time_hours,
+        mem_gb=mem_gb,
+        cpus=final_cpus,
+    )

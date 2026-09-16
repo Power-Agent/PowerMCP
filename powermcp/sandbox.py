@@ -11,8 +11,8 @@ applies that policy to its own ``path`` and ``out_path`` arguments, and
 ``powerio.mcp.sandbox`` imports nothing but the standard library, so there is
 no second copy to keep in step. Operators configure containment once, with
 ``POWERIO_MCP_ALLOWED_ROOTS`` (an ``os.pathsep`` separated list of directories)
-or one of the legacy single root spellings powerio still reads. Unset, nothing
-is constrained.
+or one of the legacy single root spellings powerio still reads. With none set,
+powerio confines paths to the directory the server process started in.
 
 Resolution happens before the check, so neither a ``..`` segment nor a symlink
 pointing out of a root gets through: it is the real target that is compared,
@@ -34,6 +34,7 @@ from powerio.mcp.sandbox import (
     checked_read_tree,
     decode_local_path,
     staged_directory_write,
+    staged_file_write,
 )
 
 
@@ -43,7 +44,7 @@ def ensure_checked_directory(value: str, *, purpose: str = "directory") -> str:
     ``checked_path(..., for_write=True)`` deliberately requires an existing
     parent.  Generated run directories often have several missing parents, so
     walk back to the first existing directory and create each component only
-    after checking it.  The explicit anchor guard matters on Windows: the
+    after checking it.  The explicit anchor check matters on Windows: the
     parent of an unavailable drive or UNC anchor is the anchor itself.
     """
     target = decode_local_path(value, purpose=purpose)
@@ -71,7 +72,7 @@ def ensure_checked_directory(value: str, *, purpose: str = "directory") -> str:
         try:
             checked.mkdir()
         except FileExistsError:
-            # A cooperating process may have created it after our exists()
+            # A cooperating process may have created it after the exists()
             # check.  Accept only a directory, never a file or dangling link.
             if not checked.is_dir():
                 raise PathNotAllowed(
@@ -96,4 +97,5 @@ __all__ = [
     "decode_local_path",
     "ensure_checked_directory",
     "staged_directory_write",
+    "staged_file_write",
 ]

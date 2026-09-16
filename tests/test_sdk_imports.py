@@ -27,6 +27,7 @@ SERVER_DIRS = (
     "HOPE",
     "LTSpice",
     "OpenDSS",
+    "PLEXOSDB",
     "PSCAD",
     "PSLF",
     "PSSE",

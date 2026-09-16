@@ -119,11 +119,11 @@ class StateInspectionTest(unittest.TestCase):
         )
 
         active_project = json.loads(mcp_module.get_active_project())
-        self.assertTrue(active_project["success"])
+        self.assertEqual(active_project["status"], "success")
         self.assertEqual(active_project["name"], "test")
 
         active_case = json.loads(mcp_module.get_active_study_case())
-        self.assertTrue(active_case["success"])
+        self.assertEqual(active_case["status"], "success")
         self.assertEqual(active_case["name"], "Case 1")
 
         parameters = json.loads(
@@ -133,7 +133,7 @@ class StateInspectionTest(unittest.TestCase):
                 max_results=1,
             )
         )
-        self.assertTrue(parameters["success"])
+        self.assertEqual(parameters["status"], "success")
         self.assertEqual(parameters["variables"], ["m:u", "uknom"])
         self.assertEqual(parameters["total_count"], 2)
         self.assertEqual(parameters["returned_count"], 1)
@@ -157,7 +157,7 @@ class StateInspectionTest(unittest.TestCase):
 
         FakeAgent._shared_app = None
         disconnected = json.loads(mcp_module.get_active_project())
-        self.assertFalse(disconnected["success"])
+        self.assertEqual(disconnected["status"], "error")
 
     def test_list_components(self):
             bus = FakeObject(
@@ -195,14 +195,14 @@ class StateInspectionTest(unittest.TestCase):
             buses = json.loads(
                 mcp_module.list_components("buses", max_results=10)
             )
-            self.assertTrue(buses["success"])
+            self.assertEqual(buses["status"], "success")
             self.assertEqual(buses["total_count"], 1)
             self.assertEqual(buses["results"][0]["name"], "Bus 01")
 
             branches = json.loads(
                 mcp_module.list_components("branches", max_results=10)
             )
-            self.assertTrue(branches["success"])
+            self.assertEqual(branches["status"], "success")
             self.assertEqual(branches["total_count"], 2)
             self.assertEqual(branches["returned_count"], 2)
             self.assertEqual(
@@ -230,7 +230,7 @@ class StateInspectionTest(unittest.TestCase):
             unsupported = json.loads(
                 mcp_module.list_components("unknown")
             )
-            self.assertFalse(unsupported["success"])
+            self.assertEqual(unsupported["status"], "error")
             self.assertIn(
                 "buses",
                 unsupported["supported_component_types"],

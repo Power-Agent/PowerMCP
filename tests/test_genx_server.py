@@ -3,7 +3,7 @@
 GenX itself is Julia (GenX.jl) and a SLURM cluster, neither of which CI has.
 What is testable without them is everything that decides *what gets run*: the
 SLURM script the server generates, the configuration resolution, the capacity
-CSV analysis, and the error shape the tools hand back. That is also where the
+CSV analysis, and the result shape the tools hand back. That is also where the
 risk lives -- the generated script is piped to `sbatch` and executes on the
 cluster under the user's own account.
 """
@@ -186,6 +186,28 @@ def test_submit_reports_a_missing_sbatch_instead_of_hanging(slurm, tmp_path, mon
         slurm.submit_case(str(case), 4, 32, case_name="ok")
 
 
+def test_preview_reports_the_script_through_the_shared_shape(genx_server, tmp_path):
+    case = _make_case(tmp_path)
+
+    result = genx_server.preview_genx_case(str(case), 4, 32, case_name="ok_name")
+    assert result["status"] == "success"
+    assert "--job-name=ok_name" in result["script"]
+
+
+def test_an_engine_failure_reaches_the_caller_as_a_result(genx_server, tmp_path, monkeypatch):
+    """A RuntimeError from sbatch is reported, not raised at the MCP layer.
+
+    Raising out of the tool would reach the caller as a protocol error, which
+    carries neither the status key nor a message a model can act on.
+    """
+    case = _make_case(tmp_path)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-bin"))
+
+    result = genx_server.submit_genx_case(str(case), 4, 32, case_name="ok_name")
+    assert result["status"] == "error"
+    assert "sbatch was not found" in result["message"]
+
+
 # ---------------------------------------------------------------------------
 # Capacity CSV analysis
 # ---------------------------------------------------------------------------
@@ -198,7 +220,7 @@ def test_summarize_capacity_returns_json_serializable_data(genx_server, tmp_path
     csv.write_text(CAPACITY_CSV)
 
     result = genx_server.summarize_capacity(str(csv))
-    assert result["success"] is True
+    assert result["status"] == "success"
     assert isinstance(result, dict)
     json.dumps(result)  # would raise on a DataFrame
 
@@ -211,19 +233,21 @@ def test_check_capacity_setting_detects_brownfield(genx_server, tmp_path):
     csv.write_text(CAPACITY_CSV)
 
     result = genx_server.check_capacity_setting(str(csv))
-    assert result["success"] is True
+    assert result["status"] == "success"
     assert result["is_brownfield"] is True
     assert result["setting"] == "brownfield"
 
 
 def test_missing_required_column_is_reported_not_walked_into(genx_server, tmp_path):
-    """A missing column used to be printed to stdout -- into the JSON-RPC
-    stream -- and then hit as a KeyError two lines later."""
+    """A capacity.csv without a Resource column is named, not walked into.
+
+    Nothing reaches stdout: that is the JSON-RPC channel for a stdio server.
+    """
     csv = tmp_path / "capacity.csv"
     csv.write_text("Zone,StartCap,RetCap,NewCap,EndCap\n1,0,0,0,0\n")
 
     result = genx_server.summarize_capacity(str(csv))
-    assert result["success"] is False
+    assert result["status"] == "error"
     assert "Resource" in result["message"]
 
 
@@ -236,7 +260,7 @@ def test_tools_return_the_error_shape_rather_than_raising(genx_server, tmp_path)
         genx_server.summarize_capacity(missing),
         genx_server.plot_capacity(missing, str(tmp_path), "EndCap", "s", "1"),
     ):
-        assert result["success"] is False
+        assert result["status"] == "error"
         assert isinstance(result["message"], str) and result["message"]
 
 
@@ -245,7 +269,7 @@ def test_invalid_zone_is_rejected_with_the_available_ones(genx_server, tmp_path)
     csv.write_text(CAPACITY_CSV)
 
     result = genx_server.summarize_capacity(str(csv), zones=[99])
-    assert result["success"] is False
+    assert result["status"] == "error"
     assert "99" in result["message"]
 
 
@@ -257,7 +281,7 @@ def test_plot_capacity_writes_a_png(genx_server, tmp_path):
     result = genx_server.plot_capacity(
         str(csv), str(out), "EndCap", "Baseline", "1"
     )
-    assert result["success"] is True, result
+    assert result["status"] == "success", result
     assert (out / "EndCap.png").is_file()
 
 
@@ -266,14 +290,17 @@ def test_plot_capacity_rejects_an_unknown_plot_type(genx_server, tmp_path):
     csv.write_text(CAPACITY_CSV)
 
     result = genx_server.plot_capacity(str(csv), str(tmp_path), "Bogus", "s", "1")
-    assert result["success"] is False
+    assert result["status"] == "error"
     assert "Bogus" in result["message"]
     assert result["file_path"] is None
 
 
 def test_greenfield_early_return_keeps_the_shared_shape(genx_server, tmp_path):
-    """The greenfield branch used to omit file_path, so a caller reading it
-    after checking success hit a KeyError on that branch alone."""
+    """The greenfield branch carries file_path like every other branch.
+
+    A caller that reads file_path after checking status finds it whichever way
+    the tool went.
+    """
     csv = tmp_path / "capacity.csv"
     csv.write_text(
         "Resource,Zone,StartCap,RetCap,NewCap,EndCap\n"
@@ -281,7 +308,7 @@ def test_greenfield_early_return_keeps_the_shared_shape(genx_server, tmp_path):
     )
 
     result = genx_server.plot_capacity(str(csv), str(tmp_path), "StartCap", "s", "1")
-    assert result["success"] is False
+    assert result["status"] == "error"
     assert result["setting"] == "greenfield"
     assert result["file_path"] is None
 
@@ -300,5 +327,5 @@ def test_paths_outside_the_allowed_roots_are_refused(genx_server, tmp_path, monk
     monkeypatch.setenv("POWERIO_MCP_ALLOWED_ROOTS", str(allowed))
 
     result = genx_server.summarize_capacity(str(outside / "capacity.csv"))
-    assert result["success"] is False
+    assert result["status"] == "error"
     assert "csv_path" in result["message"]

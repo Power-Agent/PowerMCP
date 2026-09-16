@@ -7,6 +7,7 @@ matplotlib.use("Agg")  # no display on a cluster login node
 import matplotlib.pyplot as plt
 
 from GenX.tool_logic.palette import RESOURCE_COLORS
+from powermcp.errors import tool_success
 
 # Resource name mapping for proper capitalization
 resource_labels = {
@@ -252,8 +253,7 @@ def plot_capacity_bar(
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
 
-    return {
-        "success": True,
-        "message": f"Plot saved successfully: {capacity_column}",
-        "file_path": str(output_path),
-    }
+    return tool_success(
+        message=f"Plot saved successfully: {capacity_column}",
+        file_path=str(output_path),
+    )
