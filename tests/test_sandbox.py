@@ -31,8 +31,7 @@ from powermcp.sandbox import (
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
-# Every spelling powerio reads, so a test can clear them all before asserting
-# that an unconfigured installation constrains nothing.
+# Every spelling powerio reads for an allowed root, so a test can clear them all.
 ROOT_ENVS = (powermcp.sandbox.ALLOWED_ROOTS_ENV,) + powermcp.sandbox.LEGACY_ROOT_ENVS
 
 # Every server tool that takes a path from the model, and the argument it takes.
@@ -105,9 +104,9 @@ GUARDED = {
 def test_the_policy_is_powerios(monkeypatch):
     """The policy has one implementation, which both sides reach by identity.
 
-    The drift this guards against already happened once: two copies read
-    different environment variables, so an operator could configure containment
-    and get it on one server and not another.
+    The drift this rules out already happened once: two copies read different
+    environment variables, so an operator could configure containment and get it
+    on one server and not another.
     """
     assert powermcp.sandbox.checked_path is powerio.mcp.sandbox.checked_path
     assert powermcp.sandbox.allowed_roots is powerio.mcp.sandbox.allowed_roots
@@ -138,11 +137,19 @@ def test_every_root_spelling_configures_containment(tmp_path, monkeypatch, env):
         checked_path(str(tmp_path / "secret.m"), purpose="file_path")
 
 
-def test_unset_roots_constrain_nothing(tmp_path, monkeypatch):
+def test_unset_roots_confine_to_the_startup_directory(monkeypatch):
+    """The directory is not named: powerio captures it at import time.
+
+    That makes it the pytest invocation directory, which a future runner may
+    change. One existing root that admits a path beneath it is the stable
+    statement of the policy.
+    """
     for name in ROOT_ENVS:
         monkeypatch.delenv(name, raising=False)
-    assert allowed_roots() == ()
-    assert checked_path(str(tmp_path / "anywhere.m"), purpose="p")
+    (root,) = allowed_roots()
+    assert root.is_dir()
+    inside = root / "case.m"
+    assert checked_path(str(inside), purpose="p") == str(inside)
 
 
 def test_a_path_inside_a_root_is_admitted(tmp_path, monkeypatch):
@@ -245,7 +252,7 @@ def _checked_arguments(server: str) -> dict[str, set[str]]:
     Reads the server source rather than importing it: a bridge server pulls in
     the simulator it wraps, which is not installed in every environment, so
     importing to introspect would skip the check exactly where it matters. The
-    guard is a syntactic property and the AST shows it.
+    check is a syntactic property and the AST shows it.
     """
     tree = ast.parse((REPO / server).read_text(encoding="utf-8"))
     return {
@@ -298,6 +305,7 @@ def test_staged_directory_write_preserves_unrelated_files(tmp_path):
     (output / "buses.csv").write_text("old")
 
     def write(staging):
+        pathlib.Path(staging).mkdir()
         path = pathlib.Path(staging) / "buses.csv"
         path.write_text("new")
         return {"dir": staging, "files": [str(path)]}
@@ -341,7 +349,7 @@ PSSE_PROHIBITED_COMMANDS = (
 )
 
 
-def test_psse_prohibited_command_contract_matches_the_server():
+def test_psse_prohibited_command_list_matches_the_server():
     assert set(PSSE_PROHIBITED_COMMANDS) == psse_mcp._PROHIBITED_PSSPY_COMMANDS
 
 
@@ -436,8 +444,8 @@ def test_psse_path_metadata_matches_the_bundled_specs():
 
 
 # A parameter name or description that mentions a file, path, directory or
-# folder. Deliberately broad: every hit must be either guarded or recorded as
-# reviewed, so regenerating the bundled specs cannot quietly unguard one.
+# folder. Deliberately broad: every hit must be either checked or recorded as
+# reviewed, so regenerating the bundled specs cannot quietly drop a check.
 PSSE_PATHISH_NAME = re.compile(
     r"(file|fname|path|folder|zip|csv|xml|iplname|rspname|autoname)", re.I
 )
