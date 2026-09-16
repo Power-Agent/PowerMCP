@@ -322,3 +322,9 @@ powermcp/
   clients/        # claude_desktop / claude_code / codex config writers
   _servers/       # (wheel only) the tool dirs, shipped verbatim at build time
 ```
+
+## Persistent Tellegen Studies
+
+The optional `tellegen` server invokes the native CLI for saved goals, branching
+history, comparisons and exact proposals. See [the Study integration guide](TELLEGEN.md)
+for executable configuration, portable bundles and revision checks.
