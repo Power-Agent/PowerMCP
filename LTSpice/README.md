@@ -50,6 +50,20 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - **create_rc_transient_netlist(...)**: Helper to create a standard RC circuit netlist.
 - **view_netlist_in_ltspice(netlist_path: str)**: Open netlist in LTSpice GUI.
 
+## Tool results
+
+Every tool returns the shape the whole distribution uses:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+spicelib and matplotlib are imported by the two tools that need them, not at
+startup, so the server runs and lists its tools with either one absent.
+`list_available_traces` and `plot_specific_traces` then report which package to
+install. The other tools need neither.
+
 ## Prompt Example
 
 Could you create a simple RC circuit netlist with a 1k resistor and 1uF capacitor, run a transient simulation for 5ms, and plot the output voltage?
