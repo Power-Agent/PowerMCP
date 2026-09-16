@@ -12,7 +12,7 @@ This guide shows how to **install** and **test** the packaged version.
 
 ## 1. Install (as a user)
 
-Requires **Python 3.10+**.
+Requires **Python 3.10 through 3.14**.
 
 ```bash
 pip install powermcp
