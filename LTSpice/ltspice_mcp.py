@@ -33,29 +33,23 @@ import subprocess
 from pathlib import Path
 
 # --- Third-Party Imports ---
-# The MCP Python SDK provides the server implementation.
-try:
-    from mcp.server.mcpserver import MCPServer as FastMCP
-except ImportError:
-    sys.exit("Error: mcp library not found. Please run 'pip install mcp'.")
+# The MCP Python SDK provides the server implementation. `powermcp run ltspice`
+# reports a missing SDK before it launches this file, and a direct launch
+# raises ImportError here with the module name in it.
+from mcp.server.mcpserver import MCPServer as FastMCP
 
-# `matplotlib` is used for plotting simulation results.
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    sys.exit("Error: Matplotlib library not found. Please run 'pip install matplotlib'.")
-
-# `PyLTSpice` provides the tools to read LTSpice's binary .raw files.
-try:
-    from spicelib.raw.raw_read import RawRead as LTSpiceRawRead
-except ImportError:
-    sys.exit("Error: PyLTSpice/spicelib not found. Please run 'pip install PyLTSpice'.")
+# matplotlib and spicelib are imported inside the tools that need them, so the
+# server starts, and lists its tools, with either one absent. A tool that needs
+# a missing one reports how to install it.
+_MATPLOTLIB_HINT = "matplotlib is not installed. Run 'pip install matplotlib'."
+_SPICELIB_HINT = "PyLTSpice/spicelib is not installed. Run 'pip install PyLTSpice'."
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
     sys.path.insert(0, _repo_root)
 try:
+    from powermcp.errors import tool_error
     from powermcp.sandbox import PathNotAllowed, checked_path, ensure_checked_directory
 finally:
     if _repo_root_added:
@@ -131,6 +125,27 @@ def _output_dir():
 def _ensure_output_dir() -> str:
     """Create the generated run root only after checking each new component."""
     return ensure_checked_directory(_output_dir(), purpose="generated output root")
+
+
+def _raw_reader():
+    """The spicelib .raw reader, imported on first use."""
+    from spicelib.raw.raw_read import RawRead
+
+    return RawRead
+
+
+def _pyplot():
+    """matplotlib's pyplot on the Agg backend, imported on first use.
+
+    Agg is selected before pyplot is imported: these tools write PNG files on
+    machines with no display, and an interactive backend would try to open one.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    return plt
 
 
 def check_ltspice_executable():
@@ -278,8 +293,11 @@ async def list_available_traces(raw_file_path: str) -> dict:
     if not os.path.exists(raw_file_path):
         return {"status": "error", "message": f"RAW file not found: '{raw_file_path}'"}
     try:
-        raw_reader = LTSpiceRawRead(raw_file_path)
-        traces = raw_reader.get_trace_names()
+        raw_read = _raw_reader()
+    except ImportError:
+        return tool_error(_SPICELIB_HINT)
+    try:
+        traces = raw_read(raw_file_path).get_trace_names()
         return {"status": "success", "traces": traces}
     except Exception as e:
         logging.error(f"Failed to read traces: {e}", exc_info=True)
@@ -302,7 +320,16 @@ async def plot_specific_traces(raw_file_path: str, session_dir: str, trace_names
         return {"status": "error", "message": f"RAW file not found: '{raw_file_path}'"}
 
     try:
-        raw_reader = LTSpiceRawRead(raw_file_path)
+        raw_read = _raw_reader()
+    except ImportError:
+        return tool_error(_SPICELIB_HINT)
+    try:
+        plt = _pyplot()
+    except ImportError:
+        return tool_error(_MATPLOTLIB_HINT)
+
+    try:
+        raw_reader = raw_read(raw_file_path)
         plt.style.use('seaborn-v0_8-whitegrid')
         plt.figure(figsize=(12, 7))
         plt.title("LTSpice Simulation Results")

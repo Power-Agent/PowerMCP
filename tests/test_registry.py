@@ -17,7 +17,7 @@ from powermcp.registry import CORE, TOOLS, Tool
 
 def test_package_versions_match():
     project = tomllib.loads((registry.REPO_ROOT / "pyproject.toml").read_text())["project"]
-    assert project["version"] == __version__ == "0.3.0"
+    assert project["version"] == __version__ == "0.4.0"
 
 
 def test_core_tools_present_and_have_no_extra():
@@ -55,7 +55,7 @@ def test_closed_source_path_tools_declare_config_keys():
 def test_windows_only_flags():
     for name in ("psse", "pslf", "powerfactory", "pscad", "powerworld"):
         assert TOOLS[name].windows_only is True
-    for name in ("pandapower", "pypsa", "andes", "egret", "surge", "opendss", "hope", "ltspice"):
+    for name in ("pandapower", "pypsa", "andes", "egret", "surge", "opendss", "hope", "ltspice", "tellegen"):
         assert TOOLS[name].windows_only is False
 
 

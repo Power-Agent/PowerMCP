@@ -2151,8 +2151,11 @@ class DIgSILENTAgent:
 
     def run_pipeline(self) -> dict:
         """
-        Execute the full pipeline and return a status report dict.
-        Each step is guarded: a failure stops the pipeline early.
+        Execute the full pipeline and return a step-by-step report.
+
+        A failed step stops the pipeline and the report keeps whichever steps
+        already ran. ``status`` and ``message`` carry the shared tool result
+        shape, since the MCP server hands this report back as a tool result.
         """
         report = {
             "connect":          None,
@@ -2164,7 +2167,8 @@ class DIgSILENTAgent:
             "pfd_export":       None,
             "csv_path":         None,
             "pfd_path":         None,
-            "success":          False,
+            "status":           "error",
+            "message":          None,
         }
 
         steps = [
@@ -2179,7 +2183,8 @@ class DIgSILENTAgent:
             ok, msg = fn()
             report[key] = {"ok": ok, "msg": msg}
             if not ok:
-                log.error(f"Pipeline stopped at step '{key}': {msg}")
+                report["message"] = f"Pipeline stopped at step '{key}': {msg}"
+                log.error(report["message"])
                 return report
 
         # -- Standard plots (always enabled by default) ----------------
@@ -2197,16 +2202,18 @@ class DIgSILENTAgent:
             ok, msg = self.export_project_to_pfd()
             report["pfd_export"] = {"ok": ok, "msg": msg}
             if not ok:
-                log.error(f"Pipeline stopped at step 'pfd_export': {msg}")
+                report["message"] = f"Pipeline stopped at step 'pfd_export': {msg}"
+                log.error(report["message"])
                 return report
             report["pfd_path"] = msg
         else:
             report["pfd_export"] = {"ok": True, "msg": "Skipped (export_pfd=0)"}
 
         report["csv_path"] = report["csv_export"]["msg"]
-        report["success"]  = True
+        report["status"]   = "success"
+        report["message"]  = f"All steps passed. Results: {report['csv_path']}"
         log.section("PIPELINE COMPLETE")
-        log.ok(f"All steps passed. Results → {report['csv_path']}")
+        log.ok(report["message"])
         return report
 
 

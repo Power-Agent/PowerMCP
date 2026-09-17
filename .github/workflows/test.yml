@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: pytest (py${{ matrix.python-version }})
@@ -12,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # floor and ceiling of requires-python
+        # floor of requires-python, and the highest version the classifiers claim
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +25,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - name: Install package
         run: |

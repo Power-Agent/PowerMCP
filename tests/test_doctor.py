@@ -64,7 +64,7 @@ def test_namespace_shadow_not_false_positive(monkeypatch):
     # directory must not be mistaken for the installed library (PEP 420 namespace
     # shadow), so the dependency must report missing, not ok. Bypass surge's
     # Python-version gate (it is 3.12-3.14 only) so this exercises the probe path
-    # on every Python version — otherwise on 3.10/3.11 _dep_status short-circuits
+    # on every Python version; otherwise on 3.10/3.11 _dep_status short-circuits
     # to the "needs Python 3.12-3.14" warning before reaching the probe.
     monkeypatch.setattr(doctor, "_surge_supported", lambda: True)
     style, msg = doctor._dep_status(get_tool("surge"))
@@ -73,7 +73,7 @@ def test_namespace_shadow_not_false_positive(monkeypatch):
 
 def test_tools_without_paths_show_dash():
     style, msg = doctor._path_status(get_tool("pandapower"))
-    assert msg == "—"
+    assert msg == "-"
 
 
 def test_run_doctor_smoke(capsys):
@@ -121,13 +121,14 @@ def test_the_floor_is_found_without_top_level_distribution_metadata(monkeypatch)
     monkeypatch.setattr(
         doctor,
         "requires",
-        lambda _distribution: ("powerio[mcp,matrix]>=0.9.0,<1",),
+        lambda _distribution: ("powerio[mcp,matrix]>=0.11.3,<0.12",),
     )
     req = doctor._declared_requirement("powerio")
     assert req is not None
     assert doctor._canonical(req.name) == "powerio"
-    assert Version("0.9.0") in req.specifier
-    assert Version("1.0.0") not in req.specifier
+    assert Version("0.11.3") in req.specifier
+    assert Version("0.11.2") not in req.specifier
+    assert Version("0.12.0") not in req.specifier
 
 
 def test_an_out_of_date_dependency_under_another_name_is_caught(monkeypatch):
@@ -169,7 +170,7 @@ def test_containment_status_reads_every_root_spelling(tmp_path, monkeypatch):
     for name in (ALLOWED_ROOTS_ENV,) + LEGACY_ROOT_ENVS:
         monkeypatch.delenv(name, raising=False)
     style, msg = doctor._containment_status()
-    assert style == "yellow" and "unconfined" in msg
+    assert style == "yellow" and "startup directory" in msg
 
     monkeypatch.setenv(ALLOWED_ROOTS_ENV, str(tmp_path))
     style, msg = doctor._containment_status()
@@ -190,3 +191,11 @@ def test_containment_status_reads_every_root_spelling(tmp_path, monkeypatch):
     assert style == "yellow"
     assert "every path is refused" not in msg
     assert str(tmp_path / "gone") in msg
+
+
+def test_a_roots_variable_with_no_directory_is_refused(monkeypatch):
+    from powermcp.sandbox import ALLOWED_ROOTS_ENV
+
+    monkeypatch.setenv(ALLOWED_ROOTS_ENV, "   ")
+    style, msg = doctor._containment_status()
+    assert style == "red" and "at least one directory" in msg

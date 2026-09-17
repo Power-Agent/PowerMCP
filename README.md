@@ -127,72 +127,183 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 ### Case compilation between servers (PowerIO)
 
-PowerMCP runs the MCP server that [powerio](https://github.com/eigenergy/powerio) ships in its own wheel, as a **core dependency** (no extra needed) — `powermcp run powerio` is `python -m powerio.mcp`, so a powerio release that adds tools or changes their implementation needs no local server copy. It parses transmission and distribution formats into canonical JSON transports, converts between target artifacts with fidelity warnings, and builds the sparse matrices solvers need (B', B'', Y_bus, PTDF, LODF, Laplacian, LACPF).
+PowerIO IR is the exchange format of this repository. PowerMCP runs the
+server shipped in PowerIO 0.11.3 (`powermcp run powerio` is `python -m
+powerio.mcp`); that server parses every grid exchange format, emits every
+target, summarizes, diagnoses, normalizes, lowers multiconductor networks, and
+calculates matrices. Its `parse` tool returns serialized **PowerIO IR
+generation 2** (`"schema": "pio-ir"`, `"version": 2`), a typed module carrying
+the electrical value, its provenance and its diagnostics. Every other server
+here consumes that document: the pandapower, PyPSA, ANDES and Egret adapters
+turn it into their own model with PowerIO's writers, and the Tellegen server
+hands it to the native solver. PowerMCP itself never re-parses, re-validates,
+or recomputes what PowerIO states; it routes a declared value to a consumer
+that accepts it and owns only the final step into one simulator.
 
-Its JSON transport is the exchange format between PowerMCP servers: parse a case once, pass the returned `json` string between tool calls, and save runtime artifacts only when a backend needs a file. Existing `json` transport workflows remain supported.
-
+```python
+parsed = parse(path="case9.raw")                     # powerio server
+ir = parsed["powerio_ir"]
+summarize(powerio_ir=ir)
+calc_matrix(matrix="ptdf", powerio_ir=ir)            # rows and columns carry bus ids and branch identities
+diagnostics(powerio_ir=ir)
+import_case_from_json(powerio_ir=ir, output_path="case9.nc")  # PyPSA
+load_network_from_json(powerio_ir=ir)                         # pandapower
+load_model_from_json(powerio_ir=ir)                           # Egret
+load_network_from_json(powerio_ir=ir, out_path="case9.m")     # ANDES
+solve(powerio_ir=ir, formulation="dcopf")                     # tellegen
+emit(format="psse", destination="case9.raw", powerio_ir=ir)
 ```
-parse(path="case9.raw")                            # powerio server -> {"json": ..., "summary": ...}
-load_network_from_json(network_json=...)           # pandapower server ingests the transport
-load_model_from_json(network_json=...)             # egret server stages it as a solvable case file
-import_case_from_json(network_json=..., output_path="case9.nc")  # PyPSA server writes a .nc for its tools
-matrix(kind="ptdf", json=...)                      # powerio server builds matrices from it
-save(to_format="psse", out_path="case9.raw", json=...)  # stage a file for path only servers
-```
 
-PowerIO also supports the `.pio.json` package transport, which carries the model plus package metadata and structured diagnostics:
+`powerio_ir` is the argument every adapter takes; `network_json` remains an
+alias for the same document. A `ScenarioSet` requires `scenario_id`; a
+`TimeSeries` requires `time_index`; nested collections require both. An
+operating point entry reaches the solver as the network it states. The
+`operating_point` argument remains an alias for `time_index`.
 
-```
-parsed = parse(path="case9.raw", transport="package")
-pkg = parsed["package_json"]
-summary(package_json=pkg)
-matrix(kind="ptdf", package_json=pkg)
-save(to_format="psse", out_path="case9.raw", package_json=pkg)
-diagnostics(package_json=pkg)  # package diagnostics summary and structured findings
-```
-
-A package can also retain provenance and source maps, stable row identities,
-validation state, operating-point series, cumulative study commits, and
-lowering history. The canonical PowerIO MCP tools continue to own that package
-lifecycle. PowerMCP uses the package only at the solver boundary:
-
-```
-# A static package loads directly.
-import_case_from_json(network_json=pkg, output_path="case9.nc")
-
-# A package with one or more stored states requires an explicit selection.
-# PowerIO v0.9 materializes and validates the selected state before PowerMCP
-# creates the solver model.
+```python
 import_case_from_json(
-    network_json=pkg,
-    output_path="dispatch.nc",
-    operating_point=3,
+    powerio_ir=ir, output_path="dispatch.nc",
+    scenario_id="high-demand", time_index=3,
 )
-load_network_from_json(network_json=pkg, study_commit=1)  # pandapower
 ```
 
-The same `operating_point` and `study_commit` selectors are available on the
-PowerIO import tools for pandapower, PyPSA, ANDES, and Egret. PowerMCP rejects
-unselected stored state data instead of silently solving the package's base model.
-Study materialization honors the package's `base_operating_point`. Balanced
-solvers also reject multiconductor packages until the caller explicitly lowers
-them with PowerIO, so a lossy distribution-to-transmission reduction is never
-implicit. PyPSA and pandapower use PowerIO's native writers, preserving the
-supported cost and in-service metadata without PowerMCP rebuilding PYPOWER
-tables.
+Every adapter response carries the same tail: `value_type` (the PowerIO
+structural type that was selected), `selection`, `diagnostics` (full PowerIO
+records with code, severity, target, spans and suggested action) and
+`warnings`. The powerio adapters add the emission `fidelity`
+(`exact_same_format` when PowerIO echoed retained source bytes, `canonical` for
+fresh output) and the typed `edits` report described below, because they own
+the conversion into their own model. The `package` key keeps the IR context
+earlier clients read.
 
-`summary` returns the canonical nested shape used by PowerIO and PowerMCP: counts live under `elements` (`elements.buses`, `elements.branches`, `elements.generators`) and topology metadata lives under `topology` (`topology.connected_components`, `topology.reference_buses`).
+The Tellegen tools carry the same four keys for the module they hand to the
+native solver, and `solve_module` and `plan` add what the returned module
+states. They take no typed `edits` list: Tellegen's own `edits` argument is the
+native request object (`{"deltas": ..., "rates": ...}`) the CLI applies inside
+the solve.
 
-`save` covers the servers without a bridge: write the converted case to disk and point their load tools at the file. For OpenDSS, save a distribution transport as DSS, then compile that DSS file:
+#### Typed edits before a solver import
 
+The powerio adapters accept `edits`, a JSON list of what-if changes PowerIO
+applies as typed updates before the conversion. The whole list is validated
+first, then applied in list order; consecutive updates of one class apply as
+one atomic batch, and a bus load reallocation sees the values produced by the
+edits before it. The response reports the changed components, in application
+order, under `edits`.
+
+| op | keys |
+|---|---|
+| `set_load_active_power` | `load`, `mw`, `terminal?` |
+| `set_load_reactive_power` | `load`, `mvar`, `terminal?` |
+| `set_generator_active_power` | `generator`, `mw`, `terminal?` |
+| `set_generator_reactive_power` | `generator`, `mvar`, `terminal?` |
+| `set_generator_voltage_magnitude` | `generator`, `vm_pu` |
+| `set_generator_in_service` | `generator`, `in_service` |
+| `set_branch_in_service` | `branch`, `in_service` |
+| `set_transformer_tap_ratio` | `transformer`, `tap_ratio` |
+| `set_transformer_phase_shift` | `transformer`, `shift_degrees` |
+| `set_switch_closed` | `switch`, `closed` |
+| `set_branch_thermal_rating` | `branch`, `mva`, `terminal?` |
+| `set_bus_load_active_power` | `bus`, `mw`, `allocation` (`proportional_to_current_active_power` or `equal`) |
+
+Component ids are the stable identities PowerIO reports (`loads:0`,
+`branches:3`, or the source uid). A bus demand edit names an allocation rule
+because PowerIO never assigns aggregate demand to an arbitrary load.
+
+```python
+load_network_from_json(
+    powerio_ir=ir,
+    edits='[{"op": "set_load_active_power", "load": "loads:0", "mw": 91.5},'
+          ' {"op": "set_branch_in_service", "branch": "branches:3", "in_service": false}]',
+)
 ```
-save(to_format="dss", out_path="feeder.dss", json=..., json_format="bmopf-json")
-compile_opendss_file(dss_file="feeder.dss")
+
+#### Distribution networks
+
+A multiconductor value is rejected by a balanced solver until the caller asks
+for the transformation: pass `to_balanced=True` (and `base_mva`) and the
+response carries PowerIO's readiness report under `lowering`, or call the
+powerio server's `to_balanced_report` and `to_balanced` tools first. Retaining
+a component does not establish that the selected solver models it. Use `emit`
+for a backend that needs files: OpenDSS output is a directory bundle whose
+master DSS artifact `compile_opendss_file` accepts; `bmopf-json@0.1.0` and
+`bmopf-json@0.2.0` select the BMOPF schema version (the latter writes draft
+BMOPF 0.2, subject to Task Force approval); `geo-json` writes a geographic
+layer.
+
+The retired `Package`, `model-json`, `package_json` and package `study_commit`
+formats require migration: re-parse the original case and pass its
+`powerio_ir`. Study goals, branching and decisions belong to Tellegen.
+
+PowerIO MCP paths support local files and `file://` URIs. Set
+`POWERIO_MCP_ALLOWED_ROOTS` to an `os.pathsep` separated directory list to
+constrain the shared path policy. With no root variable set, paths stay beneath
+the directory the server process started in, which is rarely the directory an
+operator means. Legacy single-root environment aliases remain supported.
+Directory inputs check every descendant, and generated directories install from
+private sibling staging paths. Place `POWERMCP_HOME` under an allowed root for
+solver run artifacts. These checks cannot prevent another process from
+replacing a path after validation.
+
+### Tellegen (native solver and Studies)
+
+[Tellegen](https://github.com/eigenergy/tellegen) solves DC power flow, DC OPF
+with prices and dispatch, AC power flow and the SOCWR relaxation, computes
+sensitivities, runs bounded capacity planning, and keeps durable Studies. It
+consumes and produces PowerIO IR, so `powermcp run tellegen` is the third
+consumer of the same format: the powerio server parses, Tellegen solves, and
+the solution comes back as a `powerio.DcOpfSolution` module every other tool
+can read.
+
+Build the CLI and point PowerMCP at it:
+
+```sh
+cargo build -p tellegen-cli --features conic     # in a tellegen checkout
+powermcp config set tellegen.binary /path/to/target/debug/tellegen
+# or: export POWERMCP_TELLEGEN_BINARY=/path/to/tellegen, or put tellegen on PATH
+powermcp doctor                                  # runs `tellegen capabilities`
 ```
 
-PowerWorld `.pwd` display files decode separately via `display(path=...)`, which returns the diagram canvas and each substation's display coordinates. The display geometry is distinct from the `.pwb`/`.aux` case data.
+Tools: `capabilities`, `contract`, `solve(powerio_ir | path, formulation,
+edits, sensitivities, max_elements)`, `solve_module(..., out_path)`,
+`plan(spec, ...)`, and the Study family `study_contract`, `study_create`
+(`input_path` lets PowerIO parse a grid exchange file into the Study input),
+`study_inspect`, `study_run`, `study_export`, `study_import`. A grid exchange
+`path` is parsed by PowerIO in the server process and serialized to IR before
+it reaches the binary; collection entries take `time_index` and `scenario_id`.
+Tellegen takes a balanced network or a calculation instance and lowers nothing:
+a multiconductor value is refused here, before the binary runs, so lower it
+with the powerio server's `to_balanced` first. A module PowerIO marks with an
+error is refused on the same terms as every other adapter refuses it.
+Applying a Study proposal binds a recommendation to the Study and is a human
+action: it is not a tool, and `study_run` refuses the `apply` operation.
 
-PowerIO MCP tools accept local paths and `file://` URIs. Nonlocal URI schemes are rejected. Set `POWERIO_MCP_ALLOWED_ROOTS` to an `os.pathsep` separated list of directories to constrain paths handled by the shared PowerIO sandbox. PyPSA preflights a NetCDF file or every descendant of a CSV directory before constructing a network, and both explicit and legacy-derived CSV import destinations are checked before writing. PyPSA and surge install directory outputs from a private sibling staging directory. Generated run directories exposed by the bundled servers use the same path policy. Put `POWERMCP_HOME` under an allowed root if ANDES, Egret, or LTSpice should write run artifacts while containment is enabled. These are path preflight checks; another process can replace a checked entry before a backend opens it.
+The adapter accepts `POWERMCP_TELLEGEN_TIMEOUT_SECONDS` (default 1800) and
+`POWERMCP_TELLEGEN_CANCEL_GRACE_SECONDS` (default 300). Equivalent keys live
+under `[tellegen]` in the configuration file. Cancellation requests SIGTERM on
+POSIX and CTRL_BREAK on a Windows process group, allowing the current exact
+trial to finish and completed evidence to be saved. After the grace period, or
+without a usable Windows console, a forced stop can retain only the previous
+saved revision. Inspect the Study before retrying. See
+[powermcp/TELLEGEN.md](powermcp/TELLEGEN.md).
+
+### Tool results
+
+Every tool in this repository reports the same shape, so one client handles all
+of them:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+A failure reaches the caller as a result, not as an MCP protocol error: a
+refused path, a rejected argument and a failure inside the simulator all arrive
+as `"status": "error"` with a message. `powermcp/errors.py` holds the helpers
+every server uses, `tool_success`, `tool_error` and `run_tool`. A tool that
+documents a key on both branches carries it on both. A few tools return
+something other than a JSON object on success, such as raw CSV text; they still
+report a failure through the shape above.
 
 ### Running from a clone (without installing)
 

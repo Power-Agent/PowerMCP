@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "powermcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -44,12 +44,12 @@ dependencies = [
     # imports the latter, so the floor tracks that, not just powerio's own
     # [mcp] extra requirement (mcp>=2,<3).
     "mcp>=2,<3",
-    # powerio supplies the conversion server, package model, native solver
+    # powerio supplies the conversion server, module model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses APIs introduced in powerio 0.9.0.
+    # PowerMCP uses the typed PowerIO 0.11.3 module APIs.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.9.0,<1",
+    "powerio[mcp,matrix]>=0.11.3,<0.12",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
@@ -64,6 +64,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # --- open-source tool engines ---
+tellegen   = []  # The native CLI installs separately.
 andes      = ["andes"]
 egret      = ["gridx-egret", "pyomo"]          # PyPI dist is `gridx-egret`; imports as `egret`
 opendss    = ["py_dss_toolkit"]
@@ -103,7 +104,7 @@ powerfactory = ["numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powe
 # powermcp[plexosdb]` until that's resolved upstream.
 plexosdb   = ["r2x-plexos>=0.3.0", "r2x-plexos-to-sienna>=0.1.0", "r2x-sienna>=0.4.0"]
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
+opensource = ["powermcp[tellegen]", "powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]", "powermcp[plexosdb]"]
 
@@ -152,4 +153,5 @@ include = [
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
+    ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",
 ]

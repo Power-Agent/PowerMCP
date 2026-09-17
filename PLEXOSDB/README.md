@@ -45,7 +45,7 @@ Then run it through PowerMCP as usual:
 powermcp run plexosdb
 ```
 
-Verify both real installs and the resulting tool surface with `uv`:
+Verify both real installs and the resulting registered tools with `uv`:
 
 ```bash
 uv pip install --prerelease=allow plexosdb "r2x-plexos>=0.3.0" "r2x-plexos-to-sienna>=0.1.0" "r2x-sienna>=0.4.0"
@@ -57,7 +57,7 @@ python -c "from plexosdb_mcp.server import build_mcp_server; print(build_mcp_ser
 
 `PLEXOSDB/plexosdb_mcp/main.py` deliberately lives in a package also named
 `plexosdb_mcp` — the same import name as the upstream distribution it re-exports
-(mirroring `powerio/powerio_mcp.py`'s re-export of the `powerio` package). Because of
+(this package re-exports that distribution's server object under the same name). Because of
 that shared name, the registry launches it as a **script** (`entry_rel=
 "plexosdb_mcp/main.py"`), not as a module. Module-style launch would add `PLEXOSDB/`
 itself to `sys.path`, and `import plexosdb_mcp` inside `main.py` would then resolve to
@@ -104,7 +104,7 @@ result = translate_to_sienna(
     model_name="Base",           # a PLEXOS Model object name — see list_models
     output_path="/tmp/out/system.json",
 )
-# {"ok": True, "output_path": ..., "model_name": "Base",
+# {"status": "success", "output_path": ..., "model_name": "Base",
 #  "component_types": {"ACBus": 12, "ThermalStandard": 4, ...}}
 ```
 
@@ -122,6 +122,20 @@ PLEXOS models the same way and diffs their component-type counts — useful for
 comparing two scenarios of a study, or a study before/after an edit made through
 plexosdb-mcp's own CRUD tools. It does not solve anything (no PLEXOS license is
 present); solving is the paired `SIENNA` connector's job.
+
+## Tool results
+
+Both tools return the shape the whole distribution uses:
+
+```json
+{"status": "success", "...": "the keys that tool documents"}
+{"status": "error", "message": "what went wrong"}
+```
+
+A refused path and every r2x failure arrive the same way, so a missing model
+name, an unreadable XML study or a failed export reads as a message rather than
+as an MCP protocol error. The unexpected ones are logged with their traceback
+on stderr, which keeps stdout free for the JSON-RPC channel.
 
 ## Known upstream issues (tracked, and worked around)
 

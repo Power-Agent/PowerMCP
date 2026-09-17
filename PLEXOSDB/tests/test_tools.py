@@ -215,7 +215,7 @@ class TestCompareSolutions(unittest.TestCase):
 class TestUpstreamReExport(unittest.TestCase):
     """The re-exported plexosdb-mcp tools themselves are not PowerMCP's to unit
     test (they belong to the upstream project); this only checks the shape of
-    the re-export, matching powerio_mcp.py's own precedent."""
+    the re-export."""
 
     def test_mcp_and_upstream_names_are_re_exported(self):
         mod = _load_main_module()

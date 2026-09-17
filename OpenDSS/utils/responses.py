@@ -1,8 +1,13 @@
-"""JSON response helpers and precondition guards."""
+"""Result helpers and precondition checks for the OpenDSS tools.
+
+Every tool reports through the shape :mod:`powermcp.errors` names: tabular
+data arrives under ``payload`` on a success, and a failure carries a message.
+"""
 
 from typing import Any, Dict, Optional
 
 from core import state
+from powermcp.errors import tool_error, tool_success
 
 
 def _json_safe(obj: Any) -> Any:
@@ -22,25 +27,26 @@ def _json_safe(obj: Any) -> Any:
 
 
 def _ok(payload: Any = None) -> Dict[str, Any]:
-    out: Dict[str, Any] = {"success": True}
-    if payload is not None:
-        out["payload"] = _json_safe(payload)
-    return out
+    """Report a successful tool call, with any tabular data under ``payload``."""
+    if payload is None:
+        return tool_success()
+    return tool_success(payload=_json_safe(payload))
 
 
 def _err(msg: str) -> Dict[str, Any]:
-    return {"success": False, "error": msg}
+    """Report a failed tool call."""
+    return tool_error(msg)
 
 
 def _require_circuit_loaded() -> Optional[Dict[str, Any]]:
-    """Return an error response if no case has been compiled in this MCP session."""
+    """Return an error result if no case has been compiled in this MCP session."""
     if not state.circuit_loaded:
         return _err("No circuit loaded; call compile_opendss_file first.")
     return None
 
 
 def _require_solution() -> Optional[Dict[str, Any]]:
-    """Return an error response if no snapshot solve has completed since compile/clear."""
+    """Return an error result if no snapshot solve has completed since compile/clear."""
     if not state.solution_available:
         return _err("No snapshot solution; call solve_opendss_snapshot first.")
     return None
