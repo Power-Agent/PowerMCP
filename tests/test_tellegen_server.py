@@ -1,6 +1,7 @@
 """Native Study adapter behavior and path checks."""
 import asyncio
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from powermcp import tellegen
 
 
@@ -365,3 +366,42 @@ def test_real_binary_solves_case9(monkeypatch):
         asyncio.run(tellegen.solve(path=str(DIST)))
     contract = asyncio.run(tellegen.contract())
     assert contract["contract"] == "tellegen.cli/1"
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "remedy"),
+    [
+        (
+            "study_run",
+            {
+                "path": "study.json",
+                "expected_revision": 0,
+                "operation": {"kind": "apply"},
+            },
+            "explicit native CLI",
+        ),
+        ("solve", {"powerio_ir": "{}", "formulation": "acopf"}, "formulation must be one of"),
+        ("study_export", {"path": "/outside/study.json"}, "outside allowed MCP roots"),
+    ],
+)
+def test_a_refusal_reaches_the_model_with_its_remedy(tmp_path, monkeypatch, tool, arguments, remedy):
+    """Every refusal here names what to do instead; the model must receive it.
+
+    The SDK preserves a tool's message only for `ToolError`. Any other
+    exception becomes `UnexpectedToolError`, whose text it replaces with a bare
+    "Error executing tool <name>" -- so a plain `ValueError` would leave the
+    caller with no reason and nothing to act on.
+    """
+    monkeypatch.setenv("POWERIO_MCP_ALLOWED_ROOTS", str(tmp_path))
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("a refused call reached the native process")
+
+    monkeypatch.setattr(tellegen, "_call", forbidden)
+
+    with pytest.raises(ToolError) as caught:
+        asyncio.run(tellegen.mcp.call_tool(tool, arguments))
+    assert remedy in str(caught.value)
+    assert not isinstance(caught.value, UnexpectedToolError), (
+        "UnexpectedToolError discards the message before the model sees it"
+    )

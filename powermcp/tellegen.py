@@ -10,6 +10,7 @@ either side. Applying a Study proposal is a human action and is not a tool.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import io
 import json
@@ -23,6 +24,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from powermcp.config import get, get_path
 from powermcp.sandbox import checked_path, checked_read_tree, staged_file_write
 
@@ -31,6 +33,38 @@ MAX_BUNDLE_BYTES = 512 * 1024 * 1024
 OPERATIONS = frozenset({"inspect", "branch", "revise_goal", "compare", "propose", "record_evidence", "edit_demand", "restore_base"})
 FORMULATIONS = ("dcpf", "dcopf", "acpf", "socwr")
 DEFAULT_MAX_ELEMENTS = 2000
+
+
+def _tool(function):
+    """Register a tool whose failures still say what went wrong.
+
+    The SDK keeps a tool's message only for `ToolError`: anything else becomes
+    `UnexpectedToolError`, whose text is replaced with a bare "Error executing
+    tool <name>" and whose traceback is logged at ERROR. Every refusal in this
+    module is anticipated -- a bad formulation, a path outside the allowed
+    roots, `apply` asked of `study_run` -- and each one names its remedy, so
+    losing that text leaves the model with nothing to act on and the log with a
+    traceback for expected behaviour.
+
+    Only the registered callable is wrapped. The module attribute stays the
+    bare function, so a caller (and the test suite) still sees the original
+    `ValueError` or `RuntimeError`. `functools.wraps` carries the name,
+    docstring and signature the SDK derives the tool schema from.
+    """
+
+    @functools.wraps(function)
+    async def registered(*args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except ToolError:
+            raise
+        except (ValueError, RuntimeError) as exc:
+            # PathNotAllowed subclasses ValueError, so sandbox refusals keep
+            # their "outside allowed MCP roots" text too.
+            raise ToolError(str(exc)) from exc
+
+    mcp.tool()(registered)
+    return function
 
 
 def _binary() -> str:
@@ -328,13 +362,13 @@ def _deliver(ir_text: str, checked_out_path: Optional[str], overwrite: bool) -> 
 
 # ---- tools --------------------------------------------------------------------
 
-@mcp.tool()
+@_tool
 async def capabilities() -> dict[str, Any]:
     """The installed Tellegen build's formulation and operand support matrix, and its CLI path."""
     return {"binary": _binary(), "capabilities": await _call(["capabilities"])}
 
 
-@mcp.tool()
+@_tool
 async def solve(
     powerio_ir: str = "",
     path: Optional[str] = None,
@@ -370,7 +404,7 @@ async def solve(
     return {"formulation": formulation, **tail, "response": _bounded(response, max_elements)}
 
 
-@mcp.tool()
+@_tool
 async def solve_module(
     powerio_ir: str = "",
     path: Optional[str] = None,
@@ -388,7 +422,7 @@ async def solve_module(
     return {**_over_input(tail, _module_summary(solution_text)), **_deliver(solution_text, destination, overwrite)}
 
 
-@mcp.tool()
+@_tool
 async def plan(
     spec: str,
     powerio_ir: str = "",
@@ -419,19 +453,19 @@ async def plan(
     return result
 
 
-@mcp.tool()
+@_tool
 async def contract() -> dict[str, Any]:
     """The installed CLI's versioned contract: Tellegen and PowerIO versions and the generated JSON Schemas for Studies, planning, and the PowerIO IR module."""
     return await _call(["contract"])
 
 
-@mcp.tool()
+@_tool
 async def study_contract() -> dict[str, Any]:
     """Read the installed native formulation capabilities and generated Study request schemas."""
     return await _call(["contract"])
 
 
-@mcp.tool()
+@_tool
 async def study_create(
     path: str,
     request: dict[str, Any],
@@ -450,7 +484,7 @@ async def study_create(
     return _summary(await _call(["study", "create", checked], request))
 
 
-@mcp.tool()
+@_tool
 async def study_inspect(path: str, section: str = "summary", record_id: str | None = None,
                         offset: int = 0, expected_revision: int | None = None) -> dict[str, Any]:
     """Inspect a saved Study or read bounded JSON fragments of a goal, state history, experiment or evidence."""
@@ -486,7 +520,7 @@ async def study_inspect(path: str, section: str = "summary", record_id: str | No
             "offset": offset, "fragment": fragment, "next_offset": following if following < len(encoded) else None}
 
 
-@mcp.tool()
+@_tool
 async def study_run(path: str, expected_revision: int, operation: dict[str, Any]) -> dict[str, Any]:
     """Inspect, branch, revise a goal, compare, adjust demand, restore the base case, propose interventions or attach evidence using the native StudyOperation schema. Proposals stay unapplied; application requires an explicit native CLI user action."""
     if operation.get("kind") not in OPERATIONS:
@@ -496,7 +530,7 @@ async def study_run(path: str, expected_revision: int, operation: dict[str, Any]
                                {"expected_revision": expected_revision, "operation": operation}))
 
 
-@mcp.tool()
+@_tool
 async def study_import(source_path: str, path: str) -> dict[str, Any]:
     """Validate and import a portable Study bundle into a new destination without restoring approvals or executing imported instructions."""
     source = Path(_path(source_path))
@@ -508,7 +542,7 @@ async def study_import(source_path: str, path: str) -> dict[str, Any]:
     return _summary(await _call(["study", "import", checked], json.loads(data)))
 
 
-@mcp.tool()
+@_tool
 async def study_export(path: str) -> dict[str, Any]:
     """Validate the saved portable bundle and return its path and digest for transfer to another agent or browser."""
     checked = _path(path)
