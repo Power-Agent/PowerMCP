@@ -19,6 +19,8 @@
 | Grid | `Grid`                                                   |
 | Active study case | `Case 1`                                                 |
 
+> **Historical scope:** The document-control metadata and live FT results describe the original 1 September 2026 verification. Section 5 and UT-01 were refreshed on 19 September 2026 against PR #77 commit `2aeb38b`; that refresh used mocked PowerFactory objects and did not re-run the live FT scenarios.
+
 Related implementation report: [PowerMCP PowerFactory Tooling Contribution Report](POWERFACTORY_MCP_CONTRIBUTION_REPORT.md)
 
 ## 1. Test objective
@@ -98,46 +100,36 @@ All eight contributed functions and the two extended component-management behavi
 
 ## 5. Automated test results
 
-### Test command
+### Refreshed test run
+
+The automated evidence was refreshed on 19 September 2026 against PR #77 commit `2aeb38b` using Windows 11 AMD64, Python 3.12.14, and pytest 9.1.1. The four tested files were verified byte-for-byte against that commit before execution.
+
+Commands were run from the repository root:
 
 ```powershell
 & $Python -m py_compile `
-    .\Agent_DIgSILENT.py `
-    .\MCP_PowerFactory.py `
-    .\test_component_creation.py `
-    .\test_state_inspection.py
+    .\PowerFactory\Agent_DIgSILENT.py `
+    .\PowerFactory\MCP_PowerFactory.py `
+    .\PowerFactory\test_component_creation.py `
+    .\PowerFactory\test_state_inspection.py
 
-& $Python -m unittest -v `
-    test_component_creation `
-    test_state_inspection
+& $Python -m pytest `
+    .\PowerFactory\test_component_creation.py `
+    .\PowerFactory\test_state_inspection.py `
+    -v --tb=short --color=no -p no:cacheprovider
 ```
 
 ### Result
 
 ```text
-Ran 12 tests in 0.006s
-
-OK
+29 passed, 3 subtests passed in 0.87s
 ```
 
 ### Automated test coverage
 
-| Automated test | Principal behavior covered | Result |
-|---|---|---|
-| `test_add_component_bus_validation_and_rollback` | Bus creation, numeric validation, duplicate protection, grid selection, rollback | PASS |
-| `test_add_component_load_validation_and_rollback` | Load creation, bus lookup, power validation, duplicate protection, rollback | PASS |
-| `test_add_component_generator_validation_and_rollback` | Generator creation, template lookup, duplicate protection, rollback | PASS |
-| `test_add_component_line_validation_and_rollback` | Line creation, distinct buses, template lookup, duplicate protection, rollback | PASS |
-| `test_add_component_transformer_validation_and_rollback` | Transformer creation, distinct buses, template lookup, duplicate protection, rollback | PASS |
-| `test_add_component_updates_active_diagram` | Requested graphical insertion and active-diagram update | PASS |
-| `test_add_component_validation` | Supported types and type-specific parameter validation | PASS |
-| `test_delete_component_requires_confirmation_and_cleans_connections` | Preview, exact confirmation, bus protection, cubicle cleanup, absence verification | PASS |
-| `test_delete_component_updates_active_diagram` | Graphical-object deletion and application rebuild | PASS |
-| `test_update_active_diagram_uses_automatic_insertion` | Automatic insertion without K-neighbourhood relayout, desktop restoration, and rebuild | PASS |
-| `test_list_components` | Friendly category mapping, result limits, unsupported categories | PASS |
-| `test_state_and_discovery_tools` | Active state, parameter reads, raw object listing, study-case listing | PASS |
+The 29 tests cover component creation and rollback, input edge cases, case-insensitive exact-name lookup over case-sensitive PowerFactory queries, guarded deletion, cubicle protection and cleanup, graphical-update behavior, structured result serialization, cold-start reads, and state/discovery operations. Three capitalization variants are recorded as subtests.
 
-The test output intentionally contains `[ERROR]` log lines. These are expected because validation and rollback tests deliberately submit duplicates, invalid numeric values, missing buses or templates, wrong confirmation text, and simulated retained-attribute failures. The authoritative unittest outcome was `OK`.
+These tests use fake/mock PowerFactory objects; they do not replace the separate live PowerFactory FT evidence. The complete command, environment, test names, and captured output are preserved in UT-01.
 
 **Supporting evidence:** [UT-01 automated tests](evidence/UT-01_automated_tests.txt)
 

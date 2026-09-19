@@ -6,6 +6,8 @@
 **Verification completed:** 1 September 2026
 **Target system:** DIgSILENT PowerFactory 2026 SP1 with Python 3.10
 
+> **Historical scope:** The metadata and live PowerFactory results in this report describe the original 1 September 2026 verification. Section 6 and UT-01 were refreshed on 19 September 2026 against PR #77 commit `2aeb38b`; that refresh used mocked PowerFactory objects and did not re-run the live FT scenarios.
+
 ## 1. Executive summary
 
 This work extends the PowerFactory integration in PowerMCP with a coherent set of read-only discovery tools and guarded model-editing tools. The contribution enables an AI client to inspect the active PowerFactory context, discover objects, read selected parameters, create supported network components with optional single-line diagram synchronization and circuit breakers, and safely preview or perform exact-name deletion.
@@ -21,7 +23,7 @@ Eight MCP tools were created:
 7. `add_component`
 8. `delete_component`
 
-The implementation was verified with 12 automated tests and live calls from the VS Code AI chat client against a running PowerFactory project. Live verification included in-service component creation, graphical insertion and deletion, automatic circuit-breaker creation, parameter inspection, load-flow calculations, short-circuit calculations, guarded deletion, hierarchical cleanup, absence checks, and post-cleanup calculations.
+The implementation was verified with automated tests and live calls from the VS Code AI chat client against a running PowerFactory project. Live verification included in-service component creation, graphical insertion and deletion, automatic circuit-breaker creation, parameter inspection, load-flow calculations, short-circuit calculations, guarded deletion, hierarchical cleanup, absence checks, and post-cleanup calculations.
 
 The work remains local. It has not been pushed to the online PowerMCP repository.
 
@@ -282,14 +284,13 @@ These commits extend `add_component` and `delete_component`; they do not expose 
 
 ## 6. Automated verification
 
-The final verified branch passed compilation and 12 unit tests:
+The automated suite was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. Compilation succeeded and pytest reported:
 
 ```text
-Ran 12 tests in 0.006s
-OK
+29 passed, 3 subtests passed in 0.87s
 ```
 
-Tests cover:
+Representative coverage includes:
 
 1. Bus creation, validation, duplicate protection, grid selection, and rollback.
 2. Load creation, bus lookup, numeric validation, duplicate protection, and rollback.
@@ -303,8 +304,9 @@ Tests cover:
 10. Friendly component discovery.
 11. Active project, active study case, multi-parameter reading, raw object discovery, and study-case discovery.
 12. Automatic diagram insertion without K-neighbourhood relayout, desktop restoration, and rebuild.
+13. Exact, case-insensitive named-object lookup despite PowerFactory's case-sensitive query behavior.
 
-The `[ERROR]` messages printed during unit testing are expected negative-path logs. The tests deliberately trigger invalid inputs and simulated PowerFactory failures, then verify that the operation returns failure and rolls back safely. The unittest outcome remained `OK`.
+These are automated fake/mock-object tests; the live PowerFactory evidence remains in the FT records. The complete command, environment, test list, and captured output are preserved in [UT-01](evidence/UT-01_automated_tests.txt).
 
 ## 7. Live PowerFactory verification
 
@@ -532,7 +534,7 @@ The implementation and verification are complete. If the contribution is prepare
 1. Review this report.
 2. Add concise user documentation for the eight tools to the repository README or PowerFactory documentation.
 3. Rebase the local integration branch on the latest online `main` branch.
-4. Re-run the 12 tests and one live smoke test after rebasing.
+4. Re-run the current automated suite and one live smoke test after rebasing.
 5. Push only when the contribution is intentionally ready for review.
 
 ## 13. Conclusion
