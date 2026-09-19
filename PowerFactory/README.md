@@ -84,12 +84,6 @@ Output folder:  CSV results · PNG plots · optional .pfd export
 | `DIgSILENTAgent.import_project` | Imports a `.pfd` file into the running PowerFactory session. |
 | `DIgSILENTAgent.create_study_case` | Creates or reuses a study case by exact name. |
 | `DIgSILENTAgent.modify_parameter` | Sets an attribute on all objects returned by `GetCalcRelevantObjects`. |
-| `DIgSILENTAgent.get_active_project` | Returns the active project identity. |
-| `DIgSILENTAgent.get_active_study_case` | Returns the active study-case identity. |
-| `DIgSILENTAgent.get_parameters` | Reads selected object attributes. |
-| `DIgSILENTAgent.list_objects` | Lists objects using a PowerFactory query. |
-| `DIgSILENTAgent.list_components` | Lists friendly component categories. |
-| `DIgSILENTAgent.list_study_cases` | Lists available study cases and marks the active one. |
 | `DIgSILENTAgent.add_component` | Creates and verifies supported network components and their connections. |
 | `DIgSILENTAgent.delete_component` | Performs guarded exact-name component deletion and cleanup. |
 | `DIgSILENTAgent.short_circuit` | Standalone ComShc execution. |
@@ -122,9 +116,18 @@ Supported component parameters:
 | `line` | `bus1_name`, `bus2_name`, `template_line`, `length_km` | — |
 | `transformer` | `high_voltage_bus_name`, `low_voltage_bus_name`, `template_transformer` | — |
 
+Component names are limited to 40 characters, matching PowerFactory's
+`loc_name` limit.
+
+An explicit `null` for optional reactive power is treated as an omitted value
+and defaults to zero. Boolean values are not accepted for numeric parameters.
+
 Each generated connection cubicle contains one closed circuit breaker
 (`StaSwitch`, `aUsage="cbk"`, `on_off=1`). Set `update_graphics=true` to
 request insertion into the active single-line diagram.
+
+Graphical updates use the Diagram Layout Tool's automatic insertion mode so
+existing diagram objects are not re-laid out as a K-neighbourhood.
 
 If graphical insertion fails, the network component remains created and the
 tool returns `success=false` with the graphical error. Check the returned
@@ -152,13 +155,23 @@ Calling `delete_component` without confirmation returns a preview and the
 required confirmation phrase:
 
 ```text
-DELETE <component_type> <exact component name>
+DELETE <component_type> <full PowerFactory object path>
 ```
 
-Confirmed deletion removes the exact component and its generated cubicles and
-circuit breakers. A bus cannot be deleted while it still has connected
-cubicles. Set `update_graphics=true` to remove the corresponding diagram object
-and rebuild the active view.
+Name lookup is case-insensitive. The confirmation phrase contains the full
+PowerFactory object path, binds the confirmation to the previewed grid, and
+must be copied exactly from the preview.
+
+Confirmed deletion removes the exact component. A connection cubicle is removed
+only when its generated name and sole generated circuit breaker both match;
+cubicles containing relays, instrument transformers, or other objects are
+preserved. A bus cannot be deleted while it still has connected cubicles. Set
+`update_graphics=true` to remove matching diagram objects from every single-line
+diagram in the active project and rebuild the active view.
+
+The response reports component deletion separately from cleanup. In particular,
+`success=false` with `deleted=true` means the network component was removed but
+some graphical or cubicle cleanup failed; do not retry the component deletion.
 
 ---
 

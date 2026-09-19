@@ -17,7 +17,7 @@ import csv
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 
 import matplotlib
@@ -201,6 +201,101 @@ class DIgSILENTAgent:
     _shared_project: Optional[object] = None
     _create_case_request_cache: dict[str, tuple[bool, str, float]] = {}
     _create_case_request_ttl_sec: int = 3600
+    _max_loc_name_length: int = 40
+    _component_specs = {
+        "bus": {
+            "class_name": "ElmTerm",
+            "label": "Bus",
+            "required": {"nominal_voltage_kv"},
+            "optional": set(),
+            "bus_parameters": (),
+            "bus_details": (),
+            "connections": (),
+            "template": None,
+            "numbers": (
+                ("uknom", "nominal_voltage_kv", "positive", None),
+            ),
+        },
+        "load": {
+            "class_name": "ElmLod",
+            "label": "Load",
+            "required": {"bus_name", "active_power_mw"},
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": None,
+            "numbers": (
+                ("plini", "active_power_mw", "non_negative", None),
+                ("qlini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "generator": {
+            "class_name": "ElmSym",
+            "label": "Generator",
+            "required": {
+                "bus_name",
+                "template_generator",
+                "active_power_mw",
+            },
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": (
+                "template_generator",
+                "generator",
+                "synchronous-machine type",
+            ),
+            "numbers": (
+                ("pgini", "active_power_mw", "non_negative", None),
+                ("qgini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "line": {
+            "class_name": "ElmLne",
+            "label": "Line",
+            "required": {
+                "bus1_name",
+                "bus2_name",
+                "template_line",
+                "length_km",
+            },
+            "optional": set(),
+            "bus_parameters": ("bus1_name", "bus2_name"),
+            "bus_details": ("bus1", "bus2"),
+            "connections": ("bus1", "bus2"),
+            "template": ("template_line", "line", "line type"),
+            "numbers": (
+                ("dline", "length_km", "positive", None),
+            ),
+        },
+        "transformer": {
+            "class_name": "ElmTr2",
+            "label": "Transformer",
+            "required": {
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+                "template_transformer",
+            },
+            "optional": set(),
+            "bus_parameters": (
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+            ),
+            "bus_details": (
+                "high_voltage_bus",
+                "low_voltage_bus",
+            ),
+            "connections": ("bushv", "buslv"),
+            "template": (
+                "template_transformer",
+                "transformer",
+                "transformer type",
+            ),
+            "numbers": (),
+        },
+    }
 
     @classmethod
     def _apply_show_preference(cls, app, open_digsilent: bool = True) -> None:
@@ -288,22 +383,9 @@ class DIgSILENTAgent:
     def connect(self) -> tuple[bool, str]:
         log.section("STEP 1 — Connect to PowerFactory")
         try:
-            global pf
             open_digsilent = bool(getattr(self.cfg, "open_digsilent", 1))
-            if pf is None:
-                _ensure_powerfactory_on_path()
-                import powerfactory as pf
-            if DIgSILENTAgent._shared_app is None:
-                self.app = pf.GetApplicationExt()
-                if self.app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                self._apply_show_preference(self.app, open_digsilent)
-                DIgSILENTAgent._shared_app = self.app
-                log.ok("PowerFactory application obtained and shown")
-            else:
-                self.app = DIgSILENTAgent._shared_app
-                self._apply_show_preference(self.app, open_digsilent)
-                log.ok("Reusing existing PowerFactory application in this process")
+            self.app = self._get_application(open_digsilent)
+            log.ok("PowerFactory application obtained")
         except Exception as e:
             log.error(f"Cannot connect to PowerFactory: {e}")
             return False, str(e)
@@ -798,24 +880,11 @@ class DIgSILENTAgent:
         (success, message)
         """
         file_path = checked_path(file_path, purpose="file_path")
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         if not os.path.isfile(file_path):
             return False, f"File not found: {file_path}"
 
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             Pfdimport = app.GetFromStudyCase("ComPfdimport")
             if Pfdimport is None:
@@ -867,21 +936,8 @@ class DIgSILENTAgent:
         -------
         (success, message)
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             objects = app.GetCalcRelevantObjects(object_name)
             if not objects:
@@ -947,8 +1003,20 @@ class DIgSILENTAgent:
             return False, str(e)
 
     # ──────────────────────────────────────────────────────────────
-    # ADD BUS - create a verified ElmTerm in an active grid
+    # COMPONENT MANAGEMENT
     # ──────────────────────────────────────────────────────────────
+    @staticmethod
+    def _find_named_contents(parent, name: str, class_name: str):
+        requested = str(name or "").strip()
+        return [
+            obj
+            for obj in (
+                parent.GetContents(f"{requested}.{class_name}", 1) or []
+            )
+            if str(obj.GetAttribute("loc_name")).casefold()
+            == requested.casefold()
+        ]
+
     @staticmethod
     def _select_grid(app, grid_name: str):
         grids = app.GetCalcRelevantObjects("*.ElmNet") or []
@@ -989,14 +1057,11 @@ class DIgSILENTAgent:
     @staticmethod
     def _select_bus(grid, bus_name: str):
         requested = str(bus_name or "").strip()
-        buses = grid.GetContents("*.ElmTerm", 1) or []
-
-        matches = [
-            bus
-            for bus in buses
-            if str(bus.GetAttribute("loc_name")).casefold()
-            == requested.casefold()
-        ]
+        matches = DIgSILENTAgent._find_named_contents(
+            grid,
+            requested,
+            "ElmTerm",
+        )
 
         if not matches:
             raise RuntimeError(
@@ -1105,27 +1170,37 @@ class DIgSILENTAgent:
             if not matches:
                 raise RuntimeError(
                     "PowerFactory did not retain the "
-                    f"{labels[attribute]}"
+                    f"{labels.get(attribute, attribute)}"
                 )
 
         return actual
 
-    @staticmethod
+    @classmethod
     def _rollback_connected_element(
+        cls,
         grid,
         buses,
         element,
         cubicles,
         class_name: str,
         element_name: str,
-        cubicle_names,
     ) -> bool:
         if not isinstance(buses, (list, tuple)):
             buses = (buses,)
         if not isinstance(cubicles, (list, tuple)):
             cubicles = (cubicles,)
-        if not isinstance(cubicle_names, (list, tuple)):
-            cubicle_names = (cubicle_names,)
+        try:
+            retained_element_name = (
+                str(element.GetAttribute("loc_name"))
+                if element is not None
+                else element_name
+            )
+            retained_cubicle_names = tuple(
+                str(cubicle.GetAttribute("loc_name"))
+                for cubicle in cubicles
+            )
+        except Exception:
+            return False
 
         for created_object in (element, *cubicles):
             if created_object is not None:
@@ -1135,25 +1210,53 @@ class DIgSILENTAgent:
                     pass
 
         try:
-            remaining_elements = (
-                grid.GetContents(f"*.{class_name}", 1) or []
-            )
-            element_exists = any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == element_name.casefold()
-                for obj in remaining_elements
-            )
+            element_exists = bool(cls._find_named_contents(
+                grid,
+                retained_element_name,
+                class_name,
+            ))
             cubicle_exists = any(
-                any(
-                    str(obj.GetAttribute("loc_name")).casefold()
-                    == cubicle_name.casefold()
-                    for obj in (
-                        bus.GetContents("*.StaCubic", 1) or []
-                    )
+                cls._find_named_contents(
+                    bus,
+                    cubicle_name,
+                    "StaCubic",
                 )
-                for bus, cubicle_name in zip(buses, cubicle_names)
+                for bus, cubicle_name in zip(
+                    buses,
+                    retained_cubicle_names,
+                )
             )
             return not element_exists and not cubicle_exists
+        except Exception:
+            return False
+
+    @classmethod
+    def _generated_cubicle_names(cls, element_name: str, count: int):
+        return tuple(
+            (
+                f"{element_name} Cubicle"
+                + (f" {index}" if count > 1 else "")
+            )[:cls._max_loc_name_length]
+            for index in range(1, count + 1)
+        )
+
+    @classmethod
+    def _is_generated_cubicle(cls, cubicle, expected_name: str) -> bool:
+        try:
+            if (
+                str(cubicle.GetAttribute("loc_name")).strip()
+                != expected_name.strip()
+            ):
+                return False
+            contents = cubicle.GetContents("*", 0) or []
+            if len(contents) != 1:
+                return False
+            switch = contents[0]
+            return (
+                switch.GetClassName() == "StaSwitch"
+                and str(switch.GetAttribute("loc_name")) == "Switch"
+                and switch.GetAttribute("aUsage") == "cbk"
+            )
         except Exception:
             return False
 
@@ -1171,14 +1274,7 @@ class DIgSILENTAgent:
     ):
         grid = cls._select_grid(app, grid_name)
 
-        existing_elements = (
-            grid.GetContents(f"*.{class_name}", 1) or []
-        )
-        if any(
-            str(obj.GetAttribute("loc_name")).casefold()
-            == element_name.casefold()
-            for obj in existing_elements
-        ):
+        if cls._find_named_contents(grid, element_name, class_name):
             raise RuntimeError(
                 f"{element_label} already exists in the selected grid: "
                 f"{element_name}"
@@ -1203,20 +1299,16 @@ class DIgSILENTAgent:
                 "The two terminals must use different buses"
             )
 
-        cubicle_names = tuple(
-            f"{element_name} Cubicle"
-            + (f" {index}" if len(buses) > 1 else "")
-            for index in range(1, len(buses) + 1)
+        cubicle_names = cls._generated_cubicle_names(
+            element_name,
+            len(buses),
         )
 
         for bus, cubicle_name in zip(buses, cubicle_names):
-            existing_cubicles = (
-                bus.GetContents("*.StaCubic", 1) or []
-            )
-            if any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == cubicle_name.casefold()
-                for obj in existing_cubicles
+            if cls._find_named_contents(
+                bus,
+                cubicle_name,
+                "StaCubic",
             ):
                 raise RuntimeError(
                     f"Cubicle already exists on bus: {cubicle_name}"
@@ -1302,7 +1394,6 @@ class DIgSILENTAgent:
                     tuple(cubicles),
                     class_name,
                     element_name,
-                    cubicle_names,
                 )
                 message += f" | rolled_back={rolled_back}"
 
@@ -1319,24 +1410,13 @@ class DIgSILENTAgent:
         if layout is None:
             raise RuntimeError("Diagram Layout Tool is unavailable")
 
-        start_elements = app.GetFromStudyCase(
-            "Set - SGL Layout - K-neighbourhood.SetSelect"
-        )
-        if start_elements is None:
-            raise RuntimeError(
-                "Diagram Layout Tool start-element set is unavailable"
-            )
+        def restore_state():
+            desktop.Freeze()
 
-        existing_start_elements = list(start_elements.All() or [])
-
+        desktop.Unfreeze()
         try:
-            start_elements.Clear()
-            start_elements.AddRef(component)
-
-            desktop.Unfreeze()
-
             layout.iAction = 1
-            layout.insertionMode = 0
+            layout.insertionMode = 1
 
             result = layout.Execute()
             if result not in (0, None):
@@ -1344,10 +1424,14 @@ class DIgSILENTAgent:
                     f"Diagram Layout Tool failed with error code {result}"
                 )
             app.Rebuild()
-        finally:
-            start_elements.Clear()
-            for existing in existing_start_elements:
-                start_elements.AddRef(existing)
+        except BaseException:
+            try:
+                restore_state()
+            except Exception:
+                pass
+            raise
+        else:
+            restore_state()
 
         graphics = cls._find_component_graphics(app, component)
         if not graphics:
@@ -1404,48 +1488,27 @@ class DIgSILENTAgent:
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
 
-        schemas = {
-            "bus": ({"nominal_voltage_kv"}, set()),
-            "load": (
-                {"bus_name", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "generator": (
-                {"bus_name", "template_generator", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "line": (
-                {
-                    "bus1_name",
-                    "bus2_name",
-                    "template_line",
-                    "length_km",
-                },
-                set(),
-            ),
-            "transformer": (
-                {
-                    "high_voltage_bus_name",
-                    "low_voltage_bus_name",
-                    "template_transformer",
-                },
-                set(),
-            ),
-        }
-
-        if kind not in schemas:
+        spec = cls._component_specs.get(kind)
+        if spec is None:
             return (
                 False,
                 f"Unsupported component type: {component_type}. "
-                f"Supported types: {', '.join(schemas)}",
+                f"Supported types: {', '.join(cls._component_specs)}",
             )
 
         if not isinstance(parameters, dict):
             return False, "parameters must be an object"
         if not name:
             return False, "component_name must not be empty"
+        if len(name) > cls._max_loc_name_length:
+            return (
+                False,
+                "component_name must be at most "
+                f"{cls._max_loc_name_length} characters",
+            )
 
-        required, optional = schemas[kind]
+        required = spec["required"]
+        optional = spec["optional"]
         supplied = set(parameters)
         missing = sorted(required - supplied)
         unexpected = sorted(supplied - required - optional)
@@ -1464,14 +1527,26 @@ class DIgSILENTAgent:
             )
 
         def required_text(key):
-            value = str(parameters[key] or "").strip()
+            raw_value = parameters[key]
+            value = "" if raw_value is None else str(raw_value).strip()
             if not value:
                 raise RuntimeError(f"{key} must not be empty")
             return value
 
-        def number(key, *, positive=False, non_negative=False):
+        def number(
+            key,
+            *,
+            positive=False,
+            non_negative=False,
+            default=None,
+        ):
+            raw_value = parameters.get(key)
+            if raw_value is None and default is not None:
+                raw_value = default
+            if isinstance(raw_value, bool):
+                raise RuntimeError(f"{key} must be a number")
             try:
-                value = float(parameters.get(key, 0.0))
+                value = float(raw_value)
             except (TypeError, ValueError) as exc:
                 raise RuntimeError(f"{key} must be a number") from exc
             if positive and (not math.isfinite(value) or value <= 0):
@@ -1483,74 +1558,33 @@ class DIgSILENTAgent:
             return value
 
         try:
-            template = None
+            class_name = spec["class_name"]
+            label = spec["label"]
+            buses = tuple(
+                required_text(parameter)
+                for parameter in spec["bus_parameters"]
+            )
+            connections = spec["connections"]
             outserv = int(bool(out_of_service))
-
-            if kind == "bus":
-                class_name, label = "ElmTerm", "Bus"
-                buses, connections = (), ()
-                attributes = {
-                    "uknom": number("nominal_voltage_kv", positive=True),
-                    "outserv": outserv,
-                }
-            elif kind == "load":
-                class_name, label = "ElmLod", "Load"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                attributes = {
-                    "plini": number("active_power_mw", non_negative=True),
-                    "qlini": number("reactive_power_mvar"),
-                    "outserv": outserv,
-                }
-            elif kind == "generator":
-                class_name, label = "ElmSym", "Generator"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                template = (
-                    required_text("template_generator"),
-                    "generator",
-                    "synchronous-machine type",
+            attributes = {"outserv": outserv}
+            for attribute, parameter, rule, default in spec["numbers"]:
+                attributes[attribute] = number(
+                    parameter,
+                    positive=rule == "positive",
+                    non_negative=rule == "non_negative",
+                    default=default,
                 )
-                attributes = {
-                    "pgini": number("active_power_mw", non_negative=True),
-                    "qgini": number("reactive_power_mvar"),
-                    "outserv": outserv,
-                }
-            elif kind == "line":
-                class_name, label = "ElmLne", "Line"
-                buses = (
-                    required_text("bus1_name"),
-                    required_text("bus2_name"),
-                )
-                connections = ("bus1", "bus2")
-                template = (
-                    required_text("template_line"),
-                    "line",
-                    "line type",
-                )
-                attributes = {
-                    "dline": number("length_km", positive=True),
-                    "outserv": outserv,
-                }
-            else:
-                class_name, label = "ElmTr2", "Transformer"
-                buses = (
-                    required_text("high_voltage_bus_name"),
-                    required_text("low_voltage_bus_name"),
-                )
-                connections = ("bushv", "buslv")
-                template = (
-                    required_text("template_transformer"),
-                    "transformer",
-                    "transformer type",
-                )
-                attributes = {"outserv": outserv}
 
             if len(buses) == 2 and buses[0].casefold() == buses[1].casefold():
                 raise RuntimeError(f"{label} buses must be different")
 
             app = cls._get_application(open_digsilent)
             template_query = ""
-            if template:
-                template_query, template_label, type_label = template
+            if spec["template"]:
+                template_parameter, template_label, type_label = (
+                    spec["template"]
+                )
+                template_query = required_text(template_parameter)
                 attributes["typ_id"] = cls._get_template_type(
                     app,
                     template_query,
@@ -1586,52 +1620,40 @@ class DIgSILENTAgent:
 
             full_name = created.GetFullName()
             service_state = bool(int(actual["outserv"]))
-            if kind == "bus":
+            if not buses:
                 voltage = float(actual["uknom"])
                 grid_label = str(grid.GetAttribute("loc_name"))
                 log.ok(
                     f"Created bus '{name}' in grid '{grid_label}' "
                     f"at {voltage} kV"
                 )
-                details = f"nominal_voltage_kv={voltage}"
-            elif kind == "load":
-                log.ok(f"Created load '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | "
-                    f"active_power_mw={float(actual['plini'])} | "
-                    f"reactive_power_mvar={float(actual['qlini'])}"
-                )
-            elif kind == "generator":
-                log.ok(f"Created generator '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | template={template_query} | "
-                    f"active_power_mw={float(actual['pgini'])} | "
-                    f"reactive_power_mvar={float(actual['qgini'])}"
-                )
-            elif kind == "line":
+            elif len(buses) == 1:
                 log.ok(
-                    f"Created line '{name}' between "
-                    f"'{buses[0]}' and '{buses[1]}'"
-                )
-                details = (
-                    f"bus1={buses[0]} | bus2={buses[1]} | "
-                    f"template={template_query} | "
-                    f"length_km={float(actual['dline'])}"
+                    f"Created {kind} '{name}' on bus '{buses[0]}'"
                 )
             else:
                 log.ok(
-                    f"Created transformer '{name}' between "
+                    f"Created {kind} '{name}' between "
                     f"'{buses[0]}' and '{buses[1]}'"
                 )
-                details = (
-                    f"high_voltage_bus={buses[0]} | "
-                    f"low_voltage_bus={buses[1]} | "
-                    f"template={template_query}"
+
+            details = [
+                f"{detail_name}={bus_name}"
+                for detail_name, bus_name in zip(
+                    spec["bus_details"],
+                    buses,
                 )
+            ]
+            if template_query:
+                details.append(f"template={template_query}")
+            details.extend(
+                f"{parameter}={float(actual[attribute])}"
+                for attribute, parameter, _, _ in spec["numbers"]
+            )
 
             return (
                 True,
-                f"Created {kind}: {full_name} | {details} | "
+                f"Created {kind}: {full_name} | {' | '.join(details)} | "
                 f"out_of_service={service_state} | "
                 f"graphics={graphics_status}",
             )
@@ -1650,38 +1672,43 @@ class DIgSILENTAgent:
         confirmation: str = "",
         open_digsilent: bool = True,
         update_graphics: bool = False,
-    ) -> tuple[bool, str]:
+    ) -> dict[str, Any]:
         """Preview or delete one exactly named supported grid component."""
-        component_types = {
-            "bus": ("ElmTerm", ()),
-            "load": ("ElmLod", ("bus1",)),
-            "generator": ("ElmSym", ("bus1",)),
-            "line": ("ElmLne", ("bus1", "bus2")),
-            "transformer": ("ElmTr2", ("bushv", "buslv")),
-        }
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
+        deleted = False
+        graphics_status = {
+            "requested": bool(update_graphics),
+            "matched": 0,
+            "deleted": 0,
+            "remaining": [],
+            "refresh": "not_requested",
+        }
 
-        if kind not in component_types:
-            return False, (
+        def result(success: bool, message: str) -> dict[str, Any]:
+            return {
+                "success": success,
+                "deleted": deleted,
+                "graphics": graphics_status,
+                "message": message,
+            }
+
+        spec = cls._component_specs.get(kind)
+        if spec is None:
+            return result(False, (
                 "component_type must be one of: "
-                + ", ".join(component_types)
-            )
+                + ", ".join(cls._component_specs)
+            ))
         if not name:
-            return False, "component_name must not be empty"
+            return result(False, "component_name must not be empty")
 
         try:
             app = cls._get_application(open_digsilent)
             grid = cls._select_grid(app, grid_name)
-            class_name, connection_attributes = component_types[kind]
+            class_name = spec["class_name"]
+            connection_attributes = spec["connections"]
 
-            matches = [
-                obj
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-                if str(obj.GetAttribute("loc_name")) == name
-            ]
+            matches = cls._find_named_contents(grid, name, class_name)
             if not matches:
                 raise RuntimeError(
                     f"{kind.capitalize()} not found in the selected grid: "
@@ -1693,12 +1720,17 @@ class DIgSILENTAgent:
                 )
 
             component = matches[0]
+            name = str(component.GetAttribute("loc_name"))
             cubicles = []
 
             if kind == "bus":
-                connected = (
-                    component.GetContents("*.StaCubic", 1) or []
-                )
+                connected = [
+                    cubicle
+                    for cubicle in (
+                        component.GetContents("*.StaCubic", 1) or []
+                    )
+                    if cubicle.GetAttribute("obj_id") is not None
+                ]
                 if connected:
                     raise RuntimeError(
                         "Bus has connected cubicles; delete its connected "
@@ -1710,13 +1742,31 @@ class DIgSILENTAgent:
                     if cubicle is not None and cubicle not in cubicles:
                         cubicles.append(cubicle)
 
-            required = f"DELETE {kind} {name}"
+            expected_cubicle_names = cls._generated_cubicle_names(
+                name,
+                len(connection_attributes),
+            )
+            generated_cubicles = [
+                cubicle
+                for cubicle, expected_name in zip(
+                    cubicles,
+                    expected_cubicle_names,
+                )
+                if cls._is_generated_cubicle(cubicle, expected_name)
+            ]
+            preserved_cubicles = [
+                cubicle
+                for cubicle in cubicles
+                if cubicle not in generated_cubicles
+            ]
+
+            required = f"DELETE {kind} {component.GetFullName()}"
 
             if not confirmation:
-                return True, (
+                return result(True, (
                     f"Preview only: {component.GetFullName()} | "
                     f"confirmation_required={required}"
-                )
+                ))
 
             if confirmation != required:
                 raise RuntimeError(
@@ -1725,7 +1775,7 @@ class DIgSILENTAgent:
 
             cubicle_locations = [
                 (cubicle.GetParent(), cubicle.GetFullName())
-                for cubicle in cubicles
+                for cubicle in generated_cubicles
             ]
 
             graphics = (
@@ -1733,33 +1783,26 @@ class DIgSILENTAgent:
                 if update_graphics
                 else []
             )
+            graphics_status["matched"] = len(graphics)
 
             graphic_locations = [
                 (graphic.GetParent(), graphic.GetFullName())
                 for graphic in graphics
             ]
 
-            if update_graphics:
-                desktop = app.GetDesktop()
-                if desktop is None:
-                    raise RuntimeError(
-                        "No active PowerFactory graphics desktop"
-                    )
-                desktop.Unfreeze()
-
             component.Delete()
 
-            still_exists = any(
-                str(obj.GetAttribute("loc_name")) == name
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-            )
+            still_exists = bool(cls._find_named_contents(
+                grid,
+                name,
+                class_name,
+            ))
             if still_exists:
                 raise RuntimeError(
                     "PowerFactory did not delete the component; "
                     "cubicles were left unchanged"
                 )
+            deleted = True
 
             for graphic in graphics:
                 try:
@@ -1767,7 +1810,7 @@ class DIgSILENTAgent:
                 except Exception:
                     pass
 
-            for cubicle in cubicles:
+            for cubicle in generated_cubicles:
                 try:
                     cubicle.Delete()
                 except Exception:
@@ -1795,43 +1838,61 @@ class DIgSILENTAgent:
                 )
             ]
 
+            graphics_status["deleted"] = (
+                len(graphics) - len(remaining_graphics)
+            )
+            graphics_status["remaining"] = remaining_graphics
+            cleanup_errors = []
+
             if remaining_graphics:
-                raise RuntimeError(
-                    "Component deleted, but graphical objects remain: "
+                cleanup_errors.append(
+                    "graphical objects remain: "
                     + ", ".join(remaining_graphics)
                 )
 
             if remaining_cubicles:
-                raise RuntimeError(
-                    "Component deleted, but connected cubicles remain: "
+                cleanup_errors.append(
+                    "connected cubicles remain: "
                     + ", ".join(remaining_cubicles)
                 )
-
-            graphics_refresh = "not_requested"
 
             if update_graphics:
                 try:
                     app.Rebuild()
-                    graphics_refresh = "rebuilt"
+                    graphics_status["refresh"] = "rebuilt"
                 except Exception as exc:
-                    graphics_refresh = f"failed:{exc}"
+                    graphics_status["refresh"] = f"failed:{exc}"
+                    cleanup_errors.append(
+                        f"graphical refresh failed: {exc}"
+                    )
+
+            if cleanup_errors:
+                message = "Component deleted, but " + "; ".join(
+                    cleanup_errors
+                )
+                log.error(f"Component deletion incomplete: {message}")
+                return result(False, message)
 
             message = f"Deleted {kind}: {name}"
+            if preserved_cubicles:
+                message += (
+                    f" | preserved_cubicles={len(preserved_cubicles)}"
+                )
             if update_graphics:
                 message += (
-                    f" | graphics_deleted={len(graphics)}"
-                    f" | graphics_refresh={graphics_refresh}"
+                    f" | graphics_deleted={graphics_status['deleted']}"
+                    f" | graphics_refresh={graphics_status['refresh']}"
                 )
             log.ok(message)
-            return True, message
+            return result(True, message)
 
         except Exception as exc:
             message = str(exc)
             log.error(f"Component deletion failed: {message}")
-            return False, message
+            return result(False, message)
 
     # ──────────────────────────────────────────────────────────────
-    # # LOAD FLOW — run ComLdf on the currently active study case
+    # LOAD FLOW — run ComLdf on the currently active study case
     # ──────────────────────────────────────────────────────────────
 
     @classmethod
@@ -1971,20 +2032,8 @@ class DIgSILENTAgent:
         run_label: str = "run_001",
     ) -> tuple[bool, str]:
         """Run a load flow (ComLdf) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             ldf = app.GetFromStudyCase('ComLdf')
             if ldf is None:
@@ -2013,20 +2062,8 @@ class DIgSILENTAgent:
     @classmethod
     def short_circuit(cls, open_digsilent: bool = True) -> tuple[bool, str]:
         """Run a short-circuit calculation (ComShc) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             shc = app.GetFromStudyCase('ComShc')
             if shc is None:
@@ -2062,11 +2099,6 @@ class DIgSILENTAgent:
         If request_id is provided and repeated, the cached result is returned
         without executing creation/activation logic again.
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
             case_name = (case_name or "").strip()
             base_study_case = (base_study_case or "").strip() or "0. Base"
@@ -2088,15 +2120,7 @@ class DIgSILENTAgent:
                     log.warn(f"create_study_case replay ignored for request_id='{request_id}'")
                     return ok, replay_msg
 
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             if cls._shared_project_path != project_path:
                 project = app.ActivateProject(project_path)

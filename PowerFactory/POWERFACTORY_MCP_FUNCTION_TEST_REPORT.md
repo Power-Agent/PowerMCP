@@ -133,7 +133,7 @@ OK
 | `test_add_component_validation` | Supported types and type-specific parameter validation | PASS |
 | `test_delete_component_requires_confirmation_and_cleans_connections` | Preview, exact confirmation, bus protection, cubicle cleanup, absence verification | PASS |
 | `test_delete_component_updates_active_diagram` | Graphical-object deletion and application rebuild | PASS |
-| `test_update_active_diagram_uses_k_neighbourhood` | K-neighbourhood selection, execution, restoration, and rebuild | PASS |
+| `test_update_active_diagram_uses_automatic_insertion` | Automatic insertion without K-neighbourhood relayout, desktop restoration, and rebuild | PASS |
 | `test_list_components` | Friendly category mapping, result limits, unsupported categories | PASS |
 | `test_state_and_discovery_tools` | Active state, parameter reads, raw object listing, study-case listing | PASS |
 

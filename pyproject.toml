@@ -46,14 +46,13 @@ dependencies = [
     "mcp>=2,<3",
     # powerio supplies the conversion server, package model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses APIs introduced in powerio 0.9.0.
+    # PowerMCP uses the powerio 0.9 API; 0.x minor releases may break it.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
     #
-    # The ceiling is 0.10, not 1. powerio is pre-1.0, so it breaks API across
-    # minor versions: 0.11 removed `powerio.Package`, which solver_case.py
+    # Concretely: powerio 0.11 removed `powerio.Package`, which solver_case.py
     # calls, and renamed most of the `powerio.mcp.server` surface. A `<1`
-    # ceiling let a fresh install resolve to 0.11.x against 0.9-era code.
+    # ceiling let a fresh install resolve to 0.11.x against 0.9-era code (#72).
     # PowerIO 0.11 support is a code change, not a pin change — see #64.
     "powerio[mcp,matrix]>=0.9.0,<0.10",
     # CLI / installer toolkit:
@@ -141,7 +140,14 @@ packages = ["powermcp"]
 "PSSE"         = "powermcp/_servers/PSSE"
 "PSLF"         = "powermcp/_servers/PSLF"
 "PowerWorld"   = "powermcp/_servers/PowerWorld"
-"PowerFactory" = "powermcp/_servers/PowerFactory"
+"PowerFactory/Agent_DIgSILENT.py" = "powermcp/_servers/PowerFactory/Agent_DIgSILENT.py"
+"PowerFactory/IEEE39.pfd" = "powermcp/_servers/PowerFactory/IEEE39.pfd"
+"PowerFactory/INSTALL.txt" = "powermcp/_servers/PowerFactory/INSTALL.txt"
+"PowerFactory/MCP_PowerFactory.py" = "powermcp/_servers/PowerFactory/MCP_PowerFactory.py"
+"PowerFactory/README.md" = "powermcp/_servers/PowerFactory/README.md"
+"PowerFactory/functions_overview.txt" = "powermcp/_servers/PowerFactory/functions_overview.txt"
+"PowerFactory/requirements.txt" = "powermcp/_servers/PowerFactory/requirements.txt"
+"PowerFactory/simulation_config.example.json" = "powermcp/_servers/PowerFactory/simulation_config.example.json"
 "LTSpice"      = "powermcp/_servers/LTSpice"
 "PLEXOSDB"     = "powermcp/_servers/PLEXOSDB"
 
@@ -158,4 +164,6 @@ include = [
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
+    "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
+    "**/PowerFactory/test_*.py",
 ]

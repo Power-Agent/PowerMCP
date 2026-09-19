@@ -3,9 +3,7 @@ import json
 import sys
 import unittest
 from types import ModuleType
-
-
-fastmcp = ModuleType("fastmcp")
+from unittest.mock import patch
 
 
 class FakeFastMCP:
@@ -16,24 +14,55 @@ class FakeFastMCP:
         return lambda function: function
 
 
-fastmcp.FastMCP = FakeFastMCP
-sys.modules["fastmcp"] = fastmcp
-
-
 class FakeAgent:
     _shared_app = None
 
+    @classmethod
+    def _get_application(cls, open_digsilent=True):
+        if cls._shared_app is None:
+            raise RuntimeError("PowerFactory is unavailable")
+        return cls._shared_app
 
-agent_module = ModuleType("Agent_DIgSILENT")
-agent_module.SimulationConfig = object
-agent_module.DIgSILENTAgent = FakeAgent
-sys.modules["Agent_DIgSILENT"] = agent_module
 
-original_print = builtins.print
-import MCP_PowerFactory as mcp_module
-builtins.print = original_print
+mcp_module = None
+module_patch = None
 
-mcp_module._pf = lambda function, *args, **kwargs: function(*args, **kwargs)
+
+def setUpModule():
+    global mcp_module, module_patch
+
+    mcpserver = ModuleType("mcp.server.mcpserver")
+    mcpserver.MCPServer = FakeFastMCP
+
+    agent_module = ModuleType("Agent_DIgSILENT")
+    agent_module.SimulationConfig = object
+    agent_module.DIgSILENTAgent = FakeAgent
+
+    module_patch = patch.dict(
+        sys.modules,
+        {
+            "Agent_DIgSILENT": agent_module,
+            "mcp.server.mcpserver": mcpserver,
+        },
+    )
+    module_patch.start()
+
+    original_print = builtins.print
+    try:
+        import MCP_PowerFactory as module
+    finally:
+        builtins.print = original_print
+
+    module._pf = lambda function, *args, **kwargs: function(
+        *args,
+        **kwargs,
+    )
+    mcp_module = module
+
+
+def tearDownModule():
+    sys.modules.pop("MCP_PowerFactory", None)
+    module_patch.stop()
 
 
 class FakeObject:
@@ -42,8 +71,10 @@ class FakeObject:
         self.full_name = full_name
         self.attributes = {"loc_name": name}
         self.attributes.update(attributes or {})
+        self.attribute_reads = []
 
     def GetAttribute(self, attribute):
+        self.attribute_reads.append(attribute)
         return self.attributes[attribute]
 
     def GetClassName(self):
@@ -67,6 +98,7 @@ class FakeApplication:
         self.active_case = active_case
         self.study_folder = FakeFolder(study_cases)
         self.objects = objects
+        self.object_queries = []
 
     def GetActiveProject(self):
         return self.project
@@ -75,6 +107,7 @@ class FakeApplication:
         return self.active_case
 
     def GetCalcRelevantObjects(self, query):
+        self.object_queries.append(query)
         return self.objects.get(query, [])
 
     def GetProjectFolder(self, folder_name):
@@ -82,6 +115,145 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_agent_result_serializes_tuple_result(self):
+        with patch.object(
+            FakeAgent,
+            "short_circuit",
+            return_value=(True, "Short-circuit calculation OK"),
+            create=True,
+        ):
+            result = json.loads(
+                mcp_module._agent_result("short_circuit", False)
+            )
+
+        self.assertEqual(result, {
+            "success": True,
+            "message": "Short-circuit calculation OK",
+        })
+
+    def test_get_parameters_serializes_object_lists(self):
+        reference = FakeObject(
+            "Bus 02",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 02.ElmTerm",
+        )
+        bus = FakeObject(
+            "Bus 01",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 01.ElmTerm",
+            {"references": [reference]},
+        )
+        FakeAgent._shared_app = FakeApplication(
+            project=None,
+            active_case=None,
+            study_cases=[],
+            objects={"*.ElmTerm": [bus]},
+        )
+
+        result = json.loads(mcp_module.get_parameters(
+            "*.ElmTerm",
+            ["references"],
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            result["results"][0]["values"]["references"],
+            [str(reference)],
+        )
+
+    def test_read_only_tools_connect_on_cold_start(self):
+        project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
+        case = FakeObject(
+            "Case 1",
+            "IntCase",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase",
+        )
+        bus = FakeObject(
+            "Bus 01",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 01.ElmTerm",
+            {"uknom": 345.0, "outserv": 0},
+        )
+        app = FakeApplication(
+            project=project,
+            active_case=case,
+            study_cases=[case],
+            objects={"*.ElmTerm": [bus]},
+        )
+        FakeAgent._shared_app = None
+
+        with patch.object(
+            FakeAgent,
+            "_get_application",
+            return_value=app,
+        ) as get_application:
+            results = [
+                json.loads(mcp_module.get_active_project()),
+                json.loads(mcp_module.get_active_study_case()),
+                json.loads(mcp_module.get_parameters(
+                    "*.ElmTerm",
+                    ["uknom"],
+                )),
+                json.loads(mcp_module.list_objects("*.ElmTerm")),
+                json.loads(mcp_module.list_components("buses")),
+                json.loads(mcp_module.list_study_cases()),
+            ]
+
+        self.assertTrue(all(result["success"] for result in results))
+        self.assertEqual(get_application.call_count, 6)
+        for call in get_application.call_args_list:
+            self.assertFalse(call.kwargs["open_digsilent"])
+
+        with patch.object(
+            FakeAgent,
+            "_get_application",
+            side_effect=RuntimeError("PowerFactory is unavailable"),
+        ):
+            failure = json.loads(mcp_module.get_active_project())
+
+        self.assertFalse(failure["success"])
+        self.assertIn("PowerFactory is unavailable", failure["message"])
+
+        with (
+            patch.object(FakeAgent, "_get_application", return_value=app),
+            patch.object(
+                app,
+                "GetActiveProject",
+                side_effect=RuntimeError("project lookup failed"),
+            ),
+        ):
+            failure = json.loads(mcp_module.get_active_project())
+
+        self.assertFalse(failure["success"])
+        self.assertIn("project lookup failed", failure["message"])
+
+    def test_delete_component_preserves_partial_deletion_result(self):
+        expected = {
+            "success": False,
+            "deleted": True,
+            "graphics": {
+                "requested": True,
+                "matched": 1,
+                "deleted": 0,
+                "remaining": [r"\user\Grid\Load Symbol.IntGrf"],
+                "refresh": "rebuilt",
+            },
+            "message": "Component deleted, but graphical objects remain",
+        }
+
+        with (
+            patch.object(FakeAgent, "delete_component", create=True),
+            patch.object(mcp_module, "_pf", return_value=expected),
+        ):
+            result = json.loads(mcp_module.delete_component(
+                "load",
+                "Load 1",
+                confirmation="DELETE load Load 1",
+                update_graphics=True,
+            ))
+
+        self.assertEqual(result, expected)
+
     def test_state_and_discovery_tools(self):
         project = FakeObject(
             "test",
@@ -178,6 +350,12 @@ class StateInspectionTest(unittest.TestCase):
                 r"\user\test.IntPrj\Grid\Trf 02 - 30.ElmTr2",
                 {"outserv": 1},
             )
+            unsupported = FakeObject(
+                "Shunt 1",
+                "ElmShnt",
+                r"\user\test.IntPrj\Grid\Shunt 1.ElmShnt",
+                {"outserv": 0},
+            )
 
             FakeAgent._shared_app = FakeApplication(
                 project=None,
@@ -189,6 +367,7 @@ class StateInspectionTest(unittest.TestCase):
                     "*.ElmTr2": [transformer],
                     "*.ElmTr3": [],
                     "*.ElmCoup": [],
+                    "*.Elm*": [bus, line, transformer, unsupported],
                 },
             )
 
@@ -221,11 +400,24 @@ class StateInspectionTest(unittest.TestCase):
                 transformers["results"][0]["out_of_service"]
             )
 
+            transformer.attribute_reads.clear()
             limited = json.loads(
                 mcp_module.list_components("branches", max_results=1)
             )
             self.assertEqual(limited["total_count"], 2)
             self.assertEqual(limited["returned_count"], 1)
+            self.assertNotIn("outserv", transformer.attribute_reads)
+            self.assertNotIn("loc_name", transformer.attribute_reads)
+
+            all_components = json.loads(
+                mcp_module.list_components("all", max_results=10)
+            )
+            self.assertEqual(all_components["total_count"], 3)
+            self.assertEqual(all_components["queries"], ["*.Elm*"])
+            self.assertEqual(
+                FakeAgent._shared_app.object_queries[-1:],
+                ["*.Elm*"],
+            )
 
             unsupported = json.loads(
                 mcp_module.list_components("unknown")

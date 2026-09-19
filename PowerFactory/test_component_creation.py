@@ -6,6 +6,7 @@ import Agent_DIgSILENT as agent_module
 
 DEFAULTS = {
     "ElmTerm": {"uknom": 0.0, "outserv": 0},
+    "StaCubic": {"obj_id": None},
     "StaSwitch": {"aUsage": "", "on_off": 0},
     "ElmLod": {"bus1": None, "plini": 0.0, "qlini": 0.0, "outserv": 0},
     "ElmSym": {
@@ -38,6 +39,7 @@ class FakeObject:
         self.attributes = {"loc_name": name, **DEFAULTS.get(class_name, {})}
         self.objects = {}
         self.reject_attribute = None
+        self.content_queries = []
 
     def __getitem__(self, class_name):
         return self.objects.setdefault(class_name, [])
@@ -51,6 +53,11 @@ class FakeObject:
             root = root.parent
         if name != root.reject_attribute:
             self.attributes[name] = value
+            if (
+                name in {"bus1", "bus2", "bushv", "buslv"}
+                and value is not None
+            ):
+                value.SetAttribute("obj_id", self)
 
     def GetClassName(self):
         return self.class_name
@@ -63,14 +70,25 @@ class FakeObject:
         return self.parent
 
     def GetContents(self, query, recursive):
+        self.content_queries.append(query)
+        if query == "*":
+            return [
+                obj
+                for objects in self.objects.values()
+                for obj in objects
+            ]
         return list(self[query.rsplit(".", 1)[-1]])
 
     def CreateObject(self, class_name, name):
-        obj = FakeObject(self, class_name, name)
+        obj = FakeObject(self, class_name, name[:40])
         self[class_name].append(obj)
         return obj
 
     def Delete(self):
+        for name in ("bus1", "bus2", "bushv", "buslv"):
+            cubicle = self.attributes.get(name)
+            if cubicle is not None:
+                cubicle.SetAttribute("obj_id", None)
         self.parent[self.class_name].remove(self)
 
 
@@ -106,6 +124,18 @@ class FakePowerFactory:
 
 
 class ComponentCreationTest(unittest.TestCase):
+    def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
+        element = FakeObject(None, "ElmTerm", "Bus")
+        element.attributes["custom_attribute"] = 0
+        element.reject_attribute = "custom_attribute"
+
+        with self.assertRaisesRegex(RuntimeError, "custom_attribute"):
+            agent_module.DIgSILENTAgent._set_and_verify_attributes(
+                element,
+                {"custom_attribute": 1},
+                "Bus",
+            )
+
     def setUp(self):
         self.original_pf = agent_module.pf
         self.original_app = agent_module.DIgSILENTAgent._shared_app
@@ -139,7 +169,11 @@ class ComponentCreationTest(unittest.TestCase):
         return grid, buses, template_object, template_type
 
     def assert_failed(self, result, text):
-        ok, message = result
+        if isinstance(result, dict):
+            ok = result["success"]
+            message = result["message"]
+        else:
+            ok, message = result
         self.assertFalse(ok)
         self.assertIn(text, message)
         return message
@@ -202,7 +236,7 @@ class ComponentCreationTest(unittest.TestCase):
             "Graphical Failure Bus",
         )
 
-    def test_update_active_diagram_uses_k_neighbourhood(self):
+    def test_update_active_diagram_uses_automatic_insertion(self):
         app = Mock()
         desktop = Mock()
         layout = Mock()
@@ -212,33 +246,9 @@ class ComponentCreationTest(unittest.TestCase):
             "ElmTerm",
             "Graphical Test Bus",
         )
-        existing_start = FakeObject(
-            None,
-            "ElmLod",
-            "Load 03",
-        )
-
-        references = [existing_start]
-        executed_references = []
-
-        start_elements = Mock()
-        start_elements.All.side_effect = lambda: list(references)
-        start_elements.Clear.side_effect = references.clear
-        start_elements.AddRef.side_effect = references.append
-
-        def execute():
-            executed_references[:] = references
-            return 0
-
-        layout.Execute.side_effect = execute
+        layout.Execute.return_value = 0
         app.GetDesktop.return_value = desktop
-        app.GetFromStudyCase.side_effect = lambda query: {
-            "ComSgllayout": layout,
-            (
-                "Set - SGL Layout - "
-                "K-neighbourhood.SetSelect"
-            ): start_elements,
-        }[query]
+        app.GetFromStudyCase.return_value = layout
 
         with patch.object(
             agent_module.DIgSILENTAgent,
@@ -251,12 +261,49 @@ class ComponentCreationTest(unittest.TestCase):
             )
 
         desktop.Unfreeze.assert_called_once_with()
+        desktop.Freeze.assert_called_once_with()
         app.Rebuild.assert_called_once_with()
         self.assertEqual(layout.iAction, 1)
-        self.assertEqual(layout.insertionMode, 0)
-        self.assertEqual(executed_references, [component])
-        self.assertEqual(references, [existing_start])
+        self.assertEqual(layout.insertionMode, 1)
         find_graphics.assert_called_once_with(app, component)
+        app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
+        layout.GetAttribute.assert_not_called()
+
+    def test_update_active_diagram_preserves_original_error(self):
+        app = Mock()
+        desktop = Mock()
+        layout = Mock()
+        component = Mock()
+
+        app.GetDesktop.return_value = desktop
+        app.GetFromStudyCase.return_value = layout
+        layout.Execute.side_effect = RuntimeError("layout failed")
+        desktop.Freeze.side_effect = RuntimeError("restore failed")
+
+        with self.assertRaisesRegex(RuntimeError, "layout failed"):
+            agent_module.DIgSILENTAgent._update_active_diagram(
+                app,
+                component,
+            )
+
+        desktop.Unfreeze.assert_called_once_with()
+        desktop.Freeze.assert_called_once_with()
+
+    def test_update_active_diagram_requires_layout_tool(self):
+        app = Mock()
+        app.GetDesktop.return_value = Mock()
+        app.GetFromStudyCase.return_value = None
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Diagram Layout Tool is unavailable",
+        ):
+            agent_module.DIgSILENTAgent._update_active_diagram(
+                app,
+                Mock(),
+            )
+
+        app.GetFromStudyCase.assert_called_once_with("ComSgllayout")
 
     def test_add_component_bus_validation_and_rollback(self):
         grid, _, _, _ = self.network()
@@ -690,6 +737,86 @@ class ComponentCreationTest(unittest.TestCase):
             "Unsupported parameter(s)",
         )
 
+        self.assert_failed(
+            self.add_component(
+                "bus",
+                "B" * 41,
+                {"nominal_voltage_kv": 110.0},
+            ),
+            "at most 40 characters",
+        )
+
+    def test_rollback_uses_retained_cubicle_name(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        grid.reject_attribute = "plini"
+
+        self.assert_failed(
+            self.add_component(
+                "load",
+                "L" * 40,
+                {"bus_name": "Bus 01", "active_power_mw": 1.0},
+                open_digsilent=False,
+            ),
+            "rolled_back=True",
+        )
+
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertEqual(buses["Bus 01"]["StaCubic"], [])
+
+    def test_add_component_parameter_edge_cases(self):
+        template = ("G 01.ElmSym", "ElmSym", "TypSym")
+        grid, buses, _, _ = self.network(("0",), template)
+
+        ok, message = self.add_component(
+            "load",
+            "Null Reactive Load",
+            {
+                "bus_name": 0,
+                "active_power_mw": 1.0,
+                "reactive_power_mvar": None,
+            },
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+        self.assertEqual(grid["ElmLod"][0].GetAttribute("qlini"), 0.0)
+        self.assertIs(
+            grid["ElmLod"][0].GetAttribute("bus1"),
+            buses["0"]["StaCubic"][0],
+        )
+
+        ok, message = self.add_component(
+            "generator",
+            "Null Reactive Generator",
+            {
+                "bus_name": "0",
+                "template_generator": template[0],
+                "active_power_mw": 1.0,
+                "reactive_power_mvar": None,
+            },
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+        self.assertEqual(grid["ElmSym"][-1].GetAttribute("qgini"), 0.0)
+
+        self.assert_failed(
+            self.add_component(
+                "load",
+                "Boolean Load",
+                {"bus_name": "0", "active_power_mw": True},
+                open_digsilent=False,
+            ),
+            "active_power_mw must be a number",
+        )
+        self.assert_failed(
+            self.add_component(
+                "bus",
+                "Boolean Bus",
+                {"nominal_voltage_kv": True},
+                open_digsilent=False,
+            ),
+            "nominal_voltage_kv must be a number",
+        )
+
     def test_delete_component_updates_active_diagram(self):
         grid, buses, _, _ = self.network(("Bus 01",))
 
@@ -705,14 +832,6 @@ class ComponentCreationTest(unittest.TestCase):
         )
         self.assertTrue(ok, message)
 
-        class FakeDesktop:
-            def __init__(self):
-                self.unfrozen = False
-
-            def Unfreeze(self):
-                self.unfrozen = True
-
-        desktop = FakeDesktop()
         app = agent_module.DIgSILENTAgent._shared_app
 
         project = app.GetActiveProject()
@@ -739,9 +858,8 @@ class ComponentCreationTest(unittest.TestCase):
             patch.object(
                 app,
                 "GetDesktop",
-                return_value=desktop,
                 create=True,
-            ),
+            ) as get_desktop,
             patch.object(
                 app,
                 "Rebuild",
@@ -749,20 +867,22 @@ class ComponentCreationTest(unittest.TestCase):
                 create=True,
             ) as rebuild,
         ):
-            ok, message = agent_module.DIgSILENTAgent.delete_component(
+            result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Graphical Test Load",
-                confirmation="DELETE load Graphical Test Load",
+                confirmation=f"DELETE load {created_load.GetFullName()}",
                 open_digsilent=False,
                 update_graphics=True,
             )
 
-        self.assertTrue(ok, message)
-        self.assertTrue(desktop.unfrozen)
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        get_desktop.assert_not_called()
         rebuild.assert_called_once_with()
 
-        self.assertIn("graphics_deleted=1", message)
-        self.assertIn("graphics_refresh=rebuilt", message)
+        self.assertEqual(result["graphics"]["deleted"], 1)
+        self.assertEqual(result["graphics"]["remaining"], [])
+        self.assertEqual(result["graphics"]["refresh"], "rebuilt")
 
         self.assertNotIn(target_graphic, diagram["IntGrf"])
         self.assertIn(unrelated_graphic, diagram["IntGrf"])
@@ -793,27 +913,39 @@ class ComponentCreationTest(unittest.TestCase):
             patch.object(
                 app,
                 "GetDesktop",
-                return_value=desktop,
                 create=True,
-            ),
+            ) as get_desktop,
             patch.object(
                 stubborn_graphic,
                 "Delete",
                 side_effect=RuntimeError("graphical deletion blocked"),
             ),
+            patch.object(
+                app,
+                "Rebuild",
+                return_value=None,
+                create=True,
+            ) as rebuild,
         ):
-            ok, message = agent_module.DIgSILENTAgent.delete_component(
+            result = agent_module.DIgSILENTAgent.delete_component(
                 "load",
                 "Stubborn Graphical Test Load",
-                confirmation=(
-                    "DELETE load Stubborn Graphical Test Load"
-                ),
+                confirmation=f"DELETE load {stubborn_load.GetFullName()}",
                 open_digsilent=False,
                 update_graphics=True,
             )
 
-        self.assertFalse(ok)
-        self.assertIn("graphical objects remain", message)
+        self.assertFalse(result["success"])
+        self.assertTrue(result["deleted"])
+        self.assertIn("graphical objects remain", result["message"])
+        self.assertEqual(result["graphics"]["deleted"], 0)
+        self.assertEqual(
+            result["graphics"]["remaining"],
+            [stubborn_graphic.GetFullName()],
+        )
+        self.assertEqual(result["graphics"]["refresh"], "rebuilt")
+        get_desktop.assert_not_called()
+        rebuild.assert_called_once_with()
         self.assertEqual(grid["ElmLod"], [])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])
         self.assertIn(stubborn_graphic, diagram["IntGrf"])
@@ -837,15 +969,17 @@ class ComponentCreationTest(unittest.TestCase):
         )
         self.assertTrue(ok, message)
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "line",
             "MCP Test Line",
             open_digsilent=False,
         )
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertFalse(result["deleted"])
         self.assertIn(
-            "confirmation_required=DELETE line MCP Test Line",
-            message,
+            f"confirmation_required=DELETE line "
+            f"{grid['ElmLne'][-1].GetFullName()}",
+            result["message"],
         )
         self.assertEqual(len(grid["ElmLne"]), 2)
 
@@ -863,31 +997,182 @@ class ComponentCreationTest(unittest.TestCase):
             agent_module.DIgSILENTAgent.delete_component(
                 "bus",
                 "Bus 01",
-                confirmation="DELETE bus Bus 01",
+                confirmation=(
+                    f"DELETE bus {buses['Bus 01'].GetFullName()}"
+                ),
                 open_digsilent=False,
             ),
             "connected cubicles",
         )
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "line",
             "MCP Test Line",
-            confirmation="DELETE line MCP Test Line",
+            confirmation=(
+                f"DELETE line {grid['ElmLne'][-1].GetFullName()}"
+            ),
             open_digsilent=False,
         )
-        self.assertTrue(ok, message)
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
         self.assertEqual(grid["ElmLne"], [template_line])
         self.assertEqual(buses["Bus 01"]["StaCubic"], [])
         self.assertEqual(buses["Bus 02"]["StaCubic"], [])
 
-        ok, message = agent_module.DIgSILENTAgent.delete_component(
+        result = agent_module.DIgSILENTAgent.delete_component(
             "bus",
             "Bus 01",
-            confirmation="DELETE bus Bus 01",
+            confirmation=f"DELETE bus {buses['Bus 01'].GetFullName()}",
+            open_digsilent=False,
+        )
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(buses["Bus 01"], grid["ElmTerm"])
+
+    def test_delete_component_preserves_protected_cubicle(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        cubicle = buses["Bus 01"].CreateObject(
+            "StaCubic",
+            "Protected Load Cubicle",
+        )
+        switch = cubicle.CreateObject("StaSwitch", "Switch")
+        switch.SetAttribute("aUsage", "cbk")
+        switch.SetAttribute("on_off", 1)
+        relay = cubicle.CreateObject("ElmRelay", "Distance Relay")
+        load = grid.CreateObject("ElmLod", "Protected Load")
+        load.SetAttribute("bus1", cubicle)
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Protected Load",
+            confirmation=f"DELETE load {load.GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertIn("preserved_cubicles=1", result["message"])
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertIn(cubicle, buses["Bus 01"]["StaCubic"])
+        self.assertIn(switch, cubicle["StaSwitch"])
+        self.assertIn(relay, cubicle["ElmRelay"])
+
+    def test_delete_component_cleans_trimmed_generated_cubicle_name(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        name = "Diagram Automatic Insert Test 20260909B"
+
+        ok, message = self.add_component(
+            "load",
+            name,
+            {"bus_name": "Bus 01", "active_power_mw": 1.0},
             open_digsilent=False,
         )
         self.assertTrue(ok, message)
-        self.assertNotIn(buses["Bus 01"], grid["ElmTerm"])
+
+        cubicle = buses["Bus 01"]["StaCubic"][0]
+        cubicle.SetAttribute(
+            "loc_name",
+            str(cubicle.GetAttribute("loc_name")).rstrip(),
+        )
+        load = grid["ElmLod"][0]
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            name,
+            confirmation=f"DELETE load {load.GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn("preserved_cubicles", result["message"])
+        self.assertEqual(buses["Bus 01"]["StaCubic"], [])
+
+    def test_delete_bus_ignores_orphan_cubicle(self):
+        grid, buses, _, _ = self.network(("Bus 01",))
+        bus = buses["Bus 01"]
+        bus.CreateObject("StaCubic", "Orphan Cubicle")
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus 01",
+            confirmation=f"DELETE bus {bus.GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(bus, grid["ElmTerm"])
+
+    def test_delete_component_uses_retained_name_casing(self):
+        grid, buses, _, _ = self.network(("bus a",))
+
+        preview = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus A",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(preview["success"], preview["message"])
+        self.assertIn(
+            f"confirmation_required=DELETE bus "
+            f"{buses['bus a'].GetFullName()}",
+            preview["message"],
+        )
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "bus",
+            "Bus A",
+            confirmation=f"DELETE bus {buses['bus a'].GetFullName()}",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(buses["bus a"], grid["ElmTerm"])
+        self.assertIn("Bus A.ElmTerm", grid.content_queries)
+        self.assertNotIn("*.ElmTerm", grid.content_queries)
+
+    def test_delete_confirmation_is_bound_to_grid(self):
+        grid_a = FakeObject(None, "ElmNet", "Grid A")
+        grid_b = FakeObject(None, "ElmNet", "Grid B")
+        load_a = grid_a.CreateObject("ElmLod", "Shared Load")
+        load_b = grid_b.CreateObject("ElmLod", "Shared Load")
+        self.use_application(FakeApplication([grid_a, grid_b]))
+
+        preview = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid A",
+            open_digsilent=False,
+        )
+        token_a = f"DELETE load {load_a.GetFullName()}"
+        self.assertIn(
+            f"confirmation_required={token_a}",
+            preview["message"],
+        )
+
+        wrong_grid = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid B",
+            confirmation=token_a,
+            open_digsilent=False,
+        )
+        self.assertFalse(wrong_grid["success"])
+        self.assertFalse(wrong_grid["deleted"])
+        self.assertIn(load_b, grid_b["ElmLod"])
+
+        result = agent_module.DIgSILENTAgent.delete_component(
+            "load",
+            "Shared Load",
+            grid_name="Grid B",
+            confirmation=f"DELETE load {load_b.GetFullName()}",
+            open_digsilent=False,
+        )
+        self.assertTrue(result["success"], result["message"])
+        self.assertTrue(result["deleted"])
+        self.assertNotIn(load_b, grid_b["ElmLod"])
 
 
 if __name__ == "__main__":

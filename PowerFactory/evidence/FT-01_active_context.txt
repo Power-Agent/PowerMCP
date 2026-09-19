@@ -21,11 +21,11 @@ Raw response:
 3. get_active_project
 Input: {}
 Raw response:
-{"result":"{\n  \"success\": true,\n  \"name\": \"test\",\n  \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\"\n}"}
+{"result":"{\n  \"success\": true,\n  \"name\": \"test\",\n  \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\"\n}"}
 
 4. get_active_study_case
 Input: {}
 Raw response:
-{"result":"{\n  \"success\": true,\n  \"name\": \"Case 1\",\n  \"full_name\": \"\\\\ic84yhos.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\"\n}"}
+{"result":"{\n  \"success\": true,\n  \"name\": \"Case 1\",\n  \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\"\n}"}
 
 Conclusion: PASS

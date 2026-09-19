@@ -26,7 +26,7 @@ Tests recorded as passing:
 7. test_add_component_validation
 8. test_delete_component_requires_confirmation_and_cleans_connections
 9. test_delete_component_updates_active_diagram
-10. test_update_active_diagram_uses_k_neighbourhood
+10. test_update_active_diagram_uses_automatic_insertion
 11. test_list_components
 12. test_state_and_discovery_tools
 
@@ -39,4 +39,4 @@ OK
 
 Interpretation:
 
-The [ERROR] lines printed during the test run were expected negative-path logs from deliberate duplicate, invalid-input, missing-object, confirmation, and rollback tests. The unittest runner's final result was OK. The line-creation test additionally verified one closed `StaSwitch` circuit breaker (`aUsage="cbk"`, `on_off=1`) in each endpoint cubicle. The graphical tests verified requested insertion, K-neighbourhood layout execution, graphical-object deletion, and application rebuild.
+The [ERROR] lines printed during the test run were expected negative-path logs from deliberate duplicate, invalid-input, missing-object, confirmation, and rollback tests. The unittest runner's final result was OK. The line-creation test additionally verified one closed `StaSwitch` circuit breaker (`aUsage="cbk"`, `on_off=1`) in each endpoint cubicle. The graphical tests verified requested automatic insertion without K-neighbourhood relayout, graphical-object deletion, and application rebuild.
