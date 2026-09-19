@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "powermcp"
-version = "0.3.1"
+version = "0.4.0"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -44,17 +44,12 @@ dependencies = [
     # imports the latter, so the floor tracks that, not just powerio's own
     # [mcp] extra requirement (mcp>=2,<3).
     "mcp>=2,<3",
-    # powerio supplies the conversion server, package model, native solver
+    # powerio supplies the conversion server, module model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses the powerio 0.9 API; 0.x minor releases may break it.
+    # PowerMCP uses the typed PowerIO 0.11.2 module APIs.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    #
-    # Concretely: powerio 0.11 removed `powerio.Package`, which solver_case.py
-    # calls, and renamed most of the `powerio.mcp.server` surface. A `<1`
-    # ceiling let a fresh install resolve to 0.11.x against 0.9-era code (#72).
-    # PowerIO 0.11 support is a code change, not a pin change — see #64.
-    "powerio[mcp,matrix]>=0.9.0,<0.10",
+    "powerio[mcp,matrix]>=0.11.2,<0.12",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
@@ -166,4 +161,5 @@ exclude = [
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
     "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
     "**/PowerFactory/test_*.py",
+    ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",
 ]

@@ -45,7 +45,7 @@ Then run it through PowerMCP as usual:
 powermcp run plexosdb
 ```
 
-Verify both real installs and the resulting tool surface with `uv`:
+Verify both real installs and the resulting registered tools with `uv`:
 
 ```bash
 uv pip install --prerelease=allow plexosdb "r2x-plexos>=0.3.0" "r2x-plexos-to-sienna>=0.1.0" "r2x-sienna>=0.4.0"
@@ -57,7 +57,7 @@ python -c "from plexosdb_mcp.server import build_mcp_server; print(build_mcp_ser
 
 `PLEXOSDB/plexosdb_mcp/main.py` deliberately lives in a package also named
 `plexosdb_mcp` — the same import name as the upstream distribution it re-exports
-(mirroring `powerio/powerio_mcp.py`'s re-export of the `powerio` package). Because of
+(this package re-exports that distribution's server object under the same name). Because of
 that shared name, the registry launches it as a **script** (`entry_rel=
 "plexosdb_mcp/main.py"`), not as a module. Module-style launch would add `PLEXOSDB/`
 itself to `sys.path`, and `import plexosdb_mcp` inside `main.py` would then resolve to

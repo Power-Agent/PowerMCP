@@ -19,7 +19,7 @@ Agent_DIgSILENT.py    ← Simulation engine
 DIgSILENT PowerFactory 
         │
         ▼
-Output folder:  CSV results · PNG plots · optional .pfd export
+Output folder:  CSV results, PNG plots, optional .pfd export
 ```
 
 ## Features

@@ -1,17 +1,17 @@
-"""`powermcp doctor` — check each tool's dependencies and configured paths.
+"""`powermcp doctor`: check each tool's dependencies and configured paths.
 
 Dependency checks use ``importlib.util.find_spec`` (which locates a module
 without executing it) so the doctor never triggers a vendor engine's import-time
 side effects (e.g. PSS/E ``psseinit``) and never crashes on a broken DLL. Vendor
 engines that load from a captured directory (PSS/E, PSLF, PowerFactory) are not
-import-probed at all — they are reported via their configured paths and verified
+import-probed at all; they are reported via their configured paths and verified
 for real only at runtime.
 
 Two checks are shared rather than per tool and print below the table: the MCP
 SDK, which every server imports, and the configured roots used by servers that
 call the shared filesystem policy. Both matter here because a server that fails
-at launch gives its MCP client nothing at all — the diagnosis only exists in a
-stderr the client does not read — so the doctor has to catch it beforehand.
+at launch gives its MCP client nothing at all, and the diagnosis only exists
+in a stderr the client does not read, so the doctor has to catch it beforehand.
 """
 
 from __future__ import annotations
@@ -35,7 +35,12 @@ from rich.table import Table
 from . import config as cfg
 from .registry import Tool, all_tools, get_tool, install_hint
 from .runner import probe_installed
-from .sandbox import ALLOWED_ROOTS_ENV, LEGACY_ROOT_ENVS, allowed_roots
+from .sandbox import (
+    ALLOWED_ROOTS_ENV,
+    LEGACY_ROOT_ENVS,
+    PathNotAllowed,
+    allowed_roots,
+)
 
 # Engines imported from a captured local dir (not from PyPI). Do not import-probe.
 _PATH_LOADED = {"psse", "pslf", "powerfactory"}
@@ -86,7 +91,7 @@ def _version_status(probe: str) -> tuple[str, str] | None:
 
     ``find_spec`` answers "importable", which is a different question from "new
     enough": an old powerio imports fine and then refuses tools this repo calls.
-    ``None`` when there is nothing to say — no declared floor, or it is met, or
+    ``None`` when there is nothing to say: no declared floor, or it is met, or
     the installed version does not parse and there is nothing to compare.
     """
     req = _declared_requirement(probe)
@@ -105,14 +110,14 @@ def _version_status(probe: str) -> tuple[str, str] | None:
 def _dep_status(t: Tool) -> tuple[str, str]:
     """Return (style, message) for the dependency column."""
     if t.windows_only and sys.platform != "win32":
-        return "dim", "skipped — Windows-only"
+        return "dim", "skipped, Windows-only"
     if t.name == "surge" and not _surge_supported():
-        return "yellow", f"needs Python 3.12–3.14 (have {sys.version_info.major}.{sys.version_info.minor})"
+        return "yellow", f"needs Python 3.12 to 3.14 (have {sys.version_info.major}.{sys.version_info.minor})"
     if t.name in _PATH_LOADED:
-        return "cyan", "vendor engine — loaded from configured path"
+        return "cyan", "vendor engine, loaded from a configured path"
     if t.probe:
         if not probe_installed(t.probe):
-            return "red", f"missing — {install_hint(t.extra)}"
+            return "red", f"missing; {install_hint(t.extra)}"
         stale = _version_status(t.probe)
         if stale:
             return stale
@@ -122,7 +127,7 @@ def _dep_status(t: Tool) -> tuple[str, str]:
 def _sdk_status() -> tuple[str, str]:
     """Every server imports the MCP SDK, so no tool row would report it."""
     if not probe_installed("mcp"):
-        return "red", f"mcp: missing — every server needs it; {install_hint(None)}"
+        return "red", f"mcp: missing; every server needs it; {install_hint(None)}"
     stale = _version_status("mcp")
     if stale:
         return stale
@@ -132,14 +137,24 @@ def _sdk_status() -> tuple[str, str]:
 def _containment_status() -> tuple[str, str]:
     """Whether model supplied paths are confined, and to what.
 
-    Unset is a legitimate configuration, not a fault, but it is worth stating:
-    a tool argument is whatever the model was persuaded to ask for.
+    With no root variable set, powerio confines paths to the directory the
+    process started in. That default is narrower than an operator usually
+    intends and it is not written down anywhere, so report it as a setting to
+    make rather than as a policy already chosen.
     """
-    roots = allowed_roots()
-    if not roots:
+    configured = any(
+        os.environ.get(name) for name in (ALLOWED_ROOTS_ENV, *LEGACY_ROOT_ENVS)
+    )
+    try:
+        roots = allowed_roots()
+    except PathNotAllowed as exc:
+        return "red", f"MCP paths: {exc}"
+    listed = ", ".join(str(r) for r in roots)
+    if not configured:
         return "yellow", (
-            f"MCP paths: unconfined — set {ALLOWED_ROOTS_ENV} to an "
-            f"{os.pathsep!r} separated list of directories to confine reads and writes"
+            f"MCP paths: confined to the startup directory {listed}; set "
+            f"{ALLOWED_ROOTS_ENV} to an {os.pathsep!r} separated list of "
+            "directories to name the roots explicitly"
         )
     missing = [str(r) for r in roots if not r.is_dir()]
     if len(missing) == len(roots):
@@ -149,12 +164,10 @@ def _containment_status() -> tuple[str, str]:
         )
     if missing:
         return "yellow", (
-            "MCP paths: confined to "
-            + ", ".join(str(r) for r in roots)
-            + "; these do not exist and admit nothing: "
-            + ", ".join(missing)
+            f"MCP paths: confined to {listed}; these do not exist and admit "
+            "nothing: " + ", ".join(missing)
         )
-    return "green", "MCP paths: confined to " + ", ".join(str(r) for r in roots)
+    return "green", f"MCP paths: confined to {listed}"
 
 
 def _path_status(t: Tool) -> tuple[str, str]:
@@ -162,7 +175,7 @@ def _path_status(t: Tool) -> tuple[str, str]:
     required = [ck for ck in t.config_keys if ck.required]
     optional = [ck for ck in t.config_keys if not ck.required]
     if not t.config_keys:
-        return "dim", "—"
+        return "dim", "-"
     missing = []
     for ck in required:
         try:
@@ -195,7 +208,7 @@ def run_doctor(tool: str | None = None) -> None:
             f"[{path_style}]{escape(path_msg)}[/]",
         )
         if t.external_solvers and not (t.windows_only and sys.platform != "win32"):
-            solver_notes.append(f"  • {t.display}: needs {', '.join(t.external_solvers)} available at runtime")
+            solver_notes.append(f"  - {t.display}: needs {', '.join(t.external_solvers)} available at runtime")
 
     console = Console()
     console.print(table)

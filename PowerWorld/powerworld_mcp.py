@@ -28,7 +28,7 @@ def _get_saw(case_path: Optional[str] = None) -> SAW:
         try:
             _saw = SAW(case_path, UIVisible=True)
         except PowerWorldError as e:
-            print(f"Error initializing SAW: {str(e)}")
+            print(f"Error initializing SAW: {str(e)}", file=sys.stderr)
             raise
     elif _saw is None:
         raise ValueError("No case is currently open. Please open a case first.")
@@ -219,7 +219,7 @@ def analyze_contingencies(option: str = "N-1", validate: bool = False) -> Dict[s
                     saw.LoadState()
                     
                 except Exception as e:
-                    print(f"Error analyzing contingency: {str(e)}")
+                    print(f"Error analyzing contingency: {str(e)}", file=sys.stderr)
                     continue
             
             return {

@@ -1,6 +1,6 @@
 # Core MCP dependencies
 mcp>=2,<3
-powerio[mcp,matrix]>=0.9.0,<0.10
+powerio[mcp,matrix]>=0.11.2,<0.12
 
 # Circuit simulation dependencies
 matplotlib

@@ -2,9 +2,39 @@
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
+from pathlib import Path
 
 import pytest
+
+from powermcp.sandbox import ALLOWED_ROOTS_ENV, LEGACY_ROOT_ENVS
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mcp_allowed_roots(tmp_path_factory):
+    """Name the roots the suite writes to, for the whole session.
+
+    powerio confines MCP paths to the directory the process started in when no
+    root variable names one, so a test writing under pytest's temporary tree is
+    refused unless that tree is named. Roots are resolved through ``realpath``
+    because the policy compares real targets, and ``/tmp`` is a symlink on
+    macOS while ``%TEMP%`` can carry a short name on Windows. A test that sets
+    its own roots overrides this with ``monkeypatch``.
+    """
+    roots = [
+        str(REPO_ROOT),
+        os.path.realpath(tmp_path_factory.getbasetemp()),
+        os.path.realpath(tempfile.gettempdir()),
+    ]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(ALLOWED_ROOTS_ENV, os.pathsep.join(dict.fromkeys(roots)))
+        for name in LEGACY_ROOT_ENVS:
+            patch.delenv(name, raising=False)
+        yield
 
 
 @pytest.fixture()
