@@ -2078,6 +2078,62 @@ class DIgSILENTAgent:
             log.error(f"Short-circuit calculation failed: {e}")
             return False, str(e)
 
+    @classmethod
+    def run_contingency_analysis(
+        cls,
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Execute the active study case's configured ComSimoutage command."""
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            command = app.GetFromStudyCase("ComSimoutage")
+            if command is None:
+                raise RuntimeError(
+                    "ComSimoutage is unavailable in the active study case; "
+                    "check the PowerFactory licence and command configuration"
+                )
+
+            error_code = command.Execute()
+            if error_code not in (0, None):
+                raise RuntimeError(
+                    f"ComSimoutage returned error code {error_code}"
+                )
+
+            def attribute(name: str):
+                try:
+                    value = command.GetAttribute(name)
+                    if value is not None:
+                        return value
+                except Exception:
+                    pass
+                return getattr(command, name, None)
+
+            return {
+                "success": True,
+                "message": "Configured contingency analysis completed",
+                "execution_code": error_code,
+                "command": {
+                    "name": attribute("loc_name"),
+                    "class_name": command.GetClassName(),
+                    "full_name": command.GetFullName(),
+                },
+                "settings": {
+                    "data_source": attribute("dat_src"),
+                    "calculation_method": attribute("iopt_method"),
+                    "linear_method": attribute("iopt_Linear"),
+                    "dynamic_contingencies": attribute("dynamicCase"),
+                },
+            }
+        except Exception as e:
+            log.error(f"Contingency analysis failed: {e}")
+            return {
+                "success": False,
+                "message": str(e),
+            }
+
     # ──────────────────────────────────────────────────────────────
     # CREATE STUDY CASE — create/activate case without simulation
     # ──────────────────────────────────────────────────────────────

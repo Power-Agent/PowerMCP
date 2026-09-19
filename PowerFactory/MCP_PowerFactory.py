@@ -776,6 +776,33 @@ def run_short_circuit(open_digsilent: bool = True) -> str:
 
 
 @mcp.tool()
+def run_contingency_analysis(open_digsilent: bool = True) -> str:
+    """
+    Execute the configured Contingency Analysis command (ComSimoutage).
+
+    The tool uses the active study case's existing contingency definitions,
+    filters, calculation method, and result selection without changing them.
+    Configure those settings in PowerFactory before calling this tool.
+
+    Parameters
+    ----------
+    open_digsilent : bool
+        If True (default), requests the PowerFactory GUI window via app.Show().
+
+    Returns
+    -------
+    str
+        JSON containing the command identity, selected settings, native
+        execution code, and completion status.
+    """
+    return _agent_result(
+        "run_contingency_analysis",
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
 def run_simulation(
     cfg_path: str = "",
     export_pfd: bool = False,
