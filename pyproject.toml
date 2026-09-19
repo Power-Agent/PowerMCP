@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "powermcp"
-version = "0.3.0"
+version = "0.3.1"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -49,7 +49,13 @@ dependencies = [
     # PowerMCP uses APIs introduced in powerio 0.9.0.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.9.0,<1",
+    #
+    # The ceiling is 0.10, not 1. powerio is pre-1.0, so it breaks API across
+    # minor versions: 0.11 removed `powerio.Package`, which solver_case.py
+    # calls, and renamed most of the `powerio.mcp.server` surface. A `<1`
+    # ceiling let a fresh install resolve to 0.11.x against 0.9-era code.
+    # PowerIO 0.11 support is a code change, not a pin change — see #64.
+    "powerio[mcp,matrix]>=0.9.0,<0.10",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.

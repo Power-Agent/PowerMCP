@@ -1,3 +1,3 @@
 surge-py>=0.1.5
 mcp>=2,<3
-powerio[mcp,matrix]>=0.9.0,<1
+powerio[mcp,matrix]>=0.9.0,<0.10
