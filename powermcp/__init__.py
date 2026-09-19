@@ -7,6 +7,6 @@ PowerIO) and add tools via extras (`pip install powermcp[psse]`). Configure and 
 clients with the `powermcp` CLI (`powermcp install`).
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = ["__version__"]
