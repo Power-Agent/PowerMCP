@@ -1,42 +1,72 @@
 Evidence ID: UT-01
 Title: Compilation and automated tests
-Date: 1 September 2026
-Classification: Compiled evidence record
+Captured: 19 September 2026, 10:38 UTC
+Classification: Captured automated transcript
+Source revision: PR #77 commit 2aeb38b020f99594609342c8714739bf9697638e
+Environment: Windows 11 AMD64; Python 3.12.14; pytest 9.1.1
 
-Command:
+Provenance:
 
-& $Python -m py_compile `
-    .\Agent_DIgSILENT.py `
-    .\MCP_PowerFactory.py `
-    .\test_component_creation.py `
-    .\test_state_inspection.py
+The four files exercised by this run were verified byte-for-byte against PR #77
+commit 2aeb38b020f99594609342c8714739bf9697638e before execution. Absolute
+machine-local executable and repository paths are represented below as <python>
+and <repository>; the remainder of the captured output is unchanged.
 
-& $Python -m unittest -v `
-    test_component_creation `
-    test_state_inspection
+This automated run uses the repository's fake/mock PowerFactory objects. It did
+not start or connect to a live PowerFactory application. Live PowerFactory
+results remain recorded separately as FT evidence.
 
-Tests recorded as passing:
+Compilation command (run from <repository>):
 
-1. test_add_component_bus_validation_and_rollback
-2. test_add_component_generator_validation_and_rollback
-3. test_add_component_line_validation_and_rollback
-4. test_add_component_load_validation_and_rollback
-5. test_add_component_transformer_validation_and_rollback
-6. test_add_component_updates_active_diagram
-7. test_add_component_validation
-8. test_delete_component_requires_confirmation_and_cleans_connections
-9. test_delete_component_updates_active_diagram
-10. test_update_active_diagram_uses_automatic_insertion
-11. test_list_components
-12. test_state_and_discovery_tools
+<python> -m py_compile PowerFactory/Agent_DIgSILENT.py PowerFactory/MCP_PowerFactory.py PowerFactory/test_component_creation.py PowerFactory/test_state_inspection.py
 
-Final unittest result:
+Compilation exit code: 0
+Compilation output: <none>
 
-----------------------------------------------------------------------
-Ran 12 tests in 0.006s
+Test command (run from <repository>):
 
-OK
+<python> -m pytest PowerFactory/test_component_creation.py PowerFactory/test_state_inspection.py -v --tb=short --color=no -p no:cacheprovider
 
-Interpretation:
+Captured test output:
 
-The [ERROR] lines printed during the test run were expected negative-path logs from deliberate duplicate, invalid-input, missing-object, confirmation, and rollback tests. The unittest runner's final result was OK. The line-creation test additionally verified one closed `StaSwitch` circuit breaker (`aUsage="cbk"`, `on_off=1`) in each endpoint cubicle. The graphical tests verified requested automatic insertion without K-neighbourhood relayout, graphical-object deletion, and application rebuild.
+============================= test session starts =============================
+platform win32 -- Python 3.12.14, pytest-9.1.1, pluggy-1.6.0 -- <python>
+rootdir: <repository>
+configfile: pyproject.toml
+plugins: anyio-4.15.1, typeguard-4.6.0
+collecting ... collected 29 items
+
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_bus_validation_and_rollback PASSED [  3%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_generator_validation_and_rollback PASSED [  6%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_line_validation_and_rollback PASSED [ 10%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_load_validation_and_rollback PASSED [ 13%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_parameter_edge_cases PASSED [ 17%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_rejects_differently_cased_duplicate PASSED [ 20%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_selects_differently_cased_bus PASSED [ 24%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_transformer_validation_and_rollback PASSED [ 27%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_updates_active_diagram PASSED [ 31%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_add_component_validation PASSED [ 34%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_bus_ignores_orphan_cubicle PASSED [ 37%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_component_cleans_trimmed_generated_cubicle_name PASSED [ 41%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_component_preserves_protected_cubicle PASSED [ 44%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_component_requires_confirmation_and_cleans_connections PASSED [ 48%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_component_updates_active_diagram PASSED [ 51%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_component_uses_retained_name_casing PASSED [ 55%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_delete_confirmation_is_bound_to_grid PASSED [ 58%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_named_lookup_handles_case_sensitive_powerfactory_queries
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_named_lookup_handles_case_sensitive_powerfactory_queries PASSED [ 62%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_rollback_uses_retained_cubicle_name PASSED [ 65%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_set_and_verify_attributes_falls_back_to_attribute_name PASSED [ 68%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_update_active_diagram_preserves_original_error PASSED [ 72%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_update_active_diagram_requires_layout_tool PASSED [ 75%]
+PowerFactory/test_component_creation.py::ComponentCreationTest::test_update_active_diagram_uses_automatic_insertion PASSED [ 79%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_agent_result_serializes_tuple_result PASSED [ 82%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_delete_component_preserves_partial_deletion_result PASSED [ 86%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_get_parameters_serializes_object_lists PASSED [ 89%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_list_components PASSED [ 93%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_read_only_tools_connect_on_cold_start PASSED [ 96%]
+PowerFactory/test_state_inspection.py::StateInspectionTest::test_state_and_discovery_tools PASSED [100%]
+
+==================== 29 passed, 3 subtests passed in 0.87s ====================
+
+Test exit code: 0

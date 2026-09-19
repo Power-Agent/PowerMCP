@@ -1008,10 +1008,11 @@ class DIgSILENTAgent:
     @staticmethod
     def _find_named_contents(parent, name: str, class_name: str):
         requested = str(name or "").strip()
+        # GetContents name patterns are case-sensitive; match names in Python.
         return [
             obj
             for obj in (
-                parent.GetContents(f"{requested}.{class_name}", 1) or []
+                parent.GetContents(f"*.{class_name}", 1) or []
             )
             if str(obj.GetAttribute("loc_name")).casefold()
             == requested.casefold()

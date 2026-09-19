@@ -1,4 +1,5 @@
 import unittest
+from fnmatch import fnmatchcase
 from unittest.mock import Mock, patch
 
 import Agent_DIgSILENT as agent_module
@@ -77,7 +78,11 @@ class FakeObject:
                 for objects in self.objects.values()
                 for obj in objects
             ]
-        return list(self[query.rsplit(".", 1)[-1]])
+        name_pattern, class_name = query.rsplit(".", 1)
+        return [
+            obj for obj in self[class_name]
+            if fnmatchcase(str(obj.GetAttribute("loc_name")), name_pattern)
+        ]
 
     def CreateObject(self, class_name, name):
         obj = FakeObject(self, class_name, name[:40])
@@ -1104,6 +1109,48 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertTrue(result["deleted"])
         self.assertNotIn(bus, grid["ElmTerm"])
 
+    def test_named_lookup_handles_case_sensitive_powerfactory_queries(self):
+        grid, buses, _, _ = self.network(("Bus 01", "Bus 02"))
+        bus = buses["Bus 01"]
+        self.assertEqual(grid.GetContents("Bus 01.ElmTerm", 1), [bus])
+        self.assertEqual(grid.GetContents("Missing.ElmTerm", 1), [])
+        self.assertEqual(
+            grid.GetContents("*.ElmTerm", 1), list(buses.values())
+        )
+        for name in ("bus 01", "BUS 01", "bUS 01"):
+            with self.subTest(name=name):
+                self.assertEqual(grid.GetContents(f"{name}.ElmTerm", 1), [])
+                self.assertEqual(
+                    agent_module.DIgSILENTAgent._find_named_contents(
+                        grid, name, "ElmTerm"
+                    ),
+                    [bus],
+                )
+
+    def test_add_component_rejects_differently_cased_duplicate(self):
+        grid, buses, _, _ = self.network(("bus a",))
+        self.assert_failed(
+            self.add_component(
+                "bus", "Bus A", {"nominal_voltage_kv": 110.0},
+                open_digsilent=False,
+            ),
+            "already exists",
+        )
+        self.assertEqual(grid["ElmTerm"], [buses["bus a"]])
+
+    def test_add_component_selects_differently_cased_bus(self):
+        grid, buses, _, _ = self.network(("Bus 01", "Bus 02"))
+        ok, message = self.add_component(
+            "load", "Case Test Load",
+            {"bus_name": "bus 01", "active_power_mw": 1.0},
+            open_digsilent=False,
+        )
+        self.assertTrue(ok, message)
+        self.assertIs(
+            grid["ElmLod"][0].GetAttribute("bus1").GetParent(),
+            buses["Bus 01"],
+        )
+
     def test_delete_component_uses_retained_name_casing(self):
         grid, buses, _, _ = self.network(("bus a",))
 
@@ -1130,8 +1177,7 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertTrue(result["success"], result["message"])
         self.assertTrue(result["deleted"])
         self.assertNotIn(buses["bus a"], grid["ElmTerm"])
-        self.assertIn("Bus A.ElmTerm", grid.content_queries)
-        self.assertNotIn("*.ElmTerm", grid.content_queries)
+        self.assertIn("*.ElmTerm", grid.content_queries)
 
     def test_delete_confirmation_is_bound_to_grid(self):
         grid_a = FakeObject(None, "ElmNet", "Grid A")
