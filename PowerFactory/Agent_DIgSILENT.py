@@ -2097,10 +2097,7 @@ class DIgSILENTAgent:
                 )
 
             error_code = command.Execute()
-            if error_code not in (0, None):
-                raise RuntimeError(
-                    f"ComSimoutage returned error code {error_code}"
-                )
+            succeeded = error_code in (0, None)
 
             def attribute(name: str):
                 try:
@@ -2111,9 +2108,21 @@ class DIgSILENTAgent:
                     pass
                 return getattr(command, name, None)
 
+            if not succeeded:
+                log.error(
+                    "Contingency analysis failed: ComSimoutage returned "
+                    f"error code {error_code}"
+                )
+
+            # A native failure keeps the same shape as a success, so a caller
+            # can read execution_code instead of parsing the message text.
             return {
-                "success": True,
-                "message": "Configured contingency analysis completed",
+                "success": succeeded,
+                "message": (
+                    "Configured contingency analysis completed"
+                    if succeeded
+                    else f"ComSimoutage returned error code {error_code}"
+                ),
                 "execution_code": error_code,
                 "command": {
                     "name": attribute("loc_name"),
