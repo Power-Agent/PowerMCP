@@ -6,6 +6,8 @@ import pandapower as pp
 from mcp.server.mcpserver import MCPServer as FastMCP
 import logging
 
+from audit import audit_network as _audit_network
+
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
@@ -41,6 +43,22 @@ def _get_network() -> pp.pandapowerNet:
     if _current_net is None:
         raise RuntimeError("No pandapower network is currently loaded. Please create or load a network first.")
     return _current_net
+
+
+@mcp.tool()
+def audit_network() -> Dict[str, Any]:
+    """Run a deterministic structural audit on the current network.
+
+    The audit does not run a power flow and does not mutate the network.
+    Returns a stable, JSON-serializable report of structural findings.
+    """
+    logger.info("Auditing current pandapower network")
+    try:
+        return _audit_network(_get_network()).to_dict()
+    except RuntimeError as re:
+        return {"status": "error", "message": str(re)}
+    except Exception as e:
+        return {"status": "error", "message": f"Network audit failed: {str(e)}"}
 
 
 @mcp.tool()
