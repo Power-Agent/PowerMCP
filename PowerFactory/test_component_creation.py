@@ -129,6 +129,70 @@ class FakePowerFactory:
 
 
 class ComponentCreationTest(unittest.TestCase):
+    def test_run_contingency_analysis_uses_configured_command(self):
+        command = Mock()
+        command.Execute.return_value = 0
+        command.GetClassName.return_value = "ComSimoutage"
+        command.GetFullName.return_value = (
+            r"\user\test\Case 1\Contingency Analysis.ComSimoutage"
+        )
+        values = {
+            "loc_name": "Contingency Analysis",
+            "dat_src": "MAN",
+            "iopt_method": 1,
+            "iopt_Linear": 0,
+            "dynamicCase": 0,
+        }
+        command.GetAttribute.side_effect = values.__getitem__
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertEqual(result["execution_code"], 0)
+        self.assertEqual(result["command"]["class_name"], "ComSimoutage")
+        command.Execute.assert_called_once_with()
+        command.HasResults.assert_not_called()
+        command.SetAttribute.assert_not_called()
+        app.GetFromStudyCase.assert_called_once_with("ComSimoutage")
+
+    def test_run_contingency_analysis_reports_native_failure_code(self):
+        command = Mock()
+        command.Execute.return_value = 2
+        command.GetClassName.return_value = "ComSimoutage"
+        command.GetFullName.return_value = (
+            r"\user\test\Case 1\Contingency Analysis.ComSimoutage"
+        )
+        values = {
+            "loc_name": "Contingency Analysis",
+            "dat_src": "MAN",
+            "iopt_method": 1,
+            "iopt_Linear": 0,
+            "dynamicCase": 0,
+        }
+        command.GetAttribute.side_effect = values.__getitem__
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["execution_code"], 2)
+        self.assertIn("2", result["message"])
+        self.assertEqual(result["command"]["class_name"], "ComSimoutage")
+        self.assertEqual(result["settings"]["calculation_method"], 1)
+
     def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
         element = FakeObject(None, "ElmTerm", "Bus")
         element.attributes["custom_attribute"] = 0

@@ -3,7 +3,7 @@ import json
 import sys
 import unittest
 from types import ModuleType
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 class FakeFastMCP:
@@ -115,6 +115,98 @@ class FakeApplication:
 
 
 class StateInspectionTest(unittest.TestCase):
+    def test_contingency_listing_and_bounded_results(self):
+        target = FakeObject(
+            "Line 01 - 02",
+            "ElmLne",
+            r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
+        )
+        outage = FakeObject(
+            "Outage Event",
+            "EvtOutage",
+            r"\user\test.IntPrj\Fault Cases\N-1.IntEvt\Outage Event.EvtOutage",
+            {
+                "p_target": target,
+                "time": 0.0,
+                "i_what": 0,
+                "outserv": 0,
+            },
+        )
+        fault_case = FakeObject(
+            "N-1",
+            "IntEvt",
+            r"\user\test.IntPrj\Fault Cases\N-1.IntEvt",
+        )
+        fault_case.GetContents = lambda pattern, recursive: [outage]
+
+        project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
+        project.GetContents = lambda pattern, recursive: [fault_case]
+        study_case = FakeObject(
+            "Case 1",
+            "IntCase",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase",
+        )
+
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase\Contingency Analysis AC.ElmRes",
+        )
+        released = []
+        result_file.Load = lambda: None
+        result_file.Release = lambda: released.append(True)
+        result_file.GetNumberOfRows = lambda: 2
+        result_file.GetNumberOfColumns = lambda: 3
+        result_file.GetVariable = lambda column: f"variable:{column}"
+        result_file.GetValue = lambda row, column: (
+            (3, 1e35) if (row, column) == (0, 1)
+            else (0, row * 10 + column)
+        )
+
+        command = Mock()
+        command.GetAttribute.return_value = result_file
+        app = Mock()
+        app.GetActiveProject.return_value = project
+        app.GetActiveStudyCase.return_value = study_case
+        app.GetFromStudyCase.return_value = command
+        FakeAgent._shared_app = app
+
+        contingencies = json.loads(mcp_module.list_contingencies())
+        self.assertTrue(contingencies["success"])
+        self.assertEqual(contingencies["total_count"], 1)
+        self.assertEqual(
+            contingencies["results"][0]["outages"][0]["target"]["name"],
+            "Line 01 - 02",
+        )
+        self.assertNotIn(
+            "full_name",
+            contingencies["results"][0]["outages"][0],
+        )
+
+        results = json.loads(mcp_module.get_contingency_results(
+            "ac",
+            max_rows=1,
+            max_columns=2,
+        ))
+        self.assertTrue(results["success"])
+        self.assertEqual(results["total_rows"], 2)
+        self.assertEqual(results["total_columns"], 3)
+        self.assertEqual(results["rows"], [{
+            "index": 0,
+            "values": [0, None],
+            "errors": [{"column": 1, "code": 3}],
+        }])
+        self.assertNotIn("element", results["columns"][0])
+        self.assertTrue(results["truncated"])
+        self.assertEqual(released, [True])
+
+        oversized = json.loads(mcp_module.get_contingency_results(
+            "ac",
+            max_rows=1000,
+            max_columns=1000,
+        ))
+        self.assertFalse(oversized["success"])
+
     def test_agent_result_serializes_tuple_result(self):
         with patch.object(
             FakeAgent,

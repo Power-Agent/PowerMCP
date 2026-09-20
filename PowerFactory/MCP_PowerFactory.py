@@ -18,6 +18,7 @@ Tools
   list_objects          List objects using a PowerFactory object query.
   list_components       List objects using friendly equipment categories.
   list_study_cases      List study cases and identify the active case.
+  list_contingencies    List available fault cases and outage events.
   import_project        Import a .pfd file and activate it in PowerFactory.
   create_study_case     Create/activate a study case by name (no simulation run).
   modify_parameter      Modify an object attribute by object query + variable name.
@@ -25,6 +26,8 @@ Tools
   delete_component      Preview or delete an exactly named grid component.
   run_loadflow          Run a load flow calculation (ComLdf) on the active study case.
   run_short_circuit     Run a short-circuit calculation (ComShc) on the active study case.
+  run_contingency_analysis Execute the configured ComSimoutage command.
+  get_contingency_results Read a bounded slice of AC or DC contingency results.
   run_simulation        Run the full pipeline from simulation_config.json.
   run_custom_case       Run a one-off case with parameters supplied at call-time.
   read_results_csv      Read the latest (or a specific) RMS results CSV.
@@ -202,6 +205,25 @@ def _to_json(obj: Any) -> str:
         return str(o)
 
     return json.dumps(_clean(obj), indent=2, ensure_ascii=False)
+
+
+def _object_summary(obj):
+    """Return the stable identity fields shared by PowerFactory objects."""
+    if obj is None:
+        return None
+    return {
+        "name": obj.GetAttribute("loc_name"),
+        "class_name": obj.GetClassName(),
+        "full_name": obj.GetFullName(),
+    }
+
+
+def _attribute(obj, name, default=None):
+    """Read an optional PowerFactory attribute."""
+    try:
+        return obj.GetAttribute(name)
+    except Exception:
+        return default
 
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
@@ -515,6 +537,58 @@ def list_study_cases(max_results: int = 100) -> str:
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
+
+@mcp.tool()
+def list_contingencies(max_results: int = 100) -> str:
+    """List available static contingency fault cases and outage events."""
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        project = app.GetActiveProject()
+        if project is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory project is active",
+            }
+
+        fault_cases = []
+        for fault_case in project.GetContents("*.IntEvt", 1) or []:
+            outages = fault_case.GetContents("*.EvtOutage", 1) or []
+            if outages:
+                fault_cases.append((fault_case, outages))
+
+        limit = max(1, min(int(max_results), 1000))
+        results = []
+        for fault_case, outages in fault_cases[:limit]:
+            results.append({
+                **_object_summary(fault_case),
+                "outage_count": len(outages),
+                "outages": [
+                    {
+                        "name": _attribute(outage, "loc_name"),
+                        "class_name": outage.GetClassName(),
+                        "target": _object_summary(
+                            _attribute(outage, "p_target")
+                        ),
+                        "time_s": _attribute(outage, "time"),
+                        "action": _attribute(outage, "i_what"),
+                        "disabled": bool(
+                            _attribute(outage, "outserv", 0)
+                        ),
+                    }
+                    for outage in outages
+                ],
+            })
+
+        return {
+            "success": True,
+            "total_count": len(fault_cases),
+            "returned_count": len(results),
+            "results": results,
+        }
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
 @mcp.tool()
 def import_project(
     file_path: str = "",
@@ -773,6 +847,164 @@ def run_short_circuit(open_digsilent: bool = True) -> str:
         JSON string with success flag and message.
     """
     return _agent_result("short_circuit", open_digsilent)
+
+
+@mcp.tool()
+def run_contingency_analysis(open_digsilent: bool = True) -> str:
+    """
+    Execute the configured Contingency Analysis command (ComSimoutage).
+
+    The tool uses the active study case's existing contingency definitions,
+    filters, calculation method, and result selection without changing them.
+    Configure those settings in PowerFactory before calling this tool.
+
+    Parameters
+    ----------
+    open_digsilent : bool
+        If True (default), requests the PowerFactory GUI window via app.Show().
+
+    Returns
+    -------
+    str
+        JSON containing the command identity, selected settings, native
+        execution code, and completion status.
+    """
+    return _agent_result(
+        "run_contingency_analysis",
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def get_contingency_results(
+    calculation_method: str = "ac",
+    max_rows: int = 100,
+    max_columns: int = 100,
+) -> str:
+    """Read a bounded rectangular slice of a contingency result file.
+
+    ``calculation_method`` selects the configured AC or DC ``ElmRes`` object.
+    The result is deliberately bounded because contingency files are sparse
+    and can contain hundreds of columns even for a single fault case.
+    """
+    method = calculation_method.strip().lower()
+    if method not in {"ac", "dc"}:
+        return _to_json({
+            "success": False,
+            "message": "calculation_method must be 'ac' or 'dc'",
+        })
+
+    try:
+        row_limit = int(max_rows)
+        column_limit = int(max_columns)
+    except (TypeError, ValueError):
+        return _to_json({
+            "success": False,
+            "message": "max_rows and max_columns must be integers",
+        })
+    if row_limit < 1 or column_limit < 1:
+        return _to_json({
+            "success": False,
+            "message": "max_rows and max_columns must be positive",
+        })
+    if row_limit * column_limit > 20_000:
+        return _to_json({
+            "success": False,
+            "message": "Requested result slice exceeds 20,000 cells",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {
+                "success": False,
+                "message": "ComSimoutage is unavailable",
+            }
+
+        reference_name = "p_rescnt" if method == "ac" else "p_rescntDC"
+        result_file = command.GetAttribute(reference_name)
+        if result_file is None:
+            return {
+                "success": False,
+                "message": f"{method.upper()} contingency result file is not configured",
+            }
+
+        load_code = result_file.Load()
+        if load_code not in (0, None):
+            return {
+                "success": False,
+                "message": f"ElmRes.Load returned error code {load_code}",
+            }
+
+        try:
+            total_rows = result_file.GetNumberOfRows()
+            total_columns = result_file.GetNumberOfColumns()
+            returned_rows = min(total_rows, row_limit)
+            returned_columns = min(total_columns, column_limit)
+
+            columns = [
+                {
+                    "index": column,
+                    "variable": result_file.GetVariable(column),
+                }
+                for column in range(returned_columns)
+            ]
+
+            rows = []
+            for row in range(returned_rows):
+                values = []
+                errors = []
+                for column in range(returned_columns):
+                    raw_value = result_file.GetValue(row, column)
+                    if (
+                        isinstance(raw_value, (list, tuple))
+                        and len(raw_value) == 2
+                        and isinstance(raw_value[0], int)
+                    ):
+                        error_code, value = raw_value
+                    else:
+                        error_code, value = 0, raw_value
+
+                    values.append(value if error_code == 0 else None)
+                    if error_code != 0:
+                        errors.append({
+                            "column": column,
+                            "code": error_code,
+                        })
+
+                item = {"index": row, "values": values}
+                if errors:
+                    item["errors"] = errors
+                rows.append(item)
+
+            return {
+                "success": True,
+                "calculation_method": method,
+                "result_file": _object_summary(result_file),
+                "total_rows": total_rows,
+                "total_columns": total_columns,
+                "returned_rows": returned_rows,
+                "returned_columns": returned_columns,
+                "truncated": (
+                    returned_rows < total_rows
+                    or returned_columns < total_columns
+                ),
+                "columns": columns,
+                "rows": rows,
+            }
+        finally:
+            result_file.Release()
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 
 @mcp.tool()
