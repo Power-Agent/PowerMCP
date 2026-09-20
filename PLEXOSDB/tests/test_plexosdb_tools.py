@@ -14,12 +14,26 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 MAIN_PATH = Path(__file__).resolve().parent.parent / "plexosdb_mcp" / "main.py"
+
+# These tools run every path argument through ``checked_path`` before reaching
+# the mocked r2x pipeline, so the fixture paths must sit inside an allowed root
+# (conftest.py names the temporary tree). An input path need only be contained,
+# but ``output_path`` is resolved against the roots and so needs a real parent
+# directory -- hence a genuine temporary tree rather than a notional one. No
+# file is created or read: r2x is mocked and never writes.
+FIXTURE_DIR = Path(tempfile.mkdtemp(prefix="plexosdb-mcp-")).resolve()
+(FIXTURE_DIR / "out").mkdir()
+STUDY_XML = str(FIXTURE_DIR / "study.xml")
+STUDY_A_XML = str(FIXTURE_DIR / "a.xml")
+STUDY_B_XML = str(FIXTURE_DIR / "b.xml")
+OUTPUT_JSON = str(FIXTURE_DIR / "out" / "system.json")
 
 
 class FakeMCP:
@@ -117,9 +131,9 @@ class TestTranslateToSienna(unittest.TestCase):
             r2x_sienna.SiennaExporter.from_context.return_value = fake_export_ctx
 
             result = self.mod.translate_to_sienna(
-                xml_path="/data/study.xml",
+                xml_path=STUDY_XML,
                 model_name="Base",
-                output_path="/tmp/out/system.json",
+                output_path=OUTPUT_JSON,
             )
 
         r2x_plexos_to_sienna.plexos_to_sienna.assert_called_once_with(
@@ -127,7 +141,7 @@ class TestTranslateToSienna(unittest.TestCase):
         )
         fake_export_ctx.run.assert_called_once()
         self.assertTrue(result["ok"])
-        self.assertEqual(result["output_path"], "/tmp/out/system.json")
+        self.assertEqual(result["output_path"], OUTPUT_JSON)
         self.assertEqual(result["component_types"], {"Bus": 2, "Generator": 1})
 
 
@@ -161,9 +175,9 @@ class TestCompareSolutions(unittest.TestCase):
             r2x_plexos.PLEXOSParser.from_context.return_value = fake_parser_instance
 
             result = self.mod.compare_solutions(
-                xml_path_a="/data/study.xml",
+                xml_path_a=STUDY_XML,
                 model_name_a="Base",
-                xml_path_b="/data/study.xml",
+                xml_path_b=STUDY_XML,
                 model_name_b="Base",
             )
 
@@ -202,9 +216,9 @@ class TestCompareSolutions(unittest.TestCase):
             r2x_plexos.PLEXOSParser.from_context.return_value = fake_parser_instance
 
             result = self.mod.compare_solutions(
-                xml_path_a="/data/a.xml",
+                xml_path_a=STUDY_A_XML,
                 model_name_a="Base",
-                xml_path_b="/data/b.xml",
+                xml_path_b=STUDY_B_XML,
                 model_name_b="Base",
             )
 

@@ -25,6 +25,25 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+import pytest
+
+# ``surge-py`` is an optional extra whose marker is ``>=3.12,<3.15`` and which
+# ships no sdist, so it is legitimately absent on Python 3.10. Skipping rather
+# than failing keeps that honest.
+#
+# The ``__file__`` check is the load-bearing part. This repository has its own
+# ``surge/`` directory, which resolves as a namespace package when the library
+# is missing -- so a bare ``import surge`` appears to succeed and only fails
+# later inside a tool, as "module 'surge' has no attribute 'load_builtin_case'".
+# A real installed package sets ``__file__``; a namespace package leaves it None.
+surge = pytest.importorskip("surge")
+if getattr(surge, "__file__", None) is None:
+    pytest.skip(
+        "surge-py is not installed; this repository's own surge/ directory is "
+        "shadowing it as a namespace package",
+        allow_module_level=True,
+    )
+
 MCP_PATH = Path(__file__).resolve().parent / "surge_mcp.py"
 
 

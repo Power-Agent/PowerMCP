@@ -160,7 +160,7 @@ include = [
 ]
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
-    "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
+    "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests", "PSCAD/conftest.py",
     "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
     "**/PowerFactory/test_*.py",
     ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",

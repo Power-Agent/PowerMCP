@@ -29,11 +29,17 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e . pytest
+          # [pscad] is psutil, which PSCAD/tests import. [surge] is surge-py,
+          # whose marker (>=3.12,<3.15) leaves it uninstalled on 3.10, where the
+          # suite skips itself.
+          python -m pip install -e ".[pscad,surge]" pytest
 
       - name: Run tests
         run: >-
           python -m pytest tests/
           PowerFactory/test_state_inspection.py
           PowerFactory/test_component_creation.py
-          HOPE/tests -q
+          HOPE/tests
+          PSCAD/tests
+          PLEXOSDB/tests
+          surge/test_integration.py -q
