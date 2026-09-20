@@ -35,4 +35,5 @@ jobs:
         run: >-
           python -m pytest tests/
           PowerFactory/test_state_inspection.py
-          PowerFactory/test_component_creation.py -q
+          PowerFactory/test_component_creation.py
+          HOPE/tests -q
