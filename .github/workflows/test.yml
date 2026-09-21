@@ -26,14 +26,36 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install native solvers
+      # surge-py binds the solver C libraries directly. Ipopt is packaged;
+      # HiGHS is not in Ubuntu at all, and the Linux highspy wheel links it
+      # statically into _core.so rather than shipping libhighs.so, so it has
+      # to be built. The build is cached, so only the first run pays for it.
+      - name: Install Ipopt
         run: |
-          # surge-py binds the solver C libraries directly: HiGHS for the LP
-          # and MILP work, Ipopt for the AC-OPF NLP. The highspy and cyipopt
-          # wheels do not ship libhighs.so or libipopt.so, so without these
-          # packages the two surge OPF groups skip themselves.
           sudo apt-get update
-          sudo apt-get install -y libhighs-dev coinor-libipopt-dev
+          sudo apt-get install -y coinor-libipopt-dev
+
+      - name: Cache HiGHS
+        id: highs
+        uses: actions/cache@v4
+        with:
+          path: ~/highs
+          key: highs-v1.11.0-${{ runner.os }}
+
+      - name: Build HiGHS
+        if: steps.highs.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v1.11.0 https://github.com/ERGO-Code/HiGHS /tmp/HiGHS
+          cmake -S /tmp/HiGHS -B /tmp/HiGHS/build \
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=$HOME/highs
+          cmake --build /tmp/HiGHS/build -j"$(nproc)"
+          cmake --install /tmp/HiGHS/build
+
+      - name: Name the solver libraries
+        run: |
+          echo "HIGHS_LIB_DIR=$HOME/highs/lib" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$HOME/highs/lib:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
       - name: Install package
         run: |
