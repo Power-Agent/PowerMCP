@@ -50,15 +50,17 @@ def audit_network() -> Dict[str, Any]:
     """Run a deterministic structural audit on the current network.
 
     The audit does not run a power flow and does not mutate the network.
-    Returns a stable, JSON-serializable report of structural findings.
+    Returns a stable, JSON-serializable report. ``status`` is one of
+    ``ok``, ``warning``, ``error``, or ``failed``: the first three describe
+    a completed audit, while ``failed`` means the audit could not run.
     """
     logger.info("Auditing current pandapower network")
     try:
         return _audit_network(_get_network()).to_dict()
     except RuntimeError as re:
-        return {"status": "error", "message": str(re)}
+        return {"status": "failed", "message": str(re)}
     except Exception as e:
-        return {"status": "error", "message": f"Network audit failed: {str(e)}"}
+        return {"status": "failed", "message": f"Network audit failed: {str(e)}"}
 
 
 @mcp.tool()
