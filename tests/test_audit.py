@@ -110,3 +110,17 @@ def test_audit_report_is_json_serializable_and_stable():
     assert first == second
     assert isinstance(first["findings"], list)
     assert all(set(f) == {"severity", "code", "message", "element", "index"} for f in first["findings"])
+
+
+def test_server_audit_reports_failed_when_no_network_is_loaded():
+    from pandapower import panda_mcp
+
+    original = panda_mcp._current_net
+    panda_mcp._current_net = None
+    try:
+        result = panda_mcp.audit_network()
+    finally:
+        panda_mcp._current_net = original
+
+    assert result["status"] == "failed"
+    assert "No pandapower network is currently loaded" in result["message"]
