@@ -138,9 +138,18 @@ class StateInspectionTest(unittest.TestCase):
             r"\user\test.IntPrj\Fault Cases\N-1.IntEvt",
         )
         fault_case.GetContents = lambda pattern, recursive: [outage]
+        empty_fault_case = FakeObject(
+            "Empty",
+            "IntEvt",
+            r"\user\test.IntPrj\Fault Cases\Empty.IntEvt",
+        )
+        empty_fault_case.GetContents = lambda pattern, recursive: []
 
         project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
-        project.GetContents = lambda pattern, recursive: [fault_case]
+        project.GetContents = lambda pattern, recursive: [
+            empty_fault_case,
+            fault_case,
+        ]
         study_case = FakeObject(
             "Case 1",
             "IntCase",
@@ -173,7 +182,7 @@ class StateInspectionTest(unittest.TestCase):
 
         contingencies = json.loads(mcp_module.list_contingencies())
         self.assertTrue(contingencies["success"])
-        self.assertEqual(contingencies["total_count"], 1)
+        self.assertEqual(contingencies["total_count"], 2)
         self.assertEqual(
             contingencies["results"][0]["outages"][0]["target"]["name"],
             "Line 01 - 02",
@@ -182,6 +191,14 @@ class StateInspectionTest(unittest.TestCase):
             "full_name",
             contingencies["results"][0]["outages"][0],
         )
+        self.assertEqual(
+            contingencies["results"][1]["outage_count"],
+            0,
+        )
+        self.assertEqual(contingencies["results"][1]["outages"], [])
+
+        limited = json.loads(mcp_module.list_contingencies(max_results=1))
+        self.assertEqual(limited["results"][0]["name"], "N-1")
 
         results = json.loads(mcp_module.get_contingency_results(
             "ac",
