@@ -864,23 +864,55 @@ def _check_export_and_graph() -> Tuple[int, int]:
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# Native solver availability
+# ---------------------------------------------------------------------------
+
+# surge-py binds the solver C libraries directly: HiGHS (libhighs.so) for LP
+# and MILP work, Ipopt (libipopt.so) for the AC-OPF NLP. Installing the
+# `highspy` wheel does NOT provide libhighs, so a pip-only environment -- a
+# stock GitHub runner, for one -- has neither. The OPF groups then report a
+# solver error for every sub-check, which says nothing about this repository's
+# code, so they are skipped rather than failed.
+#
+# There is no availability API on surge, so each probe runs the cheapest real
+# call of its kind once and caches the answer.
+
+_SOLVER_CACHE: Dict[str, bool] = {}
+
+
+def _solver_available(kind: str) -> bool:
+    """Whether a native ``lp`` or ``nlp`` solver can actually be reached."""
+    if kind not in _SOLVER_CACHE:
+        tool = {"lp": "run_dc_opf", "nlp": "run_ac_opf"}[kind]
+        try:
+            mod = _load_mcp_module()
+            _call(mod, "load_builtin_case", name="case118")
+            _SOLVER_CACHE[kind] = _call(mod, tool)["status"] == "success"
+        except Exception:
+            _SOLVER_CACHE[kind] = False
+    return _SOLVER_CACHE[kind]
+
+
+# ---------------------------------------------------------------------------
 # Checks table, shared by pytest and the standalone runner
 # ---------------------------------------------------------------------------
 
-CHECKS: Tuple[Tuple[str, Callable[[], Tuple[int, int]]], ...] = (
-    ('Solver matrix', _check_solver_matrix),
-    ('Format round-trip', _check_format_roundtrip),
-    ('MCP stdio transport', _check_mcp_stdio),
-    ('Power flow', _check_power_flow),
-    ('DC sensitivities', _check_sensitivities),
-    ('Contingency + transfer', _check_contingency_transfer),
-    ('Construction lifecycle', _check_construction_lifecycle),
-    ('Export + graph', _check_export_and_graph),
+CHECKS: Tuple[Tuple[str, Callable[[], Tuple[int, int]], Tuple[str, ...]], ...] = (
+    ('Solver matrix', _check_solver_matrix, ("lp", "nlp")),
+    ('Format round-trip', _check_format_roundtrip, ()),
+    ('MCP stdio transport', _check_mcp_stdio, ()),
+    ('Power flow', _check_power_flow, ()),
+    ('DC sensitivities', _check_sensitivities, ()),
+    ('Contingency + transfer', _check_contingency_transfer, ("lp",)),
+    ('Construction lifecycle', _check_construction_lifecycle, ()),
+    ('Export + graph', _check_export_and_graph, ()),
 )
 
 
-@pytest.mark.parametrize("name,check", CHECKS, ids=[n for n, _ in CHECKS])
-def test_surge_integration(name: str, check: Callable[[], Tuple[int, int]]) -> None:
+@pytest.mark.parametrize("name,check,requires", CHECKS, ids=[n for n, _, _ in CHECKS])
+def test_surge_integration(
+    name: str, check: Callable[[], Tuple[int, int]], requires: Tuple[str, ...]
+) -> None:
     """Assert every sub-check in a group passed, not merely that it ran.
 
     Each group tallies its own sub-checks and returns ``(passed, total)``;
@@ -888,8 +920,18 @@ def test_surge_integration(name: str, check: Callable[[], Tuple[int, int]]) -> N
     ``test_``-named function meant pytest discarded it -- a group could report
     3/4 and still be collected as a pass, and pytest warned about the non-None
     return (PytestReturnNotNoneWarning, an error in a future release). The
-    tally is now asserted here, so a failed sub-check fails the run.
+    tally is asserted here, so a failed sub-check fails the run.
+
+    Groups needing a native solver skip when it is absent: a missing libhighs
+    or libipopt makes every OPF sub-check report a solver error, which is a
+    fact about the machine rather than about this repository.
     """
+    for kind in requires:
+        if not _solver_available(kind):
+            pytest.skip(
+                f"no native {kind.upper()} solver reachable "
+                f"({'libhighs' if kind == 'lp' else 'libipopt'} not installed)"
+            )
     passed, total = check()
     assert passed == total, f"{name}: only {passed} of {total} sub-checks passed"
 
@@ -911,7 +953,11 @@ def main() -> int:
 
     results: List[Tuple[str, int, int]] = []
 
-    for name, check in CHECKS:
+    for name, check, requires in CHECKS:
+        missing = [k for k in requires if not _solver_available(k)]
+        if missing:
+            print(f"\n  SKIP {name}: no native {'/'.join(k.upper() for k in missing)} solver")
+            continue
         p, t = check()
         results.append((name, p, t))
 
