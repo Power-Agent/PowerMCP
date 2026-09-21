@@ -113,14 +113,24 @@ def test_audit_report_is_json_serializable_and_stable():
 
 
 def test_server_audit_reports_failed_when_no_network_is_loaded():
-    from pandapower import panda_mcp
-
-    original = panda_mcp._current_net
-    panda_mcp._current_net = None
+    server_path = Path(__file__).resolve().parents[1] / "pandapower" / "panda_mcp.py"
+    server_dir = str(server_path.parent)
+    sys.path.insert(0, server_dir)
     try:
-        result = panda_mcp.audit_network()
+        spec = importlib.util.spec_from_file_location("powermcp_pandapower_server", server_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+
+        original = module._current_net
+        module._current_net = None
+        try:
+            result = module.audit_network()
+        finally:
+            module._current_net = original
     finally:
-        panda_mcp._current_net = original
+        sys.path.remove(server_dir)
 
     assert result["status"] == "failed"
     assert "No pandapower network is currently loaded" in result["message"]
