@@ -540,7 +540,7 @@ def list_study_cases(max_results: int = 100) -> str:
 
 @mcp.tool()
 def list_contingencies(max_results: int = 100) -> str:
-    """List available static contingency fault cases and outage events."""
+    """List configured fault cases, including cases with no outage events."""
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -556,6 +556,7 @@ def list_contingencies(max_results: int = 100) -> str:
             outages = fault_case.GetContents("*.EvtOutage", 1) or []
             fault_cases.append((fault_case, outages))
 
+        fault_cases.sort(key=lambda entry: not entry[1])
         limit = max(1, min(int(max_results), 1000))
         results = []
         for fault_case, outages in fault_cases[:limit]:

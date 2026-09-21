@@ -147,8 +147,8 @@ class StateInspectionTest(unittest.TestCase):
 
         project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
         project.GetContents = lambda pattern, recursive: [
-            fault_case,
             empty_fault_case,
+            fault_case,
         ]
         study_case = FakeObject(
             "Case 1",
@@ -196,6 +196,9 @@ class StateInspectionTest(unittest.TestCase):
             0,
         )
         self.assertEqual(contingencies["results"][1]["outages"], [])
+
+        limited = json.loads(mcp_module.list_contingencies(max_results=1))
+        self.assertEqual(limited["results"][0]["name"], "N-1")
 
         results = json.loads(mcp_module.get_contingency_results(
             "ac",
