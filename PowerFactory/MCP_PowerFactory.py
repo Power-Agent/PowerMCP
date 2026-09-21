@@ -554,8 +554,7 @@ def list_contingencies(max_results: int = 100) -> str:
         fault_cases = []
         for fault_case in project.GetContents("*.IntEvt", 1) or []:
             outages = fault_case.GetContents("*.EvtOutage", 1) or []
-            if outages:
-                fault_cases.append((fault_case, outages))
+            fault_cases.append((fault_case, outages))
 
         limit = max(1, min(int(max_results), 1000))
         results = []
@@ -964,6 +963,7 @@ def get_contingency_results(
                 values = []
                 errors = []
                 for column in range(returned_columns):
+                    # ElmRes.GetValue returns (status, value); bare scalars are tolerated for older builds.
                     raw_value = result_file.GetValue(row, column)
                     if (
                         isinstance(raw_value, (list, tuple))
