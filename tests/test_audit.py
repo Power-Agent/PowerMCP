@@ -134,3 +134,5 @@ def test_server_audit_reports_failed_when_no_network_is_loaded():
 
     assert result["status"] == "failed"
     assert "No pandapower network is currently loaded" in result["message"]
+
+# Keep the server-boundary test on the same import path used by the runner.
