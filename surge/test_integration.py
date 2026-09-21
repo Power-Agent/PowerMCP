@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -69,7 +70,7 @@ def _call(mod, tool_name: str, **kwargs) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_solver_matrix() -> Tuple[int, int]:
+def _check_solver_matrix() -> Tuple[int, int]:
     """Run each OPF tool with each accepted solver value; confirm all work.
 
     Returns (passed, total).
@@ -177,7 +178,7 @@ def test_solver_matrix() -> Tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def test_format_roundtrip() -> Tuple[int, int]:
+def _check_format_roundtrip() -> Tuple[int, int]:
     """Save and reload in every supported extension; compare summaries.
 
     Core counts must survive the round-trip for a round-trip to count
@@ -356,7 +357,7 @@ def _parse_tool_result(result) -> Optional[Dict[str, Any]]:
     return None
 
 
-def test_mcp_stdio() -> Tuple[int, int]:
+def _check_mcp_stdio() -> Tuple[int, int]:
     print("\n" + "=" * 70)
     print("TEST 3 — MCP stdio transport")
     print("=" * 70)
@@ -370,7 +371,7 @@ def test_mcp_stdio() -> Tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def test_power_flow() -> Tuple[int, int]:
+def _check_power_flow() -> Tuple[int, int]:
     """Exercise AC / DC / FDPF on a well-behaved case + a case that should
     fail to converge."""
     print("\n" + "=" * 70)
@@ -439,7 +440,7 @@ def test_power_flow() -> Tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def test_sensitivities() -> Tuple[int, int]:
+def _check_sensitivities() -> Tuple[int, int]:
     """Exercise PTDF / LODF / OTDF across formats and verify guard rails."""
     print("\n" + "=" * 70)
     print("TEST 5 — DC sensitivities")
@@ -526,7 +527,7 @@ def test_sensitivities() -> Tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def test_contingency_transfer() -> Tuple[int, int]:
+def _check_contingency_transfer() -> Tuple[int, int]:
     """N-1 analysis against a stressed case + NERC ATC between two areas."""
     print("\n" + "=" * 70)
     print("TEST 6 — Contingency + transfer")
@@ -600,7 +601,7 @@ def test_contingency_transfer() -> Tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def test_construction_lifecycle() -> Tuple[int, int]:
+def _check_construction_lifecycle() -> Tuple[int, int]:
     """Build an empty network, add elements, solve, edit, scale, remove."""
     print("\n" + "=" * 70)
     print("TEST 7 — Network construction lifecycle")
@@ -739,7 +740,7 @@ print('OK')
     )
 
 
-def test_export_and_graph() -> Tuple[int, int]:
+def _check_export_and_graph() -> Tuple[int, int]:
     """Exercise export_tables (both pandas paths), topology, path, islands, schema."""
     print("\n" + "=" * 70)
     print("TEST 8 — Export + graph analytics")
@@ -862,29 +863,57 @@ def test_export_and_graph() -> Tuple[int, int]:
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Checks table, shared by pytest and the standalone runner
+# ---------------------------------------------------------------------------
+
+CHECKS: Tuple[Tuple[str, Callable[[], Tuple[int, int]]], ...] = (
+    ('Solver matrix', _check_solver_matrix),
+    ('Format round-trip', _check_format_roundtrip),
+    ('MCP stdio transport', _check_mcp_stdio),
+    ('Power flow', _check_power_flow),
+    ('DC sensitivities', _check_sensitivities),
+    ('Contingency + transfer', _check_contingency_transfer),
+    ('Construction lifecycle', _check_construction_lifecycle),
+    ('Export + graph', _check_export_and_graph),
+)
+
+
+@pytest.mark.parametrize("name,check", CHECKS, ids=[n for n, _ in CHECKS])
+def test_surge_integration(name: str, check: Callable[[], Tuple[int, int]]) -> None:
+    """Assert every sub-check in a group passed, not merely that it ran.
+
+    Each group tallies its own sub-checks and returns ``(passed, total)``;
+    only a few conditions are hard ``assert``s. Returning that tally from a
+    ``test_``-named function meant pytest discarded it -- a group could report
+    3/4 and still be collected as a pass, and pytest warned about the non-None
+    return (PytestReturnNotNoneWarning, an error in a future release). The
+    tally is now asserted here, so a failed sub-check fails the run.
+    """
+    passed, total = check()
+    assert passed == total, f"{name}: only {passed} of {total} sub-checks passed"
+
+
 # Runner
 # ---------------------------------------------------------------------------
 
 
 def main() -> int:
+    # Name the same root surge/conftest.py names for pytest. Without it,
+    # powerio confines paths to the process's start directory and every save
+    # and export check is refused, so a direct `python test_integration.py`
+    # run reported 54/61 while pytest reported all green.
+    from powermcp.sandbox import ALLOWED_ROOTS_ENV
+
+    os.environ.setdefault(
+        ALLOWED_ROOTS_ENV, os.path.realpath(tempfile.gettempdir())
+    )
+
     results: List[Tuple[str, int, int]] = []
 
-    p, t = test_solver_matrix()
-    results.append(("Solver matrix", p, t))
-    p, t = test_format_roundtrip()
-    results.append(("Format round-trip", p, t))
-    p, t = test_mcp_stdio()
-    results.append(("MCP stdio transport", p, t))
-    p, t = test_power_flow()
-    results.append(("Power flow", p, t))
-    p, t = test_sensitivities()
-    results.append(("DC sensitivities", p, t))
-    p, t = test_contingency_transfer()
-    results.append(("Contingency + transfer", p, t))
-    p, t = test_construction_lifecycle()
-    results.append(("Construction lifecycle", p, t))
-    p, t = test_export_and_graph()
-    results.append(("Export + graph", p, t))
+    for name, check in CHECKS:
+        p, t = check()
+        results.append((name, p, t))
 
     print("\n" + "=" * 70)
     print("Integration summary")
