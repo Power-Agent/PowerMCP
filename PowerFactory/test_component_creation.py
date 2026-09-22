@@ -30,6 +30,12 @@ DEFAULTS = {
         "buslv": None,
         "outserv": 0,
     },
+    "EvtSwitch": {
+        "p_target": None,
+        "time": 0.0,
+        "i_switch": 0,
+        "outserv": 0,
+    },
 }
 
 
@@ -192,6 +198,87 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertIn("2", result["message"])
         self.assertEqual(result["command"]["class_name"], "ComSimoutage")
         self.assertEqual(result["settings"]["calculation_method"], 1)
+
+    def test_run_contingency_analysis_sets_explicit_calculation_method(self):
+        modes = {
+            "ac": 0,
+            "dc": 1,
+            "ac_linearised": 2,
+            "linearised_screening": 3,
+        }
+
+        for mode, expected in modes.items():
+            with self.subTest(mode=mode):
+                values = {
+                    "loc_name": "Contingency Analysis",
+                    "dat_src": "MAN",
+                    "iopt_method": 0,
+                    "iopt_Linear": 0,
+                    "copt_Linear": 0,
+                    "iACDCCombine": 0,
+                    "dynamicCase": 0,
+                }
+                command = Mock()
+                command.Execute.return_value = 0
+                command.GetClassName.return_value = "ComSimoutage"
+                command.GetFullName.return_value = "Contingency Analysis.ComSimoutage"
+                command.GetAttribute.side_effect = values.__getitem__
+                command.SetAttribute.side_effect = values.__setitem__
+
+                app = Mock()
+                app.GetActiveStudyCase.return_value = Mock()
+                app.GetFromStudyCase.return_value = command
+                self.use_application(app)
+
+                result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+                    open_digsilent=False,
+                    calculation_method=mode,
+                )
+
+                self.assertTrue(result["success"], result["message"])
+                self.assertEqual(result["settings"]["mode"], mode)
+                self.assertEqual(values["iopt_Linear"], expected)
+                command.SetAttribute.assert_called_once_with(
+                    "iopt_Linear",
+                    expected,
+                )
+                command.Execute.assert_called_once_with()
+
+    def test_run_contingency_analysis_rejects_unknown_method(self):
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="unknown",
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("calculation_method must be one of", result["message"])
+
+    def test_create_contingency_is_idempotent(self):
+        app = FakeApplication([])
+        project = app.GetActiveProject()
+        folder = project.CreateObject("IntFltcases", "Fault Cases")
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        first = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            open_digsilent=False,
+        )
+        second = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(first["success"], first["message"])
+        self.assertTrue(first["created"])
+        self.assertTrue(second["success"], second["message"])
+        self.assertFalse(second["created"])
+        case = folder["IntEvt"][0]
+        self.assertEqual(len(case["EvtSwitch"]), 1)
+        self.assertIs(case["EvtSwitch"][0].GetAttribute("p_target"), target)
 
     def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
         element = FakeObject(None, "ElmTerm", "Bus")

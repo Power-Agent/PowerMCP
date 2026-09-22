@@ -54,7 +54,9 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `list_objects` | Lists calculation-relevant objects using a raw PowerFactory query. |
 | `list_components` | Lists objects using friendly equipment categories. |
 | `list_study_cases` | Lists study cases and identifies the active case. |
-| `list_contingencies` | Lists available static fault cases, outage events, and their target elements without modifying the project. |
+| `list_contingencies` | Lists configured fault-library cases, outage/switch events, and their target elements without modifying the project. |
+| `create_contingency` | Creates or reuses an idempotent switch-based contingency definition. |
+| `get_contingency_configuration` | Reads the active Contingency Analysis command settings without running a calculation. |
 | `import_project` | Imports a `.pfd` project file and activates it. |
 | `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
 | `modify_parameter` | Sets one attribute on all PowerFactory objects matching a query string. Auto-casts string values to the correct type. |
@@ -62,8 +64,9 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `delete_component` | Previews or confirms exact-name component deletion, including generated cubicles, circuit breakers, and optional diagram cleanup. |
 | `run_loadflow` | Runs a standalone load flow calculation (ComLdf). |
 | `run_short_circuit` | Runs a standalone short-circuit calculation (ComShc). |
-| `run_contingency_analysis` | Runs the active study case's configured Contingency Analysis command (ComSimoutage) and returns its native execution code. |
+| `run_contingency_analysis` | Runs ComSimoutage using its configured method or an explicit AC, DC, AC-linearised, or linearised-screening mode. |
 | `get_contingency_results` | Reads a bounded slice of the configured AC or DC contingency result file. |
+| `get_contingency_summary` | Interprets existing contingency results as affected elements, convergence, overloads, and voltage violations. |
 | `run_simulation` | Executes the full pipeline defined in `simulation_config.json`. |
 | `run_custom_case` | Runs one fault simulation with parameters supplied at call time (no config file edit required). |
 | `read_results_csv` | Reads an RMS result CSV; auto-discovers the latest file if no path is given. |
@@ -78,7 +81,7 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `DIgSILENTAgent.connect` | Connects to PowerFactory and activates the configured project. |
 | `DIgSILENTAgent.activate_study_case` | Activates or creates the target study case. |
 | `DIgSILENTAgent.run_loadflow` | Executes ComLdf. |
-| `DIgSILENTAgent.run_contingency_analysis` | Executes the configured ComSimoutage command without changing its filters or calculation settings. |
+| `DIgSILENTAgent.run_contingency_analysis` | Executes ComSimoutage without changing its contingency filters and optionally selects a validated calculation mode. |
 | `DIgSILENTAgent.run_rms_simulation` | Applies fault events, then runs ComInc + ComSim. |
 | `DIgSILENTAgent._apply_fault_event` | Builds the event sequence for bus faults, line faults, or generator switches. |
 | `DIgSILENTAgent.addSwitchEvent` | Creates a PowerFactory `EvtSwitch` event. |
