@@ -319,6 +319,51 @@ class StateInspectionTest(unittest.TestCase):
         ))
         self.assertFalse(oversized["success"])
 
+    def test_add_contingency_result_variables_updates_elmres_selection(self):
+        bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        result_file.AddVariable = Mock(return_value=0)
+        result_file.Load = Mock(return_value=0)
+        result_file.Release = Mock()
+        result_file.FindColumn = Mock(
+            side_effect=lambda obj, variable: 13 if variable == "m:u" else -1
+        )
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        command.Execute = Mock()
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        app.GetCalcRelevantObjects.return_value = [bus]
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.add_contingency_result_variables(
+            "Bus 08.ElmTerm",
+            ["m:u", "m:phiu", "m:u"],
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["configured_objects"], 1)
+        self.assertEqual(result["configured_variables"], 2)
+        self.assertEqual(result["variables"], ["m:u", "m:phiu"])
+        result_file.AddVariable.assert_any_call(bus, "m:phiu")
+        self.assertEqual(result_file.AddVariable.call_count, 1)
+        result_file.Load.assert_called_once_with()
+        result_file.Release.assert_called_once_with()
+        command.Execute.assert_not_called()
+
     def test_contingency_summary_reports_violations(self):
         bus = FakeObject(
             "Bus 08",
