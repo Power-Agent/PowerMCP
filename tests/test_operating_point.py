@@ -38,7 +38,7 @@ def test_line_overload_is_reported():
 def test_near_limit_is_warning_without_violation():
     net = pn.case9()
     pp.runpp(net)
-    net.res_bus.loc[0, "vm_pu"] = 0.96
+    net.res_bus.loc[0, "vm_pu"] = 0.953
     report = validate_operating_point(net)
     assert report["status"] == "warning"
     assert report["violations"] == []
