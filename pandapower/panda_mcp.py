@@ -162,6 +162,26 @@ def run_power_flow(algorithm: str = 'nr', calculate_voltage_angles: bool = True,
         }
 
 @mcp.tool()
+def validate_operating_point(
+    voltage_min_pu: float = 0.95,
+    voltage_max_pu: float = 1.05,
+    line_loading_limit_percent: float = 100.0,
+    trafo_loading_limit_percent: float = 100.0,
+) -> Dict[str, Any]:
+    """Validate the current converged operating point without rerunning a solver."""
+    try:
+        net = _get_network()
+        return _validate_operating_point(
+            net,
+            voltage_min_pu=voltage_min_pu,
+            voltage_max_pu=voltage_max_pu,
+            line_loading_limit_percent=line_loading_limit_percent,
+            trafo_loading_limit_percent=trafo_loading_limit_percent,
+        )
+    except RuntimeError as exc:
+        return {"status": "failed", "message": str(exc)}
+
+@mcp.tool()
 def run_contingency_analysis(contingency_type: str = "N-1", 
                            elements: Optional[List[str]] = None) -> Dict[str, Any]:
     """Run contingency analysis on the current network.
