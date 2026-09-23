@@ -2264,6 +2264,7 @@ class DIgSILENTAgent:
             if selected_method is not None:
                 previous_method = attribute("iopt_Linear")
 
+            result = None
             try:
                 if selected_method is not None:
                     cls._set_and_verify_attributes(
@@ -2303,15 +2304,31 @@ class DIgSILENTAgent:
                         "linear_option": attribute("copt_Linear"),
                         "combine_ac_dc": attribute("iACDCCombine"),
                         "dynamic_contingencies": attribute("dynamicCase"),
+                        "mode_restored": True,
                     },
                 }
             finally:
                 if selected_method is not None:
-                    cls._set_and_verify_attributes(
-                        command,
-                        {"iopt_Linear": previous_method},
-                        "Contingency Analysis",
-                    )
+                    try:
+                        cls._set_and_verify_attributes(
+                            command,
+                            {"iopt_Linear": previous_method},
+                            "Contingency Analysis",
+                        )
+                    except Exception as restore_error:
+                        # The run already happened, and its verdict is what the
+                        # caller asked for -- losing it to report a restore
+                        # failure would hide both the outcome and the
+                        # execution code. Keep the result and say the study
+                        # case was left on the explicit mode. Swallowing the
+                        # error here also stops it replacing an exception the
+                        # try block is already propagating.
+                        log.error(
+                            "Could not restore iopt_Linear to "
+                            f"{previous_method!r}: {restore_error}"
+                        )
+                        if result is not None:
+                            result["settings"]["mode_restored"] = False
 
             # A native failure keeps the same shape as a success, so a caller
             # can read execution_code instead of parsing the message text.

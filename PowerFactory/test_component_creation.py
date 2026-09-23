@@ -273,6 +273,58 @@ class ComponentCreationTest(unittest.TestCase):
             call("iopt_Linear", 2),
         ])
 
+    def test_run_contingency_analysis_reports_an_unrestored_method(self):
+        """A failed restore must not be mistaken for a failed analysis.
+
+        The mode is written before the run and put back afterwards. If putting
+        it back fails, the run itself still happened and its verdict is what
+        the caller asked for, so the result stands and ``mode_restored`` says
+        the study case was left on the explicit mode.
+        """
+        values = {
+            "loc_name": "Contingency Analysis",
+            "dat_src": "MAN",
+            "iopt_method": 0,
+            "iopt_Linear": 0,
+            "copt_Linear": 0,
+            "iACDCCombine": 0,
+            "dynamicCase": 0,
+        }
+        command = Mock()
+        command.Execute.return_value = 0
+        command.GetClassName.return_value = "ComSimoutage"
+        command.GetFullName.return_value = "Contingency Analysis.ComSimoutage"
+        command.GetAttribute.side_effect = values.__getitem__
+
+        writes = []
+
+        def set_attribute(name, value):
+            writes.append((name, value))
+            if len(writes) > 1:
+                raise RuntimeError("PowerFactory refused the restore")
+            values[name] = value
+
+        command.SetAttribute.side_effect = set_attribute
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="dc",
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertEqual(result["execution_code"], 0)
+        self.assertEqual(result["settings"]["linear_method"], 1)
+        self.assertFalse(result["settings"]["mode_restored"])
+        self.assertEqual(
+            writes,
+            [("iopt_Linear", 1), ("iopt_Linear", 0)],
+        )
+
     def test_run_contingency_analysis_rejects_unknown_method(self):
         result = agent_module.DIgSILENTAgent.run_contingency_analysis(
             open_digsilent=False,
