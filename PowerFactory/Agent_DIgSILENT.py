@@ -2202,10 +2202,18 @@ class DIgSILENTAgent:
                 "time_s": time_s,
             }
         except Exception as e:
-            if created_event is not None:
-                created_event.Delete()
-            if created_case is not None:
-                created_case.Delete()
+            for label, created_object in (
+                ("switch event", created_event),
+                ("contingency case", created_case),
+            ):
+                if created_object is None:
+                    continue
+                try:
+                    created_object.Delete()
+                except Exception as rollback_error:
+                    log.error(
+                        f"Could not roll back created {label}: {rollback_error}"
+                    )
             log.error(f"Contingency creation failed: {e}")
             return {"success": False, "message": str(e)}
 
@@ -2242,16 +2250,6 @@ class DIgSILENTAgent:
                     "check the PowerFactory licence and command configuration"
                 )
 
-            if modes[mode] is not None:
-                cls._set_and_verify_attributes(
-                    command,
-                    {"iopt_Linear": modes[mode]},
-                    "Contingency Analysis",
-                )
-
-            error_code = command.Execute()
-            succeeded = error_code in (0, None)
-
             def attribute(name: str):
                 try:
                     value = command.GetAttribute(name)
@@ -2261,37 +2259,63 @@ class DIgSILENTAgent:
                     pass
                 return getattr(command, name, None)
 
-            if not succeeded:
-                log.error(
-                    "Contingency analysis failed: ComSimoutage returned "
-                    f"error code {error_code}"
-                )
+            selected_method = modes[mode]
+            previous_method = None
+            if selected_method is not None:
+                previous_method = attribute("iopt_Linear")
+
+            try:
+                if selected_method is not None:
+                    cls._set_and_verify_attributes(
+                        command,
+                        {"iopt_Linear": selected_method},
+                        "Contingency Analysis",
+                    )
+                error_code = command.Execute()
+                succeeded = error_code in (0, None)
+
+                if not succeeded:
+                    log.error(
+                        "Contingency analysis failed: ComSimoutage returned "
+                        f"error code {error_code}"
+                    )
+
+                # Capture the settings used by this run before restoring an
+                # explicit method selection below.
+                result = {
+                    "success": succeeded,
+                    "message": (
+                        "Configured contingency analysis completed"
+                        if succeeded
+                        else f"ComSimoutage returned error code {error_code}"
+                    ),
+                    "execution_code": error_code,
+                    "command": {
+                        "name": attribute("loc_name"),
+                        "class_name": command.GetClassName(),
+                        "full_name": command.GetFullName(),
+                    },
+                    "settings": {
+                        "mode": mode,
+                        "data_source": attribute("dat_src"),
+                        "calculation_method": attribute("iopt_method"),
+                        "linear_method": attribute("iopt_Linear"),
+                        "linear_option": attribute("copt_Linear"),
+                        "combine_ac_dc": attribute("iACDCCombine"),
+                        "dynamic_contingencies": attribute("dynamicCase"),
+                    },
+                }
+            finally:
+                if selected_method is not None:
+                    cls._set_and_verify_attributes(
+                        command,
+                        {"iopt_Linear": previous_method},
+                        "Contingency Analysis",
+                    )
 
             # A native failure keeps the same shape as a success, so a caller
             # can read execution_code instead of parsing the message text.
-            return {
-                "success": succeeded,
-                "message": (
-                    "Configured contingency analysis completed"
-                    if succeeded
-                    else f"ComSimoutage returned error code {error_code}"
-                ),
-                "execution_code": error_code,
-                "command": {
-                    "name": attribute("loc_name"),
-                    "class_name": command.GetClassName(),
-                    "full_name": command.GetFullName(),
-                },
-                "settings": {
-                    "mode": mode,
-                    "data_source": attribute("dat_src"),
-                    "calculation_method": attribute("iopt_method"),
-                    "linear_method": attribute("iopt_Linear"),
-                    "linear_option": attribute("copt_Linear"),
-                    "combine_ac_dc": attribute("iACDCCombine"),
-                    "dynamic_contingencies": attribute("dynamicCase"),
-                },
-            }
+            return result
         except Exception as e:
             log.error(f"Contingency analysis failed: {e}")
             return {

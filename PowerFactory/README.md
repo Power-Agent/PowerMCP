@@ -71,6 +71,10 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `run_custom_case` | Runs one fault simulation with parameters supplied at call time (no config file edit required). |
 | `read_results_csv` | Reads an RMS result CSV; auto-discovers the latest file if no path is given. |
 
+The contingency tools can create switch-based definitions and inspect or run
+the active `ComSimoutage` command. An explicit calculation mode applies only to
+that run; the study case's previous mode is restored afterward.
+
 ### Simulation Engine (`Agent_DIgSILENT.py`)
 
 | Class / Method | Description |

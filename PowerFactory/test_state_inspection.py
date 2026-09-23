@@ -335,12 +335,20 @@ class StateInspectionTest(unittest.TestCase):
             "ElmLne",
             r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
         )
+        outage_bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
         contingency = FakeObject(
             "MCP N-1 Line Test",
             "ComOutage",
             r"\user\test.IntPrj\Case 1\MCP N-1 Line Test.ComOutage",
         )
-        contingency.GetObject = lambda index: outage_line if index == 0 else None
+        affected = [outage_line, outage_bus]
+        contingency.GetObject = lambda index: (
+            affected[index] if index < len(affected) else None
+        )
 
         result_file = FakeObject(
             "Contingency Analysis AC",
@@ -376,13 +384,26 @@ class StateInspectionTest(unittest.TestCase):
         app.GetFromStudyCase.return_value = command
         FakeAgent._shared_app = app
 
-        summary = json.loads(mcp_module.get_contingency_summary())
+        summary = json.loads(mcp_module.get_contingency_summary(
+            max_affected_elements=1,
+        ))
 
         self.assertTrue(summary["success"])
         self.assertEqual(summary["total_count"], 1)
         self.assertEqual(
             summary["results"][0]["affected_elements"][0]["name"],
             "Line 01 - 02",
+        )
+        self.assertEqual(
+            summary["results"][0]["total_affected_elements"],
+            2,
+        )
+        self.assertEqual(
+            summary["results"][0]["returned_affected_elements"],
+            1,
+        )
+        self.assertTrue(
+            summary["results"][0]["affected_elements_truncated"]
         )
         self.assertEqual(
             summary["results"][0]["voltage_violations"][0]["voltage_pu"],

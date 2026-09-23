@@ -1,6 +1,6 @@
 import unittest
 from fnmatch import fnmatchcase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import Agent_DIgSILENT as agent_module
 
@@ -237,12 +237,41 @@ class ComponentCreationTest(unittest.TestCase):
 
                 self.assertTrue(result["success"], result["message"])
                 self.assertEqual(result["settings"]["mode"], mode)
-                self.assertEqual(values["iopt_Linear"], expected)
-                command.SetAttribute.assert_called_once_with(
-                    "iopt_Linear",
-                    expected,
-                )
+                self.assertEqual(result["settings"]["linear_method"], expected)
+                self.assertEqual(values["iopt_Linear"], 0)
+                self.assertEqual(command.SetAttribute.call_args_list, [
+                    call("iopt_Linear", expected),
+                    call("iopt_Linear", 0),
+                ])
                 command.Execute.assert_called_once_with()
+
+    def test_run_contingency_analysis_restores_method_after_exception(self):
+        values = {
+            "loc_name": "Contingency Analysis",
+            "iopt_Linear": 2,
+        }
+        command = Mock()
+        command.Execute.side_effect = RuntimeError("native failure")
+        command.GetAttribute.side_effect = values.__getitem__
+        command.SetAttribute.side_effect = values.__setitem__
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="dc",
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("native failure", result["message"])
+        self.assertEqual(values["iopt_Linear"], 2)
+        self.assertEqual(command.SetAttribute.call_args_list, [
+            call("iopt_Linear", 1),
+            call("iopt_Linear", 2),
+        ])
 
     def test_run_contingency_analysis_rejects_unknown_method(self):
         result = agent_module.DIgSILENTAgent.run_contingency_analysis(
@@ -279,6 +308,54 @@ class ComponentCreationTest(unittest.TestCase):
         case = folder["IntEvt"][0]
         self.assertEqual(len(case["EvtSwitch"]), 1)
         self.assertIs(case["EvtSwitch"][0].GetAttribute("p_target"), target)
+
+    def test_create_contingency_rejects_existing_event_with_other_settings(self):
+        app = FakeApplication([])
+        folder = app.GetActiveProject().CreateObject("IntFltcases", "Fault Cases")
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        first = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            action="open",
+            open_digsilent=False,
+        )
+        second = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            action="close",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(first["success"])
+        self.assertFalse(second["success"])
+        self.assertIn("different settings", second["message"])
+        self.assertEqual(len(folder["IntEvt"][0]["EvtSwitch"]), 1)
+
+    def test_create_contingency_preserves_error_when_rollback_fails(self):
+        app = FakeApplication([])
+        app.GetActiveProject().CreateObject("IntFltcases", "Fault Cases")
+        app.GetActiveProject().reject_attribute = "p_target"
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        with patch.object(
+            FakeObject,
+            "Delete",
+            side_effect=RuntimeError("cleanup failed"),
+        ) as delete:
+            result = agent_module.DIgSILENTAgent.create_contingency(
+                "MCP N-1 Test",
+                "Line 01 - 02.ElmLne",
+                open_digsilent=False,
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIn("p_target", result["message"])
+        self.assertEqual(delete.call_count, 2)
 
     def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
         element = FakeObject(None, "ElmTerm", "Bus")

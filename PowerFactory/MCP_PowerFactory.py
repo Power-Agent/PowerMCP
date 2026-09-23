@@ -230,6 +230,18 @@ def _attribute(obj, name, default=None):
         return default
 
 
+def _decode_cell(raw):
+    """Decode PowerFactory's ``(status, value)`` result-cell convention."""
+    # Older PowerFactory builds can return a bare scalar instead of a pair.
+    if (
+        isinstance(raw, (list, tuple))
+        and len(raw) == 2
+        and isinstance(raw[0], int)
+    ):
+        return raw[0], raw[1]
+    return 0, raw
+
+
 # ── Tools ─────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
@@ -544,7 +556,7 @@ def list_study_cases(max_results: int = 100) -> str:
 
 @mcp.tool()
 def list_contingencies(max_results: int = 100) -> str:
-    """List configured fault cases and outage/switch events, including empty cases."""
+    """List direct ``IntEvt`` children of fault-case folders, including empty cases."""
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -1054,16 +1066,9 @@ def get_contingency_results(
                 values = []
                 errors = []
                 for column in range(returned_columns):
-                    # ElmRes.GetValue returns (status, value); bare scalars are tolerated for older builds.
-                    raw_value = result_file.GetValue(row, column)
-                    if (
-                        isinstance(raw_value, (list, tuple))
-                        and len(raw_value) == 2
-                        and isinstance(raw_value[0], int)
-                    ):
-                        error_code, value = raw_value
-                    else:
-                        error_code, value = 0, raw_value
+                    error_code, value = _decode_cell(
+                        result_file.GetValue(row, column)
+                    )
 
                     values.append(value if error_code == 0 else None)
                     if error_code != 0:
@@ -1076,15 +1081,9 @@ def get_contingency_results(
                 if object_column is not None and values[object_column] is not None:
                     object_index = int(values[object_column])
                     item["object_index"] = object_index
-                    raw_object = result_file.GetObj(object_index)
-                    if (
-                        isinstance(raw_object, (list, tuple))
-                        and len(raw_object) == 2
-                        and isinstance(raw_object[0], int)
-                    ):
-                        object_error, result_object = raw_object
-                    else:
-                        object_error, result_object = 0, raw_object
+                    object_error, result_object = _decode_cell(
+                        result_file.GetObj(object_index)
+                    )
                     if object_error == 0 and result_object is not None:
                         item["object"] = _object_summary(result_object)
                     elif object_error != 0:
@@ -1121,8 +1120,9 @@ def get_contingency_summary(
     max_voltage_pu: float = 1.1,
     max_loading_pct: float = 100.0,
     max_results: int = 100,
+    max_affected_elements: int = 100,
 ) -> str:
-    """Summarize existing contingency results without running a calculation."""
+    """Summarize bounded existing contingency results without running a calculation."""
     method = str(calculation_method or "").strip().lower()
     if method not in {"ac", "dc"}:
         return _to_json({
@@ -1135,10 +1135,13 @@ def get_contingency_summary(
         maximum_voltage = float(max_voltage_pu)
         maximum_loading = float(max_loading_pct)
         result_limit = max(1, min(int(max_results), 1000))
+        affected_limit = max(1, min(int(max_affected_elements), 1000))
     except (TypeError, ValueError):
         return _to_json({
             "success": False,
-            "message": "Thresholds must be numbers and max_results must be an integer",
+            "message": (
+                "Thresholds must be numbers and result limits must be integers"
+            ),
         })
     if (
         not all(math.isfinite(value) for value in (
@@ -1183,36 +1186,31 @@ def get_contingency_summary(
             }
 
         def value_at(row, column):
-            raw_value = result_file.GetValue(row, column)
-            if (
-                isinstance(raw_value, (list, tuple))
-                and len(raw_value) == 2
-                and isinstance(raw_value[0], int)
-            ):
-                return raw_value[1] if raw_value[0] == 0 else None
-            return raw_value
+            error_code, value = _decode_cell(
+                result_file.GetValue(row, column)
+            )
+            return value if error_code == 0 else None
 
         def object_at(index):
-            raw_object = result_file.GetObj(int(index))
-            if (
-                isinstance(raw_object, (list, tuple))
-                and len(raw_object) == 2
-                and isinstance(raw_object[0], int)
-            ):
-                return raw_object[1] if raw_object[0] == 0 else None
-            return raw_object
+            error_code, value = _decode_cell(result_file.GetObj(int(index)))
+            return value if error_code == 0 else None
 
         def affected_elements(contingency):
             elements = []
-            for index in range(100):
-                try:
-                    element = contingency.GetObject(index)
-                except Exception:
-                    break
+            index = 0
+            while True:
+                element = contingency.GetObject(index)
                 if element is None:
                     break
                 elements.append(_object_summary(element))
-            return elements
+                index += 1
+            returned = elements[:affected_limit]
+            return {
+                "affected_elements": returned,
+                "total_affected_elements": len(elements),
+                "returned_affected_elements": len(returned),
+                "affected_elements_truncated": len(returned) < len(elements),
+            }
 
         def finish(entry):
             voltages = list(entry.pop("_voltages").values())
@@ -1288,14 +1286,16 @@ def get_contingency_summary(
                     and result_object.GetClassName() == "ComOutage"
                 ):
                     key = result_object.GetFullName()
-                    entry = contingencies.setdefault(key, {
-                        "contingency": _object_summary(result_object),
-                        "affected_elements": affected_elements(result_object),
-                        "converged": None,
-                        "convergence_code": None,
-                        "_voltages": {},
-                        "_loadings": {},
-                    })
+                    if key not in contingencies:
+                        contingencies[key] = {
+                            "contingency": _object_summary(result_object),
+                            **affected_elements(result_object),
+                            "converged": None,
+                            "convergence_code": None,
+                            "_voltages": {},
+                            "_loadings": {},
+                        }
+                    entry = contingencies[key]
                 elif result_object is None:
                     entry = base_case
                 else:
