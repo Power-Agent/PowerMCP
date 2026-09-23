@@ -47,13 +47,20 @@ def validate_operating_point(
     if line_loading_limit_percent <= 0 or trafo_loading_limit_percent <= 0:
         return {"status": "failed", "message": "Loading limits must be positive.", "criteria": criteria}
 
-    if not bool(getattr(net, "converged", False)):
-        return {"status": "failed", "message": "No converged power-flow result is available.", "criteria": criteria}
-
     try:
         res_bus = net.res_bus
         res_line = net.res_line
         res_trafo = net.res_trafo
+    except AttributeError as exc:
+        return {"status": "failed", "message": f"Operating-point results are unavailable: {exc}", "criteria": criteria}
+
+    # pandapower can expose a truthy/default converged flag before a power
+    # flow has populated result tables. Require both the flag and actual bus
+    # results so a fresh network cannot be mistaken for a solved operating point.
+    if not bool(getattr(net, "converged", False)) or res_bus.empty:
+        return {"status": "failed", "message": "No converged power-flow result is available.", "criteria": criteria}
+
+    try:
         if "vm_pu" not in res_bus:
             return {"status": "failed", "message": "Bus voltage results are unavailable.", "criteria": criteria}
 
@@ -87,9 +94,10 @@ def validate_operating_point(
         max_trafo = max(trafo_values) if trafo_values else None
 
         near_limit = []
-        if min_vm is not None and (min_vm - voltage_min_pu) / voltage_min_pu < 0.05:
+        voltage_band = voltage_max_pu - voltage_min_pu
+        if min_vm is not None and (min_vm - voltage_min_pu) / voltage_band < 0.05:
             near_limit.append("BUS_VOLTAGE_NEAR_LIMIT")
-        if max_vm is not None and (voltage_max_pu - max_vm) / voltage_max_pu < 0.05:
+        if max_vm is not None and (voltage_max_pu - max_vm) / voltage_band < 0.05:
             near_limit.append("BUS_VOLTAGE_NEAR_LIMIT")
         if max_line is not None and (line_loading_limit_percent - max_line) / line_loading_limit_percent < 0.05:
             near_limit.append("LINE_LOADING_NEAR_LIMIT")
