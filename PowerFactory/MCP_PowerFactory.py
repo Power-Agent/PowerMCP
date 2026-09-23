@@ -1198,16 +1198,19 @@ def get_contingency_summary(
 
         def affected_elements(contingency):
             elements = []
-            for index in range(_MAX_AFFECTED_ELEMENT_SCAN):
+            # Probe one index past the cap: PowerFactory ends the list with
+            # None, so a contingency with exactly the cap's worth of elements
+            # is only known to be complete once that extra probe comes back.
+            for index in range(_MAX_AFFECTED_ELEMENT_SCAN + 1):
                 element = contingency.GetObject(index)
                 if element is None:
                     break
+                if index == _MAX_AFFECTED_ELEMENT_SCAN:
+                    raise RuntimeError(
+                        "Affected element scan exceeded the safe limit of "
+                        f"{_MAX_AFFECTED_ELEMENT_SCAN}"
+                    )
                 elements.append(_object_summary(element))
-            else:
-                raise RuntimeError(
-                    "Affected element scan exceeded the safe limit of "
-                    f"{_MAX_AFFECTED_ELEMENT_SCAN}"
-                )
             returned = elements[:affected_limit]
             return {
                 "affected_elements": returned,
