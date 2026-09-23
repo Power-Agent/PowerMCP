@@ -19,6 +19,8 @@ Tools
   list_components       List objects using friendly equipment categories.
   list_study_cases      List study cases and identify the active case.
   list_contingencies    List available fault cases and outage events.
+  create_contingency    Create an idempotent switch-based contingency definition.
+  get_contingency_configuration Read the active ComSimoutage settings.
   import_project        Import a .pfd file and activate it in PowerFactory.
   create_study_case     Create/activate a study case by name (no simulation run).
   modify_parameter      Modify an object attribute by object query + variable name.
@@ -26,8 +28,9 @@ Tools
   delete_component      Preview or delete an exactly named grid component.
   run_loadflow          Run a load flow calculation (ComLdf) on the active study case.
   run_short_circuit     Run a short-circuit calculation (ComShc) on the active study case.
-  run_contingency_analysis Execute the configured ComSimoutage command.
+  run_contingency_analysis Execute ComSimoutage with an optional method.
   get_contingency_results Read a bounded slice of AC or DC contingency results.
+  get_contingency_summary Summarize contingency overloads and voltage violations.
   run_simulation        Run the full pipeline from simulation_config.json.
   run_custom_case       Run a one-off case with parameters supplied at call-time.
   read_results_csv      Read the latest (or a specific) RMS results CSV.
@@ -41,6 +44,7 @@ Usage
 import sys
 import os
 import json
+import math
 import concurrent.futures
 from datetime import datetime
 from typing import Any
@@ -224,6 +228,18 @@ def _attribute(obj, name, default=None):
         return obj.GetAttribute(name)
     except Exception:
         return default
+
+
+def _decode_cell(raw):
+    """Decode PowerFactory's ``(status, value)`` result-cell convention."""
+    # Older PowerFactory builds can return a bare scalar instead of a pair.
+    if (
+        isinstance(raw, (list, tuple))
+        and len(raw) == 2
+        and isinstance(raw[0], int)
+    ):
+        return raw[0], raw[1]
+    return 0, raw
 
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
@@ -540,7 +556,7 @@ def list_study_cases(max_results: int = 100) -> str:
 
 @mcp.tool()
 def list_contingencies(max_results: int = 100) -> str:
-    """List configured fault cases, including cases with no outage events."""
+    """List direct ``IntEvt`` children of fault-case folders, including empty cases."""
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -551,32 +567,41 @@ def list_contingencies(max_results: int = 100) -> str:
                 "message": "No PowerFactory project is active",
             }
 
+        def event_summary(event, action_attribute):
+            return {
+                "name": _attribute(event, "loc_name"),
+                "class_name": event.GetClassName(),
+                "target": _object_summary(_attribute(event, "p_target")),
+                "time_s": _attribute(event, "time"),
+                "action": _attribute(event, action_attribute),
+                "disabled": bool(_attribute(event, "outserv", 0)),
+            }
+
         fault_cases = []
         for fault_case in project.GetContents("*.IntEvt", 1) or []:
+            parent = fault_case.GetParent()
+            if parent is None or parent.GetClassName() != "IntFltcases":
+                continue
             outages = fault_case.GetContents("*.EvtOutage", 1) or []
-            fault_cases.append((fault_case, outages))
+            switches = fault_case.GetContents("*.EvtSwitch", 1) or []
+            fault_cases.append((fault_case, outages, switches))
 
-        fault_cases.sort(key=lambda entry: not entry[1])
+        fault_cases.sort(key=lambda entry: not (entry[1] or entry[2]))
         limit = max(1, min(int(max_results), 1000))
         results = []
-        for fault_case, outages in fault_cases[:limit]:
+        for fault_case, outages, switches in fault_cases[:limit]:
             results.append({
                 **_object_summary(fault_case),
+                "event_count": len(outages) + len(switches),
                 "outage_count": len(outages),
                 "outages": [
-                    {
-                        "name": _attribute(outage, "loc_name"),
-                        "class_name": outage.GetClassName(),
-                        "target": _object_summary(
-                            _attribute(outage, "p_target")
-                        ),
-                        "time_s": _attribute(outage, "time"),
-                        "action": _attribute(outage, "i_what"),
-                        "disabled": bool(
-                            _attribute(outage, "outserv", 0)
-                        ),
-                    }
+                    event_summary(outage, "i_what")
                     for outage in outages
+                ],
+                "switch_count": len(switches),
+                "switches": [
+                    event_summary(switch, "i_switch")
+                    for switch in switches
                 ],
             })
 
@@ -585,6 +610,40 @@ def list_contingencies(max_results: int = 100) -> str:
             "total_count": len(fault_cases),
             "returned_count": len(results),
             "results": results,
+        }
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+@mcp.tool()
+def get_contingency_configuration() -> str:
+    """Read the active Contingency Analysis command without executing it."""
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {
+                "success": False,
+                "message": "ComSimoutage is unavailable",
+            }
+
+        return {
+            "success": True,
+            "command": _object_summary(command),
+            "settings": {
+                "data_source": _attribute(command, "dat_src"),
+                "calculation_method": _attribute(command, "iopt_method"),
+                "linear_method": _attribute(command, "iopt_Linear"),
+                "linear_option": _attribute(command, "copt_Linear"),
+                "combine_ac_dc": _attribute(command, "iACDCCombine"),
+                "dynamic_contingencies": _attribute(command, "dynamicCase"),
+            },
         }
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
@@ -850,16 +909,47 @@ def run_short_circuit(open_digsilent: bool = True) -> str:
 
 
 @mcp.tool()
-def run_contingency_analysis(open_digsilent: bool = True) -> str:
+def create_contingency(
+    case_name: str,
+    target_query: str,
+    action: str = "open",
+    time_s: float = 0.0,
+    event_name: str = "Switch Event",
+    folder_name: str = "Fault Cases",
+    open_digsilent: bool = True,
+) -> str:
+    """Create or reuse one switch-based contingency definition."""
+    return _agent_result(
+        "create_contingency",
+        case_name,
+        target_query,
+        action,
+        time_s,
+        event_name,
+        folder_name,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def run_contingency_analysis(
+    calculation_method: str = "configured",
+    open_digsilent: bool = True,
+) -> str:
     """
     Execute the configured Contingency Analysis command (ComSimoutage).
 
     The tool uses the active study case's existing contingency definitions,
-    filters, calculation method, and result selection without changing them.
-    Configure those settings in PowerFactory before calling this tool.
+    filters, and result selection. ``calculation_method`` may retain the
+    configured mode or explicitly select AC, DC, AC linearised, or linearised
+    screening with AC recalculation.
 
     Parameters
     ----------
+    calculation_method : str
+        One of ``configured`` (default), ``ac``, ``dc``, ``ac_linearised``,
+        or ``linearised_screening``.
     open_digsilent : bool
         If True (default), requests the PowerFactory GUI window via app.Show().
 
@@ -872,6 +962,7 @@ def run_contingency_analysis(open_digsilent: bool = True) -> str:
     return _agent_result(
         "run_contingency_analysis",
         open_digsilent,
+        calculation_method,
         structured=True,
     )
 
@@ -951,29 +1042,33 @@ def get_contingency_results(
             returned_rows = min(total_rows, row_limit)
             returned_columns = min(total_columns, column_limit)
 
-            columns = [
-                {
+            columns = []
+            for column in range(returned_columns):
+                item = {
                     "index": column,
                     "variable": result_file.GetVariable(column),
                 }
-                for column in range(returned_columns)
-            ]
+                result_object = result_file.GetObject(column)
+                if result_object is not None:
+                    item["object"] = _object_summary(result_object)
+                columns.append(item)
+            object_column = next(
+                (
+                    column["index"]
+                    for column in columns
+                    if column["variable"] == "b:i_obj"
+                ),
+                None,
+            )
 
             rows = []
             for row in range(returned_rows):
                 values = []
                 errors = []
                 for column in range(returned_columns):
-                    # ElmRes.GetValue returns (status, value); bare scalars are tolerated for older builds.
-                    raw_value = result_file.GetValue(row, column)
-                    if (
-                        isinstance(raw_value, (list, tuple))
-                        and len(raw_value) == 2
-                        and isinstance(raw_value[0], int)
-                    ):
-                        error_code, value = raw_value
-                    else:
-                        error_code, value = 0, raw_value
+                    error_code, value = _decode_cell(
+                        result_file.GetValue(row, column)
+                    )
 
                     values.append(value if error_code == 0 else None)
                     if error_code != 0:
@@ -983,6 +1078,16 @@ def get_contingency_results(
                         })
 
                 item = {"index": row, "values": values}
+                if object_column is not None and values[object_column] is not None:
+                    object_index = int(values[object_column])
+                    item["object_index"] = object_index
+                    object_error, result_object = _decode_cell(
+                        result_file.GetObj(object_index)
+                    )
+                    if object_error == 0 and result_object is not None:
+                        item["object"] = _object_summary(result_object)
+                    elif object_error != 0:
+                        item["object_error_code"] = object_error
                 if errors:
                     item["errors"] = errors
                 rows.append(item)
@@ -1001,6 +1106,246 @@ def get_contingency_results(
                 ),
                 "columns": columns,
                 "rows": rows,
+            }
+        finally:
+            result_file.Release()
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def get_contingency_summary(
+    calculation_method: str = "ac",
+    min_voltage_pu: float = 0.9,
+    max_voltage_pu: float = 1.1,
+    max_loading_pct: float = 100.0,
+    max_results: int = 100,
+    max_affected_elements: int = 100,
+) -> str:
+    """Summarize bounded existing contingency results without running a calculation."""
+    method = str(calculation_method or "").strip().lower()
+    if method not in {"ac", "dc"}:
+        return _to_json({
+            "success": False,
+            "message": "calculation_method must be 'ac' or 'dc'",
+        })
+
+    try:
+        minimum_voltage = float(min_voltage_pu)
+        maximum_voltage = float(max_voltage_pu)
+        maximum_loading = float(max_loading_pct)
+        result_limit = max(1, min(int(max_results), 1000))
+        affected_limit = max(1, min(int(max_affected_elements), 1000))
+    except (TypeError, ValueError):
+        return _to_json({
+            "success": False,
+            "message": (
+                "Thresholds must be numbers and result limits must be integers"
+            ),
+        })
+    if (
+        not all(math.isfinite(value) for value in (
+            minimum_voltage,
+            maximum_voltage,
+            maximum_loading,
+        ))
+        or minimum_voltage >= maximum_voltage
+        or maximum_loading < 0
+    ):
+        return _to_json({
+            "success": False,
+            "message": "Voltage limits must increase and max_loading_pct must be non-negative",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {"success": False, "message": "ComSimoutage is unavailable"}
+
+        reference_name = "p_rescnt" if method == "ac" else "p_rescntDC"
+        result_file = command.GetAttribute(reference_name)
+        if result_file is None:
+            return {
+                "success": False,
+                "message": f"{method.upper()} contingency result file is not configured",
+            }
+
+        load_code = result_file.Load()
+        if load_code not in (0, None):
+            return {
+                "success": False,
+                "message": f"ElmRes.Load returned error code {load_code}",
+            }
+
+        def value_at(row, column):
+            error_code, value = _decode_cell(
+                result_file.GetValue(row, column)
+            )
+            return value if error_code == 0 else None
+
+        def object_at(index):
+            error_code, value = _decode_cell(result_file.GetObj(int(index)))
+            return value if error_code == 0 else None
+
+        def affected_elements(contingency):
+            elements = []
+            index = 0
+            while True:
+                element = contingency.GetObject(index)
+                if element is None:
+                    break
+                elements.append(_object_summary(element))
+                index += 1
+            returned = elements[:affected_limit]
+            return {
+                "affected_elements": returned,
+                "total_affected_elements": len(elements),
+                "returned_affected_elements": len(returned),
+                "affected_elements_truncated": len(returned) < len(elements),
+            }
+
+        def finish(entry):
+            voltages = list(entry.pop("_voltages").values())
+            loadings = list(entry.pop("_loadings").values())
+            entry["voltage_violations"] = [
+                value for value in voltages
+                if value["voltage_pu"] < minimum_voltage
+                or value["voltage_pu"] > maximum_voltage
+            ]
+            entry["overloads"] = [
+                value for value in loadings
+                if value["loading_pct"] > maximum_loading
+            ]
+            entry["minimum_voltage"] = min(
+                voltages,
+                key=lambda value: value["voltage_pu"],
+                default=None,
+            )
+            entry["maximum_voltage"] = max(
+                voltages,
+                key=lambda value: value["voltage_pu"],
+                default=None,
+            )
+            entry["maximum_loading"] = max(
+                loadings,
+                key=lambda value: value["loading_pct"],
+                default=None,
+            )
+            return entry
+
+        try:
+            total_rows = result_file.GetNumberOfRows()
+            total_columns = result_file.GetNumberOfColumns()
+            metadata = {}
+            measurements = []
+            for column in range(total_columns):
+                variable = result_file.GetVariable(column)
+                if variable in {"b:i_obj", "b:inoconv"}:
+                    metadata[variable] = column
+                if variable not in {"m:u", "c:loading"}:
+                    continue
+                monitored_object = result_file.GetObject(column)
+                if monitored_object is not None:
+                    measurements.append((column, variable, monitored_object))
+
+            if "b:i_obj" not in metadata:
+                return {
+                    "success": False,
+                    "message": "Result file has no b:i_obj contingency column",
+                }
+            if total_rows * (len(metadata) + len(measurements)) > 20_000:
+                return {
+                    "success": False,
+                    "message": "Interpreted result scan exceeds 20,000 cells",
+                }
+
+            base_case = {
+                "converged": None,
+                "convergence_code": None,
+                "_voltages": {},
+                "_loadings": {},
+            }
+            contingencies = {}
+            for row in range(total_rows):
+                object_index = value_at(row, metadata["b:i_obj"])
+                result_object = (
+                    object_at(object_index)
+                    if object_index is not None
+                    else None
+                )
+                if (
+                    result_object is not None
+                    and result_object.GetClassName() == "ComOutage"
+                ):
+                    key = result_object.GetFullName()
+                    if key not in contingencies:
+                        contingencies[key] = {
+                            "contingency": _object_summary(result_object),
+                            **affected_elements(result_object),
+                            "converged": None,
+                            "convergence_code": None,
+                            "_voltages": {},
+                            "_loadings": {},
+                        }
+                    entry = contingencies[key]
+                elif result_object is None:
+                    entry = base_case
+                else:
+                    continue
+
+                convergence_column = metadata.get("b:inoconv")
+                convergence_code = (
+                    value_at(row, convergence_column)
+                    if convergence_column is not None
+                    else None
+                )
+                if convergence_code is not None:
+                    entry["convergence_code"] = int(convergence_code)
+                    entry["converged"] = int(convergence_code) == 0
+
+                for column, variable, monitored_object in measurements:
+                    value = value_at(row, column)
+                    if value is None:
+                        continue
+                    summary = _object_summary(monitored_object)
+                    key = summary["full_name"]
+                    if variable == "m:u":
+                        entry["_voltages"][key] = {
+                            **summary,
+                            "voltage_pu": float(value),
+                        }
+                    else:
+                        entry["_loadings"][key] = {
+                            **summary,
+                            "loading_pct": float(value),
+                        }
+
+            results = [
+                finish(entry)
+                for entry in list(contingencies.values())[:result_limit]
+            ]
+            return {
+                "success": True,
+                "calculation_method": method,
+                "result_file": _object_summary(result_file),
+                "thresholds": {
+                    "min_voltage_pu": minimum_voltage,
+                    "max_voltage_pu": maximum_voltage,
+                    "max_loading_pct": maximum_loading,
+                },
+                "base_case": finish(base_case),
+                "total_count": len(contingencies),
+                "returned_count": len(results),
+                "truncated": len(results) < len(contingencies),
+                "results": results,
             }
         finally:
             result_file.Release()

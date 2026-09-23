@@ -14,6 +14,7 @@ import sys
 import os
 import json
 import csv
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -2079,12 +2080,165 @@ class DIgSILENTAgent:
             return False, str(e)
 
     @classmethod
+    def create_contingency(
+        cls,
+        case_name: str,
+        target_query: str,
+        action: str = "open",
+        time_s: float = 0.0,
+        event_name: str = "Switch Event",
+        folder_name: str = "Fault Cases",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Create one idempotent switch-based contingency definition."""
+        created_case = None
+        created_event = None
+        try:
+            case_name = str(case_name or "").strip()
+            target_query = str(target_query or "").strip()
+            event_name = str(event_name or "").strip()
+            folder_name = str(folder_name or "").strip()
+            if not case_name or not target_query or not event_name or not folder_name:
+                raise ValueError(
+                    "case_name, target_query, event_name, and folder_name are required"
+                )
+
+            action_name = str(action or "").strip().casefold()
+            actions = {"open": 0, "close": 1}
+            if action_name not in actions:
+                raise ValueError("action must be 'open' or 'close'")
+
+            time_s = float(time_s)
+            if not math.isfinite(time_s) or time_s < 0:
+                raise ValueError("time_s must be a finite non-negative number")
+
+            app = cls._get_application(open_digsilent)
+            project = app.GetActiveProject()
+            if project is None:
+                raise RuntimeError("No PowerFactory project is active")
+
+            folders = cls._find_named_contents(
+                project,
+                folder_name,
+                "IntFltcases",
+            )
+            if len(folders) != 1:
+                raise RuntimeError(
+                    f"Expected one contingency folder named '{folder_name}', found {len(folders)}"
+                )
+            folder = folders[0]
+
+            targets = app.GetCalcRelevantObjects(target_query) or []
+            if len(targets) != 1:
+                raise RuntimeError(
+                    f"Expected one target matching '{target_query}', found {len(targets)}"
+                )
+            target = targets[0]
+
+            cases = cls._find_named_contents(folder, case_name, "IntEvt")
+            if len(cases) > 1:
+                raise RuntimeError(f"Multiple contingency cases matched: {case_name}")
+            if cases:
+                fault_case = cases[0]
+            else:
+                fault_case = folder.CreateObject("IntEvt", case_name)
+                if fault_case is None:
+                    raise RuntimeError(f"Could not create contingency case: {case_name}")
+                created_case = fault_case
+
+            events = cls._find_named_contents(fault_case, event_name, "EvtSwitch")
+            if len(events) > 1:
+                raise RuntimeError(f"Multiple switch events matched: {event_name}")
+            if events:
+                event = events[0]
+                matches = (
+                    event.GetAttribute("p_target").GetFullName()
+                    == target.GetFullName()
+                    and int(event.GetAttribute("i_switch")) == actions[action_name]
+                    and math.isclose(float(event.GetAttribute("time")), time_s)
+                    and not bool(event.GetAttribute("outserv"))
+                )
+                if not matches:
+                    raise RuntimeError(
+                        f"Switch event already exists with different settings: {event_name}"
+                    )
+                created = False
+            else:
+                event = fault_case.CreateObject("EvtSwitch", event_name)
+                if event is None:
+                    raise RuntimeError(f"Could not create switch event: {event_name}")
+                created_event = event
+                cls._set_and_verify_attributes(
+                    event,
+                    {
+                        "p_target": target,
+                        "time": time_s,
+                        "i_switch": actions[action_name],
+                        "outserv": 0,
+                    },
+                    "Switch event",
+                )
+                created = True
+
+            def identity(obj):
+                return {
+                    "name": obj.GetAttribute("loc_name"),
+                    "class_name": obj.GetClassName(),
+                    "full_name": obj.GetFullName(),
+                }
+
+            return {
+                "success": True,
+                "message": (
+                    "Contingency switch event created"
+                    if created
+                    else "Contingency switch event already existed"
+                ),
+                "created": created,
+                "case": identity(fault_case),
+                "event": identity(event),
+                "target": identity(target),
+                "action": action_name,
+                "time_s": time_s,
+            }
+        except Exception as e:
+            for label, created_object in (
+                ("switch event", created_event),
+                ("contingency case", created_case),
+            ):
+                if created_object is None:
+                    continue
+                try:
+                    created_object.Delete()
+                except Exception as rollback_error:
+                    log.error(
+                        f"Could not roll back created {label}: {rollback_error}"
+                    )
+            log.error(f"Contingency creation failed: {e}")
+            return {"success": False, "message": str(e)}
+
+    @classmethod
     def run_contingency_analysis(
         cls,
         open_digsilent: bool = True,
+        calculation_method: str = "configured",
     ) -> dict[str, Any]:
-        """Execute the active study case's configured ComSimoutage command."""
+        """Execute ComSimoutage, optionally selecting its calculation method."""
         try:
+            modes = {
+                "configured": None,
+                "ac": 0,
+                "dc": 1,
+                "ac_linearised": 2,
+                "linearised_screening": 3,
+            }
+            mode = calculation_method.strip().casefold()
+            if mode not in modes:
+                raise ValueError(
+                    "calculation_method must be one of: "
+                    + ", ".join(modes)
+                )
+
             app = cls._get_application(open_digsilent)
             if app.GetActiveStudyCase() is None:
                 raise RuntimeError("No PowerFactory study case is active")
@@ -2096,9 +2250,6 @@ class DIgSILENTAgent:
                     "check the PowerFactory licence and command configuration"
                 )
 
-            error_code = command.Execute()
-            succeeded = error_code in (0, None)
-
             def attribute(name: str):
                 try:
                     value = command.GetAttribute(name)
@@ -2108,34 +2259,80 @@ class DIgSILENTAgent:
                     pass
                 return getattr(command, name, None)
 
-            if not succeeded:
-                log.error(
-                    "Contingency analysis failed: ComSimoutage returned "
-                    f"error code {error_code}"
-                )
+            selected_method = modes[mode]
+            previous_method = None
+            if selected_method is not None:
+                previous_method = attribute("iopt_Linear")
+
+            result = None
+            try:
+                if selected_method is not None:
+                    cls._set_and_verify_attributes(
+                        command,
+                        {"iopt_Linear": selected_method},
+                        "Contingency Analysis",
+                    )
+                error_code = command.Execute()
+                succeeded = error_code in (0, None)
+
+                if not succeeded:
+                    log.error(
+                        "Contingency analysis failed: ComSimoutage returned "
+                        f"error code {error_code}"
+                    )
+
+                # Capture the settings used by this run before restoring an
+                # explicit method selection below.
+                result = {
+                    "success": succeeded,
+                    "message": (
+                        "Configured contingency analysis completed"
+                        if succeeded
+                        else f"ComSimoutage returned error code {error_code}"
+                    ),
+                    "execution_code": error_code,
+                    "command": {
+                        "name": attribute("loc_name"),
+                        "class_name": command.GetClassName(),
+                        "full_name": command.GetFullName(),
+                    },
+                    "settings": {
+                        "mode": mode,
+                        "data_source": attribute("dat_src"),
+                        "calculation_method": attribute("iopt_method"),
+                        "linear_method": attribute("iopt_Linear"),
+                        "linear_option": attribute("copt_Linear"),
+                        "combine_ac_dc": attribute("iACDCCombine"),
+                        "dynamic_contingencies": attribute("dynamicCase"),
+                        "mode_restored": True,
+                    },
+                }
+            finally:
+                if selected_method is not None:
+                    try:
+                        cls._set_and_verify_attributes(
+                            command,
+                            {"iopt_Linear": previous_method},
+                            "Contingency Analysis",
+                        )
+                    except Exception as restore_error:
+                        # The run already happened, and its verdict is what the
+                        # caller asked for -- losing it to report a restore
+                        # failure would hide both the outcome and the
+                        # execution code. Keep the result and say the study
+                        # case was left on the explicit mode. Swallowing the
+                        # error here also stops it replacing an exception the
+                        # try block is already propagating.
+                        log.error(
+                            "Could not restore iopt_Linear to "
+                            f"{previous_method!r}: {restore_error}"
+                        )
+                        if result is not None:
+                            result["settings"]["mode_restored"] = False
 
             # A native failure keeps the same shape as a success, so a caller
             # can read execution_code instead of parsing the message text.
-            return {
-                "success": succeeded,
-                "message": (
-                    "Configured contingency analysis completed"
-                    if succeeded
-                    else f"ComSimoutage returned error code {error_code}"
-                ),
-                "execution_code": error_code,
-                "command": {
-                    "name": attribute("loc_name"),
-                    "class_name": command.GetClassName(),
-                    "full_name": command.GetFullName(),
-                },
-                "settings": {
-                    "data_source": attribute("dat_src"),
-                    "calculation_method": attribute("iopt_method"),
-                    "linear_method": attribute("iopt_Linear"),
-                    "dynamic_contingencies": attribute("dynamicCase"),
-                },
-            }
+            return result
         except Exception as e:
             log.error(f"Contingency analysis failed: {e}")
             return {
