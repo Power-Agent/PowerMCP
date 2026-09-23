@@ -94,6 +94,7 @@ mcp = FastMCP(
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_MAX_AFFECTED_ELEMENT_SCAN = 10_000
 
 
 def _ensure_checked_directory(path: str, purpose: str) -> str:
@@ -1197,13 +1198,19 @@ def get_contingency_summary(
 
         def affected_elements(contingency):
             elements = []
-            index = 0
-            while True:
+            # Probe one index past the cap: PowerFactory ends the list with
+            # None, so a contingency with exactly the cap's worth of elements
+            # is only known to be complete once that extra probe comes back.
+            for index in range(_MAX_AFFECTED_ELEMENT_SCAN + 1):
                 element = contingency.GetObject(index)
                 if element is None:
                     break
+                if index == _MAX_AFFECTED_ELEMENT_SCAN:
+                    raise RuntimeError(
+                        "Affected element scan exceeded the safe limit of "
+                        f"{_MAX_AFFECTED_ELEMENT_SCAN}"
+                    )
                 elements.append(_object_summary(element))
-                index += 1
             returned = elements[:affected_limit]
             return {
                 "affected_elements": returned,

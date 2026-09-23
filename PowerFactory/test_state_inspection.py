@@ -417,6 +417,45 @@ class StateInspectionTest(unittest.TestCase):
         self.assertEqual(summary["base_case"]["maximum_loading"]["loading_pct"], 50.0)
         self.assertEqual(released, [True])
 
+        # A GetObject that never returns None must stop at the cap. The probe
+        # list also stops the test itself: an unbounded walk fails here fast
+        # instead of hanging CI, which sets no pytest timeout.
+        probes = []
+
+        def never_none(index):
+            probes.append(index)
+            if len(probes) > 10:
+                raise AssertionError("affected element scan did not stop")
+            return outage_line
+
+        contingency.GetObject = never_none
+        with patch.object(mcp_module, "_MAX_AFFECTED_ELEMENT_SCAN", 2):
+            unbounded = json.loads(mcp_module.get_contingency_summary())
+        self.assertFalse(unbounded["success"])
+        self.assertIn("scan exceeded the safe limit", unbounded["message"])
+        self.assertEqual(probes, [0, 1, 2])
+        self.assertEqual(released, [True, True])
+
+        # Exactly as many elements as the cap is a complete scan, not an
+        # overflow: the walk has to probe one index past the last element to
+        # see PowerFactory's terminating None.
+        contingency.GetObject = lambda index: (
+            affected[index] if index < len(affected) else None
+        )
+        with patch.object(
+            mcp_module, "_MAX_AFFECTED_ELEMENT_SCAN", len(affected)
+        ):
+            at_cap = json.loads(mcp_module.get_contingency_summary())
+        self.assertTrue(at_cap["success"], at_cap.get("message"))
+        self.assertEqual(
+            at_cap["results"][0]["total_affected_elements"],
+            len(affected),
+        )
+
+        # max_affected_elements clamps to 1000, so the scan cap must sit above
+        # it or affected_elements_truncated could never be reported.
+        self.assertGreater(mcp_module._MAX_AFFECTED_ELEMENT_SCAN, 1000)
+
     def test_agent_result_serializes_tuple_result(self):
         with patch.object(
             FakeAgent,
