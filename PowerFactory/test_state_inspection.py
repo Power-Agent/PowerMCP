@@ -417,6 +417,13 @@ class StateInspectionTest(unittest.TestCase):
         self.assertEqual(summary["base_case"]["maximum_loading"]["loading_pct"], 50.0)
         self.assertEqual(released, [True])
 
+        contingency.GetObject = lambda index: outage_line
+        with patch.object(mcp_module, "_MAX_AFFECTED_ELEMENT_SCAN", 2):
+            unbounded = json.loads(mcp_module.get_contingency_summary())
+        self.assertFalse(unbounded["success"])
+        self.assertIn("scan exceeded the safe limit", unbounded["message"])
+        self.assertEqual(released, [True, True])
+
     def test_agent_result_serializes_tuple_result(self):
         with patch.object(
             FakeAgent,

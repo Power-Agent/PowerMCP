@@ -94,6 +94,7 @@ mcp = FastMCP(
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_MAX_AFFECTED_ELEMENT_SCAN = 10_000
 
 
 def _ensure_checked_directory(path: str, purpose: str) -> str:
@@ -1197,13 +1198,16 @@ def get_contingency_summary(
 
         def affected_elements(contingency):
             elements = []
-            index = 0
-            while True:
+            for index in range(_MAX_AFFECTED_ELEMENT_SCAN):
                 element = contingency.GetObject(index)
                 if element is None:
                     break
                 elements.append(_object_summary(element))
-                index += 1
+            else:
+                raise RuntimeError(
+                    "Affected element scan exceeded the safe limit of "
+                    f"{_MAX_AFFECTED_ELEMENT_SCAN}"
+                )
             returned = elements[:affected_limit]
             return {
                 "affected_elements": returned,
