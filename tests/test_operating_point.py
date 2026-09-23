@@ -3,7 +3,7 @@ import copy
 import pandapower as pp
 import pandapower.networks as pn
 
-from pandapower.operating_point import validate_operating_point
+from operating_point import validate_operating_point
 
 
 def test_case9_clean_operating_point_is_ok():
