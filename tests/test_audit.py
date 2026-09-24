@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import importlib.util
 from pathlib import Path
 import sys
 
 import pandapower as pp
+import pandapower.networks as pn
 
 _AUDIT_PATH = Path(__file__).resolve().parents[1] / "pandapower" / "audit.py"
 _SPEC = importlib.util.spec_from_file_location("powermcp_pandapower_audit", _AUDIT_PATH)
@@ -14,6 +16,43 @@ _AUDIT_MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = _AUDIT_MODULE
 _SPEC.loader.exec_module(_AUDIT_MODULE)
 audit_network = _AUDIT_MODULE.audit_network
+
+_SERVER_PATH = _AUDIT_PATH.parent / "panda_mcp.py"
+
+
+def _load_server():
+    spec = importlib.util.spec_from_file_location("powermcp_pandapower_server", _SERVER_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_server_like_runner():
+    # The runner puts only the server's own directory on sys.path.
+    server_dir = str(_SERVER_PATH.parent)
+    sys.path.insert(0, server_dir)
+    try:
+        return _load_server()
+    finally:
+        sys.path.remove(server_dir)
+
+
+def _graded(report):
+    return {(f.code, f.severity) for f in report.findings}
+
+
+def _two_bus_trafo_net(vk_percent):
+    net = pp.create_empty_network()
+    hv = pp.create_bus(net, vn_kv=110)
+    lv = pp.create_bus(net, vn_kv=20)
+    pp.create_ext_grid(net, hv)
+    pp.create_transformer_from_parameters(
+        net, hv, lv, sn_mva=40, vn_hv_kv=110, vn_lv_kv=20,
+        vkr_percent=0.3, vk_percent=vk_percent, pfe_kw=0, i0_percent=0,
+    )
+    return net
 
 
 def test_audit_clean_network():
@@ -37,7 +76,7 @@ def test_audit_flags_reversed_voltage_limits():
 def test_audit_flags_nonfinite_voltage_limit():
     net = pp.create_empty_network()
     bus = pp.create_bus(net, vn_kv=110, min_vm_pu=0.95, max_vm_pu=1.05)
-    net.bus.at[bus, "min_vm_pu"] = float("nan")
+    net.bus.at[bus, "min_vm_pu"] = float("inf")
     pp.create_ext_grid(net, bus)
     report = audit_network(net)
     assert report.status == "error"
@@ -112,27 +151,148 @@ def test_audit_report_is_json_serializable_and_stable():
     assert all(set(f) == {"severity", "code", "message", "element", "index"} for f in first["findings"])
 
 
-def test_server_audit_reports_failed_when_no_network_is_loaded():
-    server_path = Path(__file__).resolve().parents[1] / "pandapower" / "panda_mcp.py"
-    server_dir = str(server_path.parent)
-    sys.path.insert(0, server_dir)
-    try:
-        spec = importlib.util.spec_from_file_location("powermcp_pandapower_server", server_path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+def test_audit_warning_only_report_is_warning():
+    report = audit_network(pn.case11_iwamoto())
+    assert report.status == report.to_dict()["status"] == "warning"
+    assert report.counts == {"errors": 0, "warnings": 11, "info": 0}
 
-        original = module._current_net
-        module._current_net = None
-        try:
-            result = module.audit_network()
-        finally:
-            module._current_net = original
-    finally:
-        sys.path.remove(server_dir)
 
-    assert result["status"] == "failed"
+def test_audit_grades_benchmark_equivalents_as_warning():
+    # Negative line r and trafo vk are non-physical but solve (converted equivalents).
+    assert audit_network(pn.case145()).status == "warning"
+    assert audit_network(pn.case1888rte()).status == "warning"
+
+
+def test_audit_grades_transformer_short_circuit_voltage():
+    assert _graded(audit_network(_two_bus_trafo_net(0))) == {
+        ("TRAFO_INVALID_SHORT_CIRCUIT", "error")
+    }
+    assert _graded(audit_network(_two_bus_trafo_net(-5))) == {
+        ("TRAFO_NEGATIVE_SHORT_CIRCUIT", "warning")
+    }
+
+
+def test_audit_grades_line_resistance():
+    net = pp.create_empty_network()
+    b0 = pp.create_bus(net, vn_kv=110)
+    b1 = pp.create_bus(net, vn_kv=110)
+    pp.create_ext_grid(net, b0)
+    line = pp.create_line_from_parameters(
+        net, b0, b1, length_km=1, r_ohm_per_km=-0.1, x_ohm_per_km=0.1,
+        c_nf_per_km=0, max_i_ka=1,
+    )
+    assert _graded(audit_network(net)) == {("LINE_NEGATIVE_RESISTANCE", "warning")}
+    net.line.at[line, "r_ohm_per_km"] = float("nan")
+    assert _graded(audit_network(net)) == {("LINE_INVALID_RESISTANCE", "error")}
+
+
+def test_audit_treats_nan_voltage_limits_as_unset():
+    net = pp.create_empty_network()
+    b0 = pp.create_bus(net, vn_kv=110, min_vm_pu=0.95, max_vm_pu=1.05)
+    b1, b2 = pp.create_buses(net, 2, vn_kv=110)
+    pp.create_ext_grid(net, b0)
+    for f, t in ((b0, b1), (b1, b2)):
+        pp.create_line_from_parameters(
+            net, f, t, length_km=1, r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+            c_nf_per_km=0, max_i_ka=1,
+        )
+    assert net.bus.loc[[b1, b2], ["min_vm_pu", "max_vm_pu"]].isna().all().all()
+    assert audit_network(net).status == "ok"
+
+
+def test_audit_caps_out_of_service_placeholder_line_at_warning():
+    net = pp.create_empty_network()
+    b0 = pp.create_bus(net, vn_kv=110)
+    b1 = pp.create_bus(net, vn_kv=110)
+    pp.create_ext_grid(net, b0)
+    pp.create_line_from_parameters(
+        net, b0, b1, length_km=1, r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+        c_nf_per_km=0, max_i_ka=1,
+    )
+    pp.create_line_from_parameters(
+        net, b0, b1, length_km=0, r_ohm_per_km=0, x_ohm_per_km=0,
+        c_nf_per_km=0, max_i_ka=0, in_service=False,
+    )
+    report = audit_network(net)
+    assert report.status == "warning"
+    assert _graded(report) == {
+        ("LINE_NONPOSITIVE_LENGTH", "warning"),
+        ("LINE_ZERO_IMPEDANCE", "warning"),
+        ("LINE_MISSING_RATING", "warning"),
+    }
+
+
+def test_audit_flags_area_fed_only_through_dcline():
+    net = pp.create_empty_network()
+    b0, b1, b2, b3 = [pp.create_bus(net, vn_kv=110) for _ in range(4)]
+    pp.create_ext_grid(net, b0)
+    for f, t in ((b0, b1), (b2, b3)):
+        pp.create_line_from_parameters(
+            net, f, t, length_km=1, r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+            c_nf_per_km=0, max_i_ka=1,
+        )
+    pp.create_dcline(
+        net, b1, b2, p_mw=1, loss_percent=0, loss_mw=0, vm_from_pu=1, vm_to_pu=1,
+    )
+    pp.create_load(net, b3, p_mw=0.5)
+
+    report = audit_network(net)
+
+    disconnected = {
+        f.index for f in report.findings if f.code == "DISCONNECTED_BUS"
+    }
+    assert disconnected == {2, 3}
+
+
+def test_server_audit_reports_error_when_no_network_is_loaded():
+    module = _load_server_like_runner()
+    module._current_net = None
+    result = module.audit_network()
+
+    assert result["status"] == "error"
     assert "No pandapower network is currently loaded" in result["message"]
 
-# Keep the server-boundary test on the same import path used by the runner.
+
+def test_server_audit_success_carries_verdict_counts_and_findings():
+    module = _load_server_like_runner()
+    net = pn.case9()
+    pp.create_bus(net, vn_kv=345, min_vm_pu=0.9, max_vm_pu=1.1)
+    module._current_net = net
+    result = module.audit_network()
+
+    assert result["status"] == "success"
+    assert result["audit_status"] == "error"
+    assert result["counts"] == {"errors": 1, "warnings": 0, "info": 0}
+    assert [f["code"] for f in result["findings"]] == ["DISCONNECTED_BUS"]
+
+
+def test_server_audit_reports_error_when_audit_raises():
+    class _BrokenNet:
+        @property
+        def bus(self):
+            raise ValueError("bus table unreadable")
+
+    module = _load_server_like_runner()
+    module._current_net = _BrokenNet()
+    result = module.audit_network()
+
+    assert result["status"] == "error"
+    assert "bus table unreadable" in result["message"]
+
+
+def test_server_registers_audit_tool():
+    module = _load_server_like_runner()
+    names = {tool.name for tool in asyncio.run(module.mcp.list_tools())}
+    assert "audit_network" in names
+
+
+def test_server_imports_audit_without_its_directory_on_sys_path(monkeypatch):
+    # `python -P pandapower/panda_mcp.py` (or PYTHONSAFEPATH) omits the script dir.
+    server_dir = _SERVER_PATH.parent.resolve()
+    monkeypatch.setattr(
+        sys, "path", [p for p in sys.path if Path(p or ".").resolve() != server_dir]
+    )
+    monkeypatch.delitem(sys.modules, "audit", raising=False)
+    module = _load_server()
+    module._current_net = pn.case9()
+    assert module.audit_network()["status"] == "success"

@@ -11,6 +11,13 @@ import math
 from typing import Any
 
 
+def _is_nan(value: Any) -> bool:
+    try:
+        return math.isnan(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
 @dataclass(frozen=True)
 class AuditFinding:
     severity: str
@@ -65,15 +72,22 @@ def audit_network(net: Any) -> AuditReport:
         for idx, row in buses.iterrows():
             if not bool(row.get("in_service", True)):
                 add("warning", "BUS_OUT_OF_SERVICE", "Bus is out of service.", "bus", int(idx))
+            # Parameter faults on an out-of-service element cannot break a solve.
+            sev = "error" if bool(row.get("in_service", True)) else "warning"
 
             minimum = row.get("min_vm_pu")
             maximum = row.get("max_vm_pu")
+            # NaN is how pandapower stores an unset limit (e.g. create_buses).
+            if _is_nan(minimum):
+                minimum = None
+            if _is_nan(maximum):
+                maximum = None
             if minimum is not None:
                 if not finite(minimum) or float(minimum) < 0:
-                    add("error", "BUS_MIN_VM_INVALID", "min_vm_pu must be finite and non-negative.", "bus", int(idx))
+                    add(sev, "BUS_MIN_VM_INVALID", "min_vm_pu must be finite and non-negative.", "bus", int(idx))
             if maximum is not None:
                 if not finite(maximum) or float(maximum) <= 0:
-                    add("error", "BUS_MAX_VM_INVALID", "max_vm_pu must be finite and positive.", "bus", int(idx))
+                    add(sev, "BUS_MAX_VM_INVALID", "max_vm_pu must be finite and positive.", "bus", int(idx))
             if (
                 minimum is not None
                 and maximum is not None
@@ -82,7 +96,7 @@ def audit_network(net: Any) -> AuditReport:
                 and float(minimum) > float(maximum)
             ):
                 add(
-                    "error",
+                    sev,
                     "BUS_VOLTAGE_RANGE_REVERSED",
                     "min_vm_pu is greater than max_vm_pu.",
                     "bus",
@@ -92,16 +106,25 @@ def audit_network(net: Any) -> AuditReport:
     lines = getattr(net, "line", None)
     if lines is not None:
         for idx, row in lines.iterrows():
+            sev = "error" if bool(row.get("in_service", True)) else "warning"
             length = row.get("length_km")
             resistance = row.get("r_ohm_per_km")
             reactance = row.get("x_ohm_per_km")
             if length is not None and (not finite(length) or float(length) <= 0):
-                add("error", "LINE_NONPOSITIVE_LENGTH", "Line length must be positive.", "line", int(idx))
-            if resistance is not None and (not finite(resistance) or float(resistance) < 0):
+                add(sev, "LINE_NONPOSITIVE_LENGTH", "Line length must be positive.", "line", int(idx))
+            if resistance is not None and not finite(resistance):
                 add(
-                    "error",
+                    sev,
+                    "LINE_INVALID_RESISTANCE",
+                    "Line resistance must be a finite number.",
+                    "line",
+                    int(idx),
+                )
+            elif resistance is not None and float(resistance) < 0:
+                add(
+                    "warning",
                     "LINE_NEGATIVE_RESISTANCE",
-                    "Line resistance cannot be negative.",
+                    "Line resistance is negative (non-physical; common in network equivalents).",
                     "line",
                     int(idx),
                 )
@@ -113,7 +136,7 @@ def audit_network(net: Any) -> AuditReport:
                 and float(reactance) == 0
                 and float(resistance) == 0
             ):
-                add("error", "LINE_ZERO_IMPEDANCE", "Line has zero series impedance.", "line", int(idx))
+                add(sev, "LINE_ZERO_IMPEDANCE", "Line has zero series impedance.", "line", int(idx))
             if "max_i_ka" in row and (
                 not finite(row["max_i_ka"]) or float(row["max_i_ka"]) <= 0
             ):
@@ -122,6 +145,7 @@ def audit_network(net: Any) -> AuditReport:
     trafos = getattr(net, "trafo", None)
     if trafos is not None:
         for idx, row in trafos.iterrows():
+            sev = "error" if bool(row.get("in_service", True)) else "warning"
             if "sn_mva" in row and (
                 not finite(row["sn_mva"]) or float(row["sn_mva"]) <= 0
             ):
@@ -133,25 +157,38 @@ def audit_network(net: Any) -> AuditReport:
                     int(idx),
                 )
             if "vk_percent" in row and (
-                not finite(row["vk_percent"]) or float(row["vk_percent"]) <= 0
+                not finite(row["vk_percent"]) or float(row["vk_percent"]) == 0
             ):
                 add(
-                    "error",
+                    sev,
                     "TRAFO_INVALID_SHORT_CIRCUIT",
-                    "Transformer vk_percent must be positive.",
+                    "Transformer vk_percent must be finite and non-zero.",
+                    "trafo",
+                    int(idx),
+                )
+            elif "vk_percent" in row and float(row["vk_percent"]) < 0:
+                add(
+                    "warning",
+                    "TRAFO_NEGATIVE_SHORT_CIRCUIT",
+                    "Transformer vk_percent is negative (negative series reactance; common in converted equivalents).",
                     "trafo",
                     int(idx),
                 )
 
     try:
-        from pandapower.topology import unsupplied_buses
+        from pandapower.topology import create_nxgraph, unsupplied_buses
 
         in_service_buses = (
             set(net.bus.index[net.bus.in_service])
             if "in_service" in net.bus
             else set(net.bus.index)
         )
-        for idx in sorted(unsupplied_buses(net) & in_service_buses):
+        # A dcline is two PV generators, not a slack, so it does not supply the
+        # far side. Adding every bus keeps an isolated one visible even when a
+        # dangling element reference inflates the graph's node count.
+        graph = create_nxgraph(net, include_dclines=False)
+        graph.add_nodes_from(in_service_buses)
+        for idx in sorted(unsupplied_buses(net, mg=graph) & in_service_buses):
             add(
                 "error",
                 "DISCONNECTED_BUS",
