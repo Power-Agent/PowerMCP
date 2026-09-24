@@ -1,0 +1,9 @@
+clear
+new circuit.t basekv=4.16 phases=3 bus1=sourcebus
+new wiredata.w rac=0.1859 gmr=0.0313 radius=0.4635 runits=mi gmrunits=ft radunits=in
+new linegeometry.g nconds=4 nphases=3 reduce=no
+~ cond=1 wire=w x=2.5 h=29 units=ft
+~ cond=2 wire=w x=0 h=29 units=ft
+~ cond=3 wire=w x=7 h=29 units=ft
+~ cond=4 wire=w x=4 h=25 units=ft
+new line.l bus1=sourcebus bus2=b geometry=g length=1 units=m

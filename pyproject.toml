@@ -66,6 +66,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # --- open-source tool engines ---
+tellegen   = []  # The native CLI installs separately.
 andes      = ["andes"]
 egret      = ["gridx-egret", "pyomo"]          # PyPI dist is `gridx-egret`; imports as `egret`
 opendss    = ["py_dss_toolkit"]
@@ -105,7 +106,7 @@ powerfactory = ["numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powe
 # powermcp[plexosdb]` until that's resolved upstream.
 plexosdb   = ["r2x-plexos>=0.3.0", "r2x-plexos-to-sienna>=0.1.0", "r2x-sienna>=0.4.0"]
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
+opensource = ["powermcp[tellegen]", "powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]", "powermcp[plexosdb]"]
 
