@@ -6,6 +6,12 @@ import pandapower as pp
 from mcp.server.mcpserver import MCPServer as FastMCP
 import logging
 
+# Only the repo root would shadow the real pandapower library, not this dir.
+_server_dir = str(Path(__file__).resolve().parent)
+if _server_dir not in sys.path:
+    sys.path.insert(0, _server_dir)
+from audit import audit_network as _audit_network
+
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
@@ -42,6 +48,35 @@ def _get_network() -> pp.pandapowerNet:
     if _current_net is None:
         raise RuntimeError("No pandapower network is currently loaded. Please create or load a network first.")
     return _current_net
+
+
+@mcp.tool()
+def audit_network() -> Dict[str, Any]:
+    """Run a deterministic structural audit on the current network.
+
+    The audit does not run a power flow and does not mutate the network.
+
+    Returns:
+        Dict whose ``status`` is ``success`` when the audit ran, or ``error``
+        with a ``message`` when it could not run, like the other tools. On
+        success, ``audit_status`` is the verdict (``ok``, ``warning`` or
+        ``error``), ``counts`` has keys ``errors``, ``warnings`` and ``info``,
+        and each of ``findings`` has ``severity``, ``code``, ``message``,
+        ``element`` and ``index``.
+    """
+    logger.info("Auditing current pandapower network")
+    try:
+        report = _audit_network(_get_network()).to_dict()
+    except RuntimeError as re:
+        return {"status": "error", "message": str(re)}
+    except Exception as e:
+        return {"status": "error", "message": f"Network audit failed: {str(e)}"}
+    return {
+        "status": "success",
+        "audit_status": report["status"],
+        "counts": report["counts"],
+        "findings": report["findings"],
+    }
 
 
 @mcp.tool()

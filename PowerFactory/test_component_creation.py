@@ -1,6 +1,6 @@
 import unittest
 from fnmatch import fnmatchcase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import Agent_DIgSILENT as agent_module
 
@@ -28,6 +28,12 @@ DEFAULTS = {
         "typ_id": None,
         "bushv": None,
         "buslv": None,
+        "outserv": 0,
+    },
+    "EvtSwitch": {
+        "p_target": None,
+        "time": 0.0,
+        "i_switch": 0,
         "outserv": 0,
     },
 }
@@ -192,6 +198,216 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertIn("2", result["message"])
         self.assertEqual(result["command"]["class_name"], "ComSimoutage")
         self.assertEqual(result["settings"]["calculation_method"], 1)
+
+    def test_run_contingency_analysis_sets_explicit_calculation_method(self):
+        modes = {
+            "ac": 0,
+            "dc": 1,
+            "ac_linearised": 2,
+            "linearised_screening": 3,
+        }
+
+        for mode, expected in modes.items():
+            with self.subTest(mode=mode):
+                values = {
+                    "loc_name": "Contingency Analysis",
+                    "dat_src": "MAN",
+                    "iopt_method": 0,
+                    "iopt_Linear": 0,
+                    "copt_Linear": 0,
+                    "iACDCCombine": 0,
+                    "dynamicCase": 0,
+                }
+                command = Mock()
+                command.Execute.return_value = 0
+                command.GetClassName.return_value = "ComSimoutage"
+                command.GetFullName.return_value = "Contingency Analysis.ComSimoutage"
+                command.GetAttribute.side_effect = values.__getitem__
+                command.SetAttribute.side_effect = values.__setitem__
+
+                app = Mock()
+                app.GetActiveStudyCase.return_value = Mock()
+                app.GetFromStudyCase.return_value = command
+                self.use_application(app)
+
+                result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+                    open_digsilent=False,
+                    calculation_method=mode,
+                )
+
+                self.assertTrue(result["success"], result["message"])
+                self.assertEqual(result["settings"]["mode"], mode)
+                self.assertEqual(result["settings"]["linear_method"], expected)
+                self.assertEqual(values["iopt_Linear"], 0)
+                self.assertEqual(command.SetAttribute.call_args_list, [
+                    call("iopt_Linear", expected),
+                    call("iopt_Linear", 0),
+                ])
+                command.Execute.assert_called_once_with()
+
+    def test_run_contingency_analysis_restores_method_after_exception(self):
+        values = {
+            "loc_name": "Contingency Analysis",
+            "iopt_Linear": 2,
+        }
+        command = Mock()
+        command.Execute.side_effect = RuntimeError("native failure")
+        command.GetAttribute.side_effect = values.__getitem__
+        command.SetAttribute.side_effect = values.__setitem__
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="dc",
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("native failure", result["message"])
+        self.assertEqual(values["iopt_Linear"], 2)
+        self.assertEqual(command.SetAttribute.call_args_list, [
+            call("iopt_Linear", 1),
+            call("iopt_Linear", 2),
+        ])
+
+    def test_run_contingency_analysis_reports_an_unrestored_method(self):
+        """A failed restore must not be mistaken for a failed analysis.
+
+        The mode is written before the run and put back afterwards. If putting
+        it back fails, the run itself still happened and its verdict is what
+        the caller asked for, so the result stands and ``mode_restored`` says
+        the study case was left on the explicit mode.
+        """
+        values = {
+            "loc_name": "Contingency Analysis",
+            "dat_src": "MAN",
+            "iopt_method": 0,
+            "iopt_Linear": 0,
+            "copt_Linear": 0,
+            "iACDCCombine": 0,
+            "dynamicCase": 0,
+        }
+        command = Mock()
+        command.Execute.return_value = 0
+        command.GetClassName.return_value = "ComSimoutage"
+        command.GetFullName.return_value = "Contingency Analysis.ComSimoutage"
+        command.GetAttribute.side_effect = values.__getitem__
+
+        writes = []
+
+        def set_attribute(name, value):
+            writes.append((name, value))
+            if len(writes) > 1:
+                raise RuntimeError("PowerFactory refused the restore")
+            values[name] = value
+
+        command.SetAttribute.side_effect = set_attribute
+
+        app = Mock()
+        app.GetActiveStudyCase.return_value = Mock()
+        app.GetFromStudyCase.return_value = command
+        self.use_application(app)
+
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="dc",
+        )
+
+        self.assertTrue(result["success"], result["message"])
+        self.assertEqual(result["execution_code"], 0)
+        self.assertEqual(result["settings"]["linear_method"], 1)
+        self.assertFalse(result["settings"]["mode_restored"])
+        self.assertEqual(
+            writes,
+            [("iopt_Linear", 1), ("iopt_Linear", 0)],
+        )
+
+    def test_run_contingency_analysis_rejects_unknown_method(self):
+        result = agent_module.DIgSILENTAgent.run_contingency_analysis(
+            open_digsilent=False,
+            calculation_method="unknown",
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("calculation_method must be one of", result["message"])
+
+    def test_create_contingency_is_idempotent(self):
+        app = FakeApplication([])
+        project = app.GetActiveProject()
+        folder = project.CreateObject("IntFltcases", "Fault Cases")
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        first = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            open_digsilent=False,
+        )
+        second = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(first["success"], first["message"])
+        self.assertTrue(first["created"])
+        self.assertTrue(second["success"], second["message"])
+        self.assertFalse(second["created"])
+        case = folder["IntEvt"][0]
+        self.assertEqual(len(case["EvtSwitch"]), 1)
+        self.assertIs(case["EvtSwitch"][0].GetAttribute("p_target"), target)
+
+    def test_create_contingency_rejects_existing_event_with_other_settings(self):
+        app = FakeApplication([])
+        folder = app.GetActiveProject().CreateObject("IntFltcases", "Fault Cases")
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        first = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            action="open",
+            open_digsilent=False,
+        )
+        second = agent_module.DIgSILENTAgent.create_contingency(
+            "MCP N-1 Test",
+            "Line 01 - 02.ElmLne",
+            action="close",
+            open_digsilent=False,
+        )
+
+        self.assertTrue(first["success"])
+        self.assertFalse(second["success"])
+        self.assertIn("different settings", second["message"])
+        self.assertEqual(len(folder["IntEvt"][0]["EvtSwitch"]), 1)
+
+    def test_create_contingency_preserves_error_when_rollback_fails(self):
+        app = FakeApplication([])
+        app.GetActiveProject().CreateObject("IntFltcases", "Fault Cases")
+        app.GetActiveProject().reject_attribute = "p_target"
+        target = FakeObject(None, "ElmLne", "Line 01 - 02")
+        app.objects["Line 01 - 02.ElmLne"] = [target]
+        self.use_application(app)
+
+        with patch.object(
+            FakeObject,
+            "Delete",
+            side_effect=RuntimeError("cleanup failed"),
+        ) as delete:
+            result = agent_module.DIgSILENTAgent.create_contingency(
+                "MCP N-1 Test",
+                "Line 01 - 02.ElmLne",
+                open_digsilent=False,
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIn("p_target", result["message"])
+        self.assertEqual(delete.call_count, 2)
 
     def test_set_and_verify_attributes_falls_back_to_attribute_name(self):
         element = FakeObject(None, "ElmTerm", "Bus")

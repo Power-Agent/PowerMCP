@@ -66,9 +66,10 @@ def tearDownModule():
 
 
 class FakeObject:
-    def __init__(self, name, class_name, full_name, attributes=None):
+    def __init__(self, name, class_name, full_name, attributes=None, parent=None):
         self.class_name = class_name
         self.full_name = full_name
+        self.parent = parent
         self.attributes = {"loc_name": name}
         self.attributes.update(attributes or {})
         self.attribute_reads = []
@@ -82,6 +83,9 @@ class FakeObject:
 
     def GetFullName(self):
         return self.full_name
+
+    def GetParent(self):
+        return self.parent
 
 
 class FakeFolder:
@@ -116,6 +120,11 @@ class FakeApplication:
 
 class StateInspectionTest(unittest.TestCase):
     def test_contingency_listing_and_bounded_results(self):
+        fault_cases_folder = FakeObject(
+            "Fault Cases",
+            "IntFltcases",
+            r"\user\test.IntPrj\Fault Cases.IntFltcases",
+        )
         target = FakeObject(
             "Line 01 - 02",
             "ElmLne",
@@ -132,22 +141,50 @@ class StateInspectionTest(unittest.TestCase):
                 "outserv": 0,
             },
         )
+        switch = FakeObject(
+            "Switch Event",
+            "EvtSwitch",
+            r"\user\test.IntPrj\Fault Cases\N-1.IntEvt\Switch Event.EvtSwitch",
+            {
+                "p_target": target,
+                "time": 0.0,
+                "i_switch": 0,
+                "outserv": 0,
+            },
+        )
         fault_case = FakeObject(
             "N-1",
             "IntEvt",
             r"\user\test.IntPrj\Fault Cases\N-1.IntEvt",
+            parent=fault_cases_folder,
         )
-        fault_case.GetContents = lambda pattern, recursive: [outage]
+        fault_case.GetContents = lambda pattern, recursive: (
+            [outage] if pattern == "*.EvtOutage" else
+            [switch] if pattern == "*.EvtSwitch" else []
+        )
         empty_fault_case = FakeObject(
             "Empty",
             "IntEvt",
             r"\user\test.IntPrj\Fault Cases\Empty.IntEvt",
+            parent=fault_cases_folder,
         )
         empty_fault_case.GetContents = lambda pattern, recursive: []
+        simulation_events = FakeObject(
+            "Simulation Events/Fault",
+            "IntEvt",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase\Simulation Events/Fault.IntEvt",
+            parent=FakeObject(
+                "Case 1",
+                "IntCase",
+                r"\user\test.IntPrj\Study Cases\Case 1.IntCase",
+            ),
+        )
+        simulation_events.GetContents = lambda pattern, recursive: []
 
         project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
         project.GetContents = lambda pattern, recursive: [
             empty_fault_case,
+            simulation_events,
             fault_case,
         ]
         study_case = FakeObject(
@@ -166,19 +203,60 @@ class StateInspectionTest(unittest.TestCase):
         result_file.Release = lambda: released.append(True)
         result_file.GetNumberOfRows = lambda: 2
         result_file.GetNumberOfColumns = lambda: 3
-        result_file.GetVariable = lambda column: f"variable:{column}"
+        result_file.GetVariable = lambda column: (
+            "b:i_obj" if column == 0 else f"variable:{column}"
+        )
         result_file.GetValue = lambda row, column: (
             (3, 1e35) if (row, column) == (0, 1)
             else (0, row * 10 + column)
         )
+        monitored_object = FakeObject(
+            "Line 01 - 02",
+            "ElmLne",
+            r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
+        )
+        result_file.GetObject = lambda column: (
+            monitored_object if column == 1 else None
+        )
+        result_object = FakeObject(
+            "MCP N-1 Line Test",
+            "IntEvt",
+            r"\user\test.IntPrj\Fault Cases\MCP N-1 Line Test.IntEvt",
+        )
+        result_file.GetObj = lambda index: (0, result_object)
 
-        command = Mock()
-        command.GetAttribute.return_value = result_file
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Study Cases\Case 1.IntCase\Contingency Analysis.ComSimoutage",
+            {
+                "p_rescnt": result_file,
+                "dat_src": "MAN",
+                "iopt_method": 1,
+                "iopt_Linear": 0,
+                "copt_Linear": 0,
+                "iACDCCombine": 0,
+                "dynamicCase": 0,
+            },
+        )
         app = Mock()
         app.GetActiveProject.return_value = project
         app.GetActiveStudyCase.return_value = study_case
         app.GetFromStudyCase.return_value = command
         FakeAgent._shared_app = app
+
+        configuration = json.loads(
+            mcp_module.get_contingency_configuration()
+        )
+        self.assertTrue(configuration["success"])
+        self.assertEqual(configuration["settings"], {
+            "data_source": "MAN",
+            "calculation_method": 1,
+            "linear_method": 0,
+            "linear_option": 0,
+            "combine_ac_dc": 0,
+            "dynamic_contingencies": 0,
+        })
 
         contingencies = json.loads(mcp_module.list_contingencies())
         self.assertTrue(contingencies["success"])
@@ -196,6 +274,12 @@ class StateInspectionTest(unittest.TestCase):
             0,
         )
         self.assertEqual(contingencies["results"][1]["outages"], [])
+        self.assertEqual(contingencies["results"][0]["event_count"], 2)
+        self.assertEqual(contingencies["results"][0]["switch_count"], 1)
+        self.assertEqual(
+            contingencies["results"][0]["switches"][0]["target"]["name"],
+            "Line 01 - 02",
+        )
 
         limited = json.loads(mcp_module.list_contingencies(max_results=1))
         self.assertEqual(limited["results"][0]["name"], "N-1")
@@ -211,9 +295,20 @@ class StateInspectionTest(unittest.TestCase):
         self.assertEqual(results["rows"], [{
             "index": 0,
             "values": [0, None],
+            "object_index": 0,
+            "object": {
+                "name": "MCP N-1 Line Test",
+                "class_name": "IntEvt",
+                "full_name": r"\user\test.IntPrj\Fault Cases\MCP N-1 Line Test.IntEvt",
+            },
             "errors": [{"column": 1, "code": 3}],
         }])
         self.assertNotIn("element", results["columns"][0])
+        self.assertEqual(results["columns"][1]["object"], {
+            "name": "Line 01 - 02",
+            "class_name": "ElmLne",
+            "full_name": r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
+        })
         self.assertTrue(results["truncated"])
         self.assertEqual(released, [True])
 
@@ -223,6 +318,143 @@ class StateInspectionTest(unittest.TestCase):
             max_columns=1000,
         ))
         self.assertFalse(oversized["success"])
+
+    def test_contingency_summary_reports_violations(self):
+        bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        line = FakeObject(
+            "Line 06 - 07",
+            "ElmLne",
+            r"\user\test.IntPrj\Grid\Line 06 - 07.ElmLne",
+        )
+        outage_line = FakeObject(
+            "Line 01 - 02",
+            "ElmLne",
+            r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
+        )
+        outage_bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        contingency = FakeObject(
+            "MCP N-1 Line Test",
+            "ComOutage",
+            r"\user\test.IntPrj\Case 1\MCP N-1 Line Test.ComOutage",
+        )
+        affected = [outage_line, outage_bus]
+        contingency.GetObject = lambda index: (
+            affected[index] if index < len(affected) else None
+        )
+
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        released = []
+        result_file.Load = lambda: None
+        result_file.Release = lambda: released.append(True)
+        result_file.GetNumberOfRows = lambda: 2
+        result_file.GetNumberOfColumns = lambda: 4
+        result_file.GetVariable = lambda column: (
+            "b:i_obj", "b:inoconv", "m:u", "c:loading"
+        )[column]
+        result_file.GetObject = lambda column: (
+            bus if column == 2 else line if column == 3 else None
+        )
+        values = (
+            (0.0, 0.0, 1.0, 50.0),
+            (-1.0, 0.0, 0.89, 120.0),
+        )
+        result_file.GetValue = lambda row, column: (0, values[row][column])
+        result_file.GetObj = lambda index: contingency if index == -1 else None
+
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        FakeAgent._shared_app = app
+
+        summary = json.loads(mcp_module.get_contingency_summary(
+            max_affected_elements=1,
+        ))
+
+        self.assertTrue(summary["success"])
+        self.assertEqual(summary["total_count"], 1)
+        self.assertEqual(
+            summary["results"][0]["affected_elements"][0]["name"],
+            "Line 01 - 02",
+        )
+        self.assertEqual(
+            summary["results"][0]["total_affected_elements"],
+            2,
+        )
+        self.assertEqual(
+            summary["results"][0]["returned_affected_elements"],
+            1,
+        )
+        self.assertTrue(
+            summary["results"][0]["affected_elements_truncated"]
+        )
+        self.assertEqual(
+            summary["results"][0]["voltage_violations"][0]["voltage_pu"],
+            0.89,
+        )
+        self.assertEqual(
+            summary["results"][0]["overloads"][0]["loading_pct"],
+            120.0,
+        )
+        self.assertTrue(summary["results"][0]["converged"])
+        self.assertEqual(summary["base_case"]["maximum_loading"]["loading_pct"], 50.0)
+        self.assertEqual(released, [True])
+
+        # A GetObject that never returns None must stop at the cap. The probe
+        # list also stops the test itself: an unbounded walk fails here fast
+        # instead of hanging CI, which sets no pytest timeout.
+        probes = []
+
+        def never_none(index):
+            probes.append(index)
+            if len(probes) > 10:
+                raise AssertionError("affected element scan did not stop")
+            return outage_line
+
+        contingency.GetObject = never_none
+        with patch.object(mcp_module, "_MAX_AFFECTED_ELEMENT_SCAN", 2):
+            unbounded = json.loads(mcp_module.get_contingency_summary())
+        self.assertFalse(unbounded["success"])
+        self.assertIn("scan exceeded the safe limit", unbounded["message"])
+        self.assertEqual(probes, [0, 1, 2])
+        self.assertEqual(released, [True, True])
+
+        # Exactly as many elements as the cap is a complete scan, not an
+        # overflow: the walk has to probe one index past the last element to
+        # see PowerFactory's terminating None.
+        contingency.GetObject = lambda index: (
+            affected[index] if index < len(affected) else None
+        )
+        with patch.object(
+            mcp_module, "_MAX_AFFECTED_ELEMENT_SCAN", len(affected)
+        ):
+            at_cap = json.loads(mcp_module.get_contingency_summary())
+        self.assertTrue(at_cap["success"], at_cap.get("message"))
+        self.assertEqual(
+            at_cap["results"][0]["total_affected_elements"],
+            len(affected),
+        )
+
+        # max_affected_elements clamps to 1000, so the scan cap must sit above
+        # it or affected_elements_truncated could never be reported.
+        self.assertGreater(mcp_module._MAX_AFFECTED_ELEMENT_SCAN, 1000)
 
     def test_agent_result_serializes_tuple_result(self):
         with patch.object(
