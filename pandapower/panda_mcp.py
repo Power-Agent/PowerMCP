@@ -11,6 +11,7 @@ _server_dir = str(Path(__file__).resolve().parent)
 if _server_dir not in sys.path:
     sys.path.insert(0, _server_dir)
 from audit import audit_network as _audit_network
+from operating_point import validate_operating_point as _validate_operating_point
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
@@ -194,6 +195,58 @@ def run_power_flow(algorithm: str = 'nr', calculate_voltage_angles: bool = True,
             "status": "error",
             "message": f"Power flow calculation failed: {str(e)}"
         }
+
+@mcp.tool()
+def validate_operating_point(
+    voltage_min_pu: float = 0.95,
+    voltage_max_pu: float = 1.05,
+    line_loading_limit_percent: float = 100.0,
+    trafo_loading_limit_percent: float = 100.0,
+) -> Dict[str, Any]:
+    """Validate the current converged operating point against voltage and loading limits.
+
+    Reads the results of the last power flow (res_bus, res_line, res_trafo,
+    res_trafo3w); it does not run a solver or modify the network, so call
+    run_power_flow first. The limits are the global values passed here;
+    per-element limits stored in the network (bus min_vm_pu/max_vm_pu, line
+    max_loading_percent) are ignored. trafo_loading_limit_percent applies to
+    2- and 3-winding transformers, and out-of-service buses are skipped.
+
+    Args:
+        voltage_min_pu: Lowest acceptable bus voltage magnitude in p.u.
+        voltage_max_pu: Highest acceptable bus voltage magnitude in p.u.
+        line_loading_limit_percent: Line loading limit in percent
+        trafo_loading_limit_percent: Transformer loading limit in percent
+
+    Returns:
+        Dict whose ``status`` is ``success`` when the validation ran, or
+        ``error`` with a ``message`` when it could not (no network, no
+        converged power flow, invalid limits), like the other tools. On
+        success, ``validation_status`` is the verdict:
+        ``ok`` - nothing within 5% of a limit;
+        ``warning`` - no violations, but an element is within 5% of a limit
+            (see near_limit_codes);
+        ``error`` - limit violations were found (see violations).
+        A completed validation also carries criteria, summary,
+        near_limit_codes, violations and counts.
+    """
+    try:
+        net = _get_network()
+        report = _validate_operating_point(
+            net,
+            voltage_min_pu=voltage_min_pu,
+            voltage_max_pu=voltage_max_pu,
+            line_loading_limit_percent=line_loading_limit_percent,
+            trafo_loading_limit_percent=trafo_loading_limit_percent,
+        )
+    except RuntimeError as exc:
+        return {"status": "error", "message": str(exc)}
+    # The validator reports "failed" when it could not run; every other
+    # status is its verdict on a completed validation.
+    verdict = report.pop("status")
+    if verdict == "failed":
+        return {"status": "error", **report}
+    return {"status": "success", "validation_status": verdict, **report}
 
 @mcp.tool()
 def run_contingency_analysis(contingency_type: str = "N-1", 
