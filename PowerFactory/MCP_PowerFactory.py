@@ -21,6 +21,7 @@ Tools
   list_contingencies    List available fault cases and outage events.
   create_contingency    Create an idempotent switch-based contingency definition.
   get_contingency_configuration Read the active ComSimoutage settings.
+  add_contingency_result_variables Add variables to AC/DC result recording.
   import_project        Import a .pfd file and activate it in PowerFactory.
   create_study_case     Create/activate a study case by name (no simulation run).
   modify_parameter      Modify an object attribute by object query + variable name.
@@ -1110,6 +1111,145 @@ def get_contingency_results(
             }
         finally:
             result_file.Release()
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def add_contingency_result_variables(
+    object_query: str,
+    variables: list[str],
+    calculation_method: str = "ac",
+    max_objects: int = 100,
+) -> str:
+    """Add variables to the configured AC or DC contingency result file.
+
+    This updates the existing ``ElmRes`` recording selection but does not run
+    the contingency analysis. Run it again to populate the added variables.
+    """
+    method = str(calculation_method or "").strip().lower()
+    if method not in {"ac", "dc"}:
+        return _to_json({
+            "success": False,
+            "message": "calculation_method must be 'ac' or 'dc'",
+        })
+
+    query = str(object_query or "").strip()
+    variable_names = list(dict.fromkeys(
+        variable.strip()
+        for variable in (variables or [])
+        if isinstance(variable, str) and variable.strip()
+    ))
+    if not query or not variable_names:
+        return _to_json({
+            "success": False,
+            "message": "object_query and at least one variable are required",
+        })
+
+    try:
+        object_limit = max(1, min(int(max_objects), 1000))
+    except (TypeError, ValueError):
+        return _to_json({
+            "success": False,
+            "message": "max_objects must be an integer",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {"success": False, "message": "ComSimoutage is unavailable"}
+
+        reference_name = "p_rescnt" if method == "ac" else "p_rescntDC"
+        result_file = command.GetAttribute(reference_name)
+        if result_file is None:
+            return {
+                "success": False,
+                "message": f"{method.upper()} contingency result file is not configured",
+            }
+
+        objects = app.GetCalcRelevantObjects(query) or []
+        if not objects:
+            return {
+                "success": False,
+                "message": f"No objects found for query: {query}",
+            }
+
+        load_code = result_file.Load()
+        if load_code not in (0, None):
+            return {
+                "success": False,
+                "message": f"ElmRes.Load returned error code {load_code}",
+            }
+        existing = set()
+        try:
+            for object_index, obj in enumerate(objects[:object_limit]):
+                for variable in variable_names:
+                    if result_file.FindColumn(obj, variable) >= 0:
+                        existing.add((object_index, variable))
+        finally:
+            result_file.Release()
+
+        configured = []
+        errors = []
+        for object_index, obj in enumerate(objects[:object_limit]):
+            added = []
+            for variable in variable_names:
+                if (object_index, variable) in existing:
+                    added.append(variable)
+                    continue
+                try:
+                    code = result_file.AddVariable(obj, variable)
+                except Exception as exc:
+                    errors.append({
+                        "object": _object_summary(obj),
+                        "variable": variable,
+                        "message": str(exc),
+                    })
+                    continue
+                if code not in (0, None):
+                    errors.append({
+                        "object": _object_summary(obj),
+                        "variable": variable,
+                        "code": code,
+                    })
+                    continue
+                added.append(variable)
+            if added:
+                configured.append({
+                    "object": _object_summary(obj),
+                    "variables": added,
+                })
+
+        response = {
+            "success": not errors,
+            "calculation_method": method,
+            "result_file": _object_summary(result_file),
+            "query": query,
+            "variables": variable_names,
+            "total_objects": len(objects),
+            "configured_objects": len(configured),
+            "configured_variables": sum(
+                len(item["variables"]) for item in configured
+            ),
+            "truncated": len(objects) > object_limit,
+            "results": configured,
+            "message": (
+                "Result recording selection updated; rerun contingency analysis "
+                "to populate the added variables"
+            ),
+        }
+        if errors:
+            response["message"] = "Some result variables could not be configured"
+            response["errors"] = errors
+        return response
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
