@@ -532,30 +532,59 @@ def open_case(case: str) -> Dict[str, Any]:
         case: Filename with .sav extension.
 
     Returns:
-        Dict with status and case information
+        Dict with status and case information.
     """
     try:
         case = checked_path(case, purpose="case")
     except PathNotAllowed as exc:
         return {"status": "error", "message": str(exc)}
+
     try:
         _ensure_psse()
         ierr = psspy.case(case)
-        err, bus_data = psspy.abuscount(flag=2)
-        err, branch_data = psspy.abrncount(flag=4)
-        err, gen_data = psspy.amachcount(flag=4)
 
-        if err == 0:
+        if ierr != 0:
             return {
-                'status': 'success',
-                'case_info': {
-                    'path': os.path.abspath(case),
-                    'num_buses': bus_data or 0,
-                    'num_branches': branch_data or 0,
-                    'num_generators': gen_data or 0
-                }
+                "status": "error",
+                "ierr": ierr,
+                "message": f"psspy.case returned ierr={ierr}",
+                "case": os.path.abspath(case),
             }
-        return {'status': 'error', 'ierr': err}
+
+        bus_ierr, bus_data = psspy.abuscount(flag=2)
+        if bus_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": bus_ierr,
+                "message": f"psspy.abuscount returned ierr={bus_ierr}",
+            }
+
+        branch_ierr, branch_data = psspy.abrncount(flag=4)
+        if branch_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": branch_ierr,
+                "message": f"psspy.abrncount returned ierr={branch_ierr}",
+            }
+
+        gen_ierr, gen_data = psspy.amachcount(flag=4)
+        if gen_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": gen_ierr,
+                "message": f"psspy.amachcount returned ierr={gen_ierr}",
+            }
+
+        return {
+            "status": "success",
+            "case_info": {
+                "path": os.path.abspath(case),
+                "num_buses": bus_data or 0,
+                "num_branches": branch_data or 0,
+                "num_generators": gen_data or 0,
+            },
+        }
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
