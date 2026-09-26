@@ -28,7 +28,7 @@ import pytest
 CASE = Path(
     os.environ.get(
         "PSSE_VALIDATION_CASE",
-        str(Path(__file__).resolve().parents[2] / "savnw.sav"),
+        str(Path(__file__).resolve().parents[1] / "savnw.sav"),
     )
 )
 
