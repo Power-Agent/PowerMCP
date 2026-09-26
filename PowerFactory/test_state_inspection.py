@@ -319,6 +319,136 @@ class StateInspectionTest(unittest.TestCase):
         ))
         self.assertFalse(oversized["success"])
 
+    def test_add_contingency_result_variables_updates_elmres_selection(self):
+        bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        result_file.AddVariable = Mock(return_value=0)
+        result_file.Load = Mock(return_value=0)
+        result_file.Release = Mock()
+        result_file.FindColumn = Mock(
+            side_effect=lambda obj, variable: 13 if variable == "m:u" else -1
+        )
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        command.Execute = Mock()
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        app.GetCalcRelevantObjects.return_value = [bus]
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.add_contingency_result_variables(
+            "Bus 08.ElmTerm",
+            ["m:u", "m:phiu", "m:u"],
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["configured_objects"], 1)
+        self.assertEqual(result["configured_variables"], 2)
+        self.assertEqual(result["variables"], ["m:u", "m:phiu"])
+        result_file.AddVariable.assert_any_call(bus, "m:phiu")
+        self.assertEqual(result_file.AddVariable.call_count, 1)
+        result_file.Load.assert_called_once_with()
+        result_file.Release.assert_called_once_with()
+        command.Execute.assert_not_called()
+
+    def _result_recording_app(self, objects, recorded):
+        """Fake an AC result file whose registered columns are ``recorded``."""
+        columns = set(recorded)
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        result_file.Load = Mock(return_value=0)
+        result_file.Release = Mock()
+        result_file.FindColumn = Mock(side_effect=lambda obj, variable: (
+            7 if (obj.GetAttribute("loc_name"), variable) in columns else -1
+        ))
+
+        def add_variable(obj, variable):
+            columns.add((obj.GetAttribute("loc_name"), variable))
+            return 0
+
+        result_file.AddVariable = Mock(side_effect=add_variable)
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        app.GetCalcRelevantObjects.return_value = objects
+        FakeAgent._shared_app = app
+        return result_file, columns
+
+    def test_add_contingency_result_variables_reports_whether_anything_changed(self):
+        # A repeat must be distinguishable from a first call, and must not send
+        # the caller off to rerun the analysis when nothing was added.
+        bus = FakeObject("Bus 08", "ElmTerm", r"\user\test.IntPrj\Grid\Bus 08.ElmTerm")
+        result_file, _ = self._result_recording_app([bus], set())
+
+        first = json.loads(mcp_module.add_contingency_result_variables(
+            "Bus 08.ElmTerm", ["m:u", "m:phiu"],
+        ))
+        self.assertTrue(first["success"])
+        self.assertEqual(first["added_variables"], 2)
+        self.assertEqual(first["already_recorded_variables"], 0)
+        self.assertEqual(first["results"][0]["added"], ["m:u", "m:phiu"])
+        self.assertIn("rerun contingency analysis", first["message"])
+
+        repeat = json.loads(mcp_module.add_contingency_result_variables(
+            "Bus 08.ElmTerm", ["m:u", "m:phiu"],
+        ))
+        self.assertTrue(repeat["success"])
+        self.assertEqual(repeat["added_variables"], 0)
+        self.assertEqual(repeat["already_recorded_variables"], 2)
+        self.assertEqual(repeat["results"][0]["added"], [])
+        self.assertEqual(
+            repeat["results"][0]["already_recorded"], ["m:u", "m:phiu"],
+        )
+        self.assertNotIn("rerun", repeat["message"])
+        self.assertEqual(result_file.AddVariable.call_count, 2)
+
+    def test_add_contingency_result_variables_keeps_record_after_an_object_fails(self):
+        # An object that cannot be described must not take the whole call down
+        # as a failed "read" and erase the record of columns already added.
+        class Detached(FakeObject):
+            def GetFullName(self):
+                raise RuntimeError("COM object detached")
+
+        good = FakeObject("Bus 1", "ElmTerm", r"\user\test.IntPrj\Grid\Bus 1.ElmTerm")
+        bad = Detached("Bus 3", "ElmTerm", r"\user\test.IntPrj\Grid\Bus 3.ElmTerm")
+        _, columns = self._result_recording_app([good, bad], set())
+
+        result = json.loads(mcp_module.add_contingency_result_variables(
+            "*.ElmTerm", ["m:u"],
+        ))
+
+        self.assertFalse(result["success"])
+        self.assertNotIn("read failed", result["message"])
+        self.assertEqual(result["added_variables"], 1)
+        self.assertEqual(result["results"][0]["object"]["name"], "Bus 1")
+        self.assertEqual(result["results"][0]["added"], ["m:u"])
+        self.assertIn("COM object detached", result["errors"][0]["message"])
+        self.assertEqual(result["errors"][0]["object_index"], 1)
+        # An object that cannot be identified is not written to.
+        self.assertEqual(columns, {("Bus 1", "m:u")})
+
     def test_contingency_summary_reports_violations(self):
         bus = FakeObject(
             "Bus 08",
