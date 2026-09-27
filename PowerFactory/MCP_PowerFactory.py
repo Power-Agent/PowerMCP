@@ -21,7 +21,9 @@ Tools
   list_contingencies    List available fault cases and outage events.
   create_contingency    Create an idempotent switch-based contingency definition.
   get_contingency_configuration Read the active ComSimoutage settings.
+  configure_contingency_screening Configure persistent ComSimoutage screening criteria.
   add_contingency_result_variables Add variables to AC/DC result recording.
+  remove_contingency_result_variables Remove variables from AC/DC result recording.
   import_project        Import a .pfd file and activate it in PowerFactory.
   create_study_case     Create/activate a study case by name (no simulation run).
   modify_parameter      Modify an object attribute by object query + variable name.
@@ -230,6 +232,58 @@ def _attribute(obj, name, default=None):
         return obj.GetAttribute(name)
     except Exception:
         return default
+
+
+def _contingency_screening_settings(command):
+    """Return the supported ComSimoutage screening settings."""
+    method = _attribute(command, "screeningMeth")
+    return {
+        "screening_method": {0: "dc", 1: "ac_linearised"}.get(
+            method, "unknown" if method is None else f"unknown:{method}"
+        ),
+        "simple_loading_criterion": bool(_attribute(command, "scrCritSimple", 0)),
+        "simple_loading_threshold_pct": _attribute(command, "maxLoadAbs"),
+        "combined_loading_criterion": bool(_attribute(command, "scrCritComb", 0)),
+        "combined_loading_threshold_pct": _attribute(command, "maxLoad"),
+        "relative_loading_change_pct": _attribute(command, "diffLoadBase"),
+        "ignore_base_case_overloads": bool(_attribute(command, "iIgnCriticalBC", 0)),
+        "screen_only_recorded_elements": bool(_attribute(command, "screenRecOnly", 0)),
+    }
+
+
+def _contingency_variable_names(variables):
+    """Validate and de-duplicate a result-variable list."""
+    if not isinstance(variables, list):
+        return [], "variables must be a list of non-empty strings"
+    invalid = [
+        index for index, variable in enumerate(variables)
+        if not isinstance(variable, str) or not variable.strip()
+    ]
+    if invalid:
+        indexes = ", ".join(str(index) for index in invalid)
+        return [], (
+            "variables entries at indexes " + indexes
+            + " must be non-empty strings"
+        )
+    return list(dict.fromkeys(variable.strip() for variable in variables)), ""
+
+
+def _contingency_recorded_variables(result_file):
+    """Return configured variables by object, or None for legacy files."""
+    try:
+        monitors = result_file.GetContents("*.IntMon", 1) or []
+    except (AttributeError, TypeError):
+        return None
+
+    recorded = {}
+    for monitor in monitors:
+        monitored_object = monitor.GetAttribute("obj_id")
+        if monitored_object is None:
+            continue
+        recorded.setdefault(monitored_object.GetFullName(), set()).update(
+            monitor.GetVar(index) for index in range(int(monitor.NVars()))
+        )
+    return recorded
 
 
 def _decode_cell(raw):
@@ -645,7 +699,128 @@ def get_contingency_configuration() -> str:
                 "linear_option": _attribute(command, "copt_Linear"),
                 "combine_ac_dc": _attribute(command, "iACDCCombine"),
                 "dynamic_contingencies": _attribute(command, "dynamicCase"),
+                **_contingency_screening_settings(command),
             },
+        }
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def configure_contingency_screening(
+    screening_method: str = "",
+    simple_loading_criterion: bool | None = None,
+    simple_loading_threshold_pct: float | None = None,
+    combined_loading_criterion: bool | None = None,
+    combined_loading_threshold_pct: float | None = None,
+    relative_loading_change_pct: float | None = None,
+    ignore_base_case_overloads: bool | None = None,
+    screen_only_recorded_elements: bool | None = None,
+) -> str:
+    """Persist selected ComSimoutage screening settings without executing it."""
+    method_name = str(screening_method or "").strip().casefold()
+    methods = {"dc": 0, "ac_linearised": 1}
+    if method_name and method_name not in methods:
+        return _to_json({
+            "success": False,
+            "message": "screening_method must be 'dc' or 'ac_linearised'",
+        })
+
+    parsed = {}
+    try:
+        for name, value in (
+            ("simple_loading_threshold_pct", simple_loading_threshold_pct),
+            ("combined_loading_threshold_pct", combined_loading_threshold_pct),
+            ("relative_loading_change_pct", relative_loading_change_pct),
+        ):
+            if value is None:
+                continue
+            number = float(value)
+            if not math.isfinite(number) or number < 0:
+                raise ValueError(f"{name} must be finite and non-negative")
+            parsed[name] = number
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
+
+    updates = {}
+    if method_name:
+        updates["screeningMeth"] = methods[method_name]
+    for value, attribute in (
+        (simple_loading_criterion, "scrCritSimple"),
+        (combined_loading_criterion, "scrCritComb"),
+        (ignore_base_case_overloads, "iIgnCriticalBC"),
+        (screen_only_recorded_elements, "screenRecOnly"),
+    ):
+        if value is not None:
+            updates[attribute] = int(value)
+    for name, attribute in (
+        ("simple_loading_threshold_pct", "maxLoadAbs"),
+        ("combined_loading_threshold_pct", "maxLoad"),
+        ("relative_loading_change_pct", "diffLoadBase"),
+    ):
+        if name in parsed:
+            updates[attribute] = parsed[name]
+
+    if not updates:
+        return _to_json({
+            "success": False,
+            "message": "At least one screening setting must be provided",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {"success": False, "message": "ComSimoutage is unavailable"}
+
+        previous = {
+            attribute: command.GetAttribute(attribute)
+            for attribute in updates
+        }
+        before = _contingency_screening_settings(command)
+        try:
+            for attribute, expected in updates.items():
+                command.SetAttribute(attribute, expected)
+                actual = command.GetAttribute(attribute)
+                matches = (
+                    int(actual) == expected
+                    if isinstance(expected, int)
+                    else math.isclose(float(actual), expected, abs_tol=1e-6)
+                )
+                if not matches:
+                    raise RuntimeError(
+                        f"PowerFactory did not retain {attribute}={expected}"
+                    )
+        except Exception as exc:
+            rollback_errors = []
+            for attribute, value in previous.items():
+                try:
+                    command.SetAttribute(attribute, value)
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"{attribute}: {rollback_exc}")
+            message = f"Could not configure contingency screening: {exc}"
+            if rollback_errors:
+                message += "; rollback failed for " + ", ".join(rollback_errors)
+            return {"success": False, "message": message}
+
+        after = _contingency_screening_settings(command)
+        return {
+            "success": True,
+            "message": (
+                "Contingency screening configuration updated"
+                if before != after
+                else "Contingency screening configuration already matched"
+            ),
+            "command": _object_summary(command),
+            "changed": before != after,
+            "before": before,
+            "settings": after,
         }
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
@@ -1118,7 +1293,7 @@ def get_contingency_results(
 @mcp.tool()
 def add_contingency_result_variables(
     object_query: str,
-    variables: list[str],
+    variables: list[Any],
     calculation_method: str = "ac",
     max_objects: int = 100,
 ) -> str:
@@ -1142,11 +1317,9 @@ def add_contingency_result_variables(
         })
 
     query = str(object_query or "").strip()
-    variable_names = list(dict.fromkeys(
-        variable.strip()
-        for variable in (variables or [])
-        if isinstance(variable, str) and variable.strip()
-    ))
+    variable_names, variable_error = _contingency_variable_names(variables)
+    if variable_error:
+        return _to_json({"success": False, "message": variable_error})
     if not query or not variable_names:
         return _to_json({
             "success": False,
@@ -1189,20 +1362,31 @@ def add_contingency_result_variables(
                 "message": f"No objects found for query: {query}",
             }
 
-        load_code = result_file.Load()
-        if load_code not in (0, None):
-            return {
-                "success": False,
-                "message": f"ElmRes.Load returned error code {load_code}",
-            }
         existing = set()
-        try:
+        recorded = _contingency_recorded_variables(result_file)
+        if recorded is not None:
             for object_index, obj in enumerate(objects[:object_limit]):
+                try:
+                    object_variables = recorded.get(obj.GetFullName(), set())
+                except Exception:
+                    continue
                 for variable in variable_names:
-                    if result_file.FindColumn(obj, variable) >= 0:
+                    if variable in object_variables:
                         existing.add((object_index, variable))
-        finally:
-            result_file.Release()
+        else:
+            load_code = result_file.Load()
+            if load_code not in (0, None):
+                return {
+                    "success": False,
+                    "message": f"ElmRes.Load returned error code {load_code}",
+                }
+            try:
+                for object_index, obj in enumerate(objects[:object_limit]):
+                    for variable in variable_names:
+                        if result_file.FindColumn(obj, variable) >= 0:
+                            existing.add((object_index, variable))
+            finally:
+                result_file.Release()
 
         configured = []
         errors = []
@@ -1285,6 +1469,173 @@ def add_contingency_result_variables(
         if errors:
             response["message"] = (
                 "Some result variables could not be configured; "
+                + response["message"][0].lower()
+                + response["message"][1:]
+            )
+            response["errors"] = errors
+        return response
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def remove_contingency_result_variables(
+    object_query: str,
+    variables: list[Any],
+    calculation_method: str = "ac",
+    max_objects: int = 100,
+) -> str:
+    """Remove variables from the configured AC or DC result selection.
+
+    The matching ``IntMon`` selections are updated without executing the
+    contingency analysis. Rerun it only when ``removed_variables`` is non-zero
+    so the result file is rebuilt without those columns.
+    """
+    method = str(calculation_method or "").strip().lower()
+    if method not in {"ac", "dc"}:
+        return _to_json({
+            "success": False,
+            "message": "calculation_method must be 'ac' or 'dc'",
+        })
+
+    query = str(object_query or "").strip()
+    variable_names, variable_error = _contingency_variable_names(variables)
+    if variable_error:
+        return _to_json({"success": False, "message": variable_error})
+    if not query or not variable_names:
+        return _to_json({
+            "success": False,
+            "message": "object_query and at least one variable are required",
+        })
+
+    try:
+        object_limit = max(1, min(int(max_objects), 1000))
+    except (TypeError, ValueError):
+        return _to_json({
+            "success": False,
+            "message": "max_objects must be an integer",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+
+        command = app.GetFromStudyCase("ComSimoutage")
+        if command is None:
+            return {"success": False, "message": "ComSimoutage is unavailable"}
+
+        reference_name = "p_rescnt" if method == "ac" else "p_rescntDC"
+        result_file = command.GetAttribute(reference_name)
+        if result_file is None:
+            return {
+                "success": False,
+                "message": f"{method.upper()} contingency result file is not configured",
+            }
+        result_summary = _object_summary(result_file)
+
+        objects = app.GetCalcRelevantObjects(query) or []
+        if not objects:
+            return {
+                "success": False,
+                "message": f"No objects found for query: {query}",
+            }
+
+        monitors = result_file.GetContents("*.IntMon", 1) or []
+        configured = []
+        errors = []
+        for object_index, obj in enumerate(objects[:object_limit]):
+            try:
+                summary = _object_summary(obj)
+            except Exception as exc:
+                errors.append({
+                    "object_index": object_index,
+                    "message": f"Could not identify object: {exc}",
+                })
+                continue
+
+            matching_monitors = []
+            for monitor in monitors:
+                try:
+                    monitored_object = monitor.GetAttribute("obj_id")
+                    if monitored_object is obj or (
+                        monitored_object is not None
+                        and monitored_object.GetFullName() == summary["full_name"]
+                    ):
+                        matching_monitors.append(monitor)
+                except Exception as exc:
+                    errors.append({
+                        "object_index": object_index,
+                        "object": summary,
+                        "message": f"Could not inspect result selection: {exc}",
+                    })
+
+            removed = []
+            already_absent = []
+            for variable in variable_names:
+                removed_here = False
+                for monitor in matching_monitors:
+                    try:
+                        code = monitor.RemoveVar(variable)
+                    except Exception as exc:
+                        errors.append({
+                            "object_index": object_index,
+                            "object": summary,
+                            "variable": variable,
+                            "message": str(exc),
+                        })
+                        continue
+                    if code in (0, None):
+                        removed_here = True
+                    elif code != 1:
+                        errors.append({
+                            "object_index": object_index,
+                            "object": summary,
+                            "variable": variable,
+                            "code": code,
+                        })
+                (removed if removed_here else already_absent).append(variable)
+
+            configured.append({
+                "object": summary,
+                "variables": variable_names,
+                "removed": removed,
+                "already_absent": already_absent,
+            })
+
+        response = {
+            "success": not errors,
+            "calculation_method": method,
+            "result_file": result_summary,
+            "query": query,
+            "variables": variable_names,
+            "total_objects": len(objects),
+            "configured_objects": len(configured),
+            "removed_variables": sum(
+                len(item["removed"]) for item in configured
+            ),
+            "already_absent_variables": sum(
+                len(item["already_absent"]) for item in configured
+            ),
+            "truncated": len(objects) > object_limit,
+            "results": configured,
+        }
+        if response["removed_variables"]:
+            response["message"] = (
+                "Result recording selection updated; rerun contingency analysis "
+                "to rebuild the result file"
+            )
+        else:
+            response["message"] = (
+                "All requested variables were already absent; no change"
+            )
+        if errors:
+            response["message"] = (
+                "Some result variables could not be removed; "
                 + response["message"][0].lower()
                 + response["message"][1:]
             )

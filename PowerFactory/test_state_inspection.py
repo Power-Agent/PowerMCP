@@ -78,6 +78,9 @@ class FakeObject:
         self.attribute_reads.append(attribute)
         return self.attributes[attribute]
 
+    def SetAttribute(self, attribute, value):
+        self.attributes[attribute] = value
+
     def GetClassName(self):
         return self.class_name
 
@@ -237,6 +240,14 @@ class StateInspectionTest(unittest.TestCase):
                 "copt_Linear": 0,
                 "iACDCCombine": 0,
                 "dynamicCase": 0,
+                "screeningMeth": 0,
+                "scrCritSimple": 1,
+                "maxLoadAbs": 100.0,
+                "scrCritComb": 1,
+                "maxLoad": 80.0,
+                "diffLoadBase": 5.0,
+                "iIgnCriticalBC": 0,
+                "screenRecOnly": 1,
             },
         )
         app = Mock()
@@ -256,6 +267,14 @@ class StateInspectionTest(unittest.TestCase):
             "linear_option": 0,
             "combine_ac_dc": 0,
             "dynamic_contingencies": 0,
+            "screening_method": "dc",
+            "simple_loading_criterion": True,
+            "simple_loading_threshold_pct": 100.0,
+            "combined_loading_criterion": True,
+            "combined_loading_threshold_pct": 80.0,
+            "relative_loading_change_pct": 5.0,
+            "ignore_base_case_overloads": False,
+            "screen_only_recorded_elements": True,
         })
 
         contingencies = json.loads(mcp_module.list_contingencies())
@@ -448,6 +467,198 @@ class StateInspectionTest(unittest.TestCase):
         self.assertEqual(result["errors"][0]["object_index"], 1)
         # An object that cannot be identified is not written to.
         self.assertEqual(columns, {("Bus 1", "m:u")})
+
+    def test_contingency_result_variables_reject_invalid_entries(self):
+        for function in (
+            mcp_module.add_contingency_result_variables,
+            mcp_module.remove_contingency_result_variables,
+        ):
+            with self.subTest(function=function.__name__):
+                result = json.loads(function(
+                    "Bus 08.ElmTerm", ["m:u", 7, ""],
+                ))
+                self.assertFalse(result["success"])
+                self.assertIn("indexes 1, 2", result["message"])
+
+    def test_configure_contingency_screening_updates_and_rolls_back(self):
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {
+                "screeningMeth": 0,
+                "scrCritSimple": 1,
+                "maxLoadAbs": 100.0,
+                "scrCritComb": 1,
+                "maxLoad": 80.0,
+                "diffLoadBase": 5.0,
+                "iIgnCriticalBC": 0,
+                "screenRecOnly": 1,
+            },
+        )
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.configure_contingency_screening(
+            screening_method="ac_linearised",
+            simple_loading_threshold_pct=110,
+            combined_loading_threshold_pct=85,
+            relative_loading_change_pct=7.5,
+            ignore_base_case_overloads=True,
+            screen_only_recorded_elements=False,
+        ))
+
+        self.assertTrue(result["success"], result.get("message"))
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["before"]["screening_method"], "dc")
+        self.assertEqual(result["settings"], {
+            "screening_method": "ac_linearised",
+            "simple_loading_criterion": True,
+            "simple_loading_threshold_pct": 110.0,
+            "combined_loading_criterion": True,
+            "combined_loading_threshold_pct": 85.0,
+            "relative_loading_change_pct": 7.5,
+            "ignore_base_case_overloads": True,
+            "screen_only_recorded_elements": False,
+        })
+
+        original = command.SetAttribute
+        failed = False
+
+        def fail_once(attribute, value):
+            nonlocal failed
+            if attribute == "maxLoad" and not failed:
+                failed = True
+                raise RuntimeError("write failed")
+            original(attribute, value)
+
+        command.SetAttribute = fail_once
+        rolled_back = json.loads(mcp_module.configure_contingency_screening(
+            screening_method="dc",
+            combined_loading_threshold_pct=75,
+        ))
+        self.assertFalse(rolled_back["success"])
+        self.assertIn("write failed", rolled_back["message"])
+        self.assertEqual(command.GetAttribute("screeningMeth"), 1)
+        self.assertEqual(command.GetAttribute("maxLoad"), 85.0)
+
+        invalid = json.loads(mcp_module.configure_contingency_screening(
+            relative_loading_change_pct=-1,
+        ))
+        self.assertFalse(invalid["success"])
+        self.assertIn("finite and non-negative", invalid["message"])
+
+    def test_add_contingency_result_variable_ignores_stale_result_column(self):
+        bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        selected = ["m:u"]
+        monitor = FakeObject(
+            "Bus 08 Results",
+            "IntMon",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes\Bus 08 Results.IntMon",
+            {"obj_id": bus},
+        )
+        monitor.NVars = lambda: len(selected)
+        monitor.GetVar = lambda index: selected[index]
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        result_file.GetContents = Mock(return_value=[monitor])
+        result_file.FindColumn = Mock(return_value=13)
+        result_file.Load = Mock(return_value=0)
+        result_file.Release = Mock()
+        result_file.AddVariable = Mock(
+            side_effect=lambda _obj, variable: selected.append(variable) or 0
+        )
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        app.GetCalcRelevantObjects.return_value = [bus]
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.add_contingency_result_variables(
+            "Bus 08.ElmTerm", ["m:phiu"],
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["added_variables"], 1)
+        self.assertEqual(selected, ["m:u", "m:phiu"])
+        result_file.AddVariable.assert_called_once_with(bus, "m:phiu")
+        result_file.FindColumn.assert_not_called()
+        result_file.Load.assert_not_called()
+
+    def test_remove_contingency_result_variables_updates_intmon_selection(self):
+        bus = FakeObject(
+            "Bus 08",
+            "ElmTerm",
+            r"\user\test.IntPrj\Grid\Bus 08.ElmTerm",
+        )
+        selected = {"m:u"}
+        monitor = FakeObject(
+            "Bus 08 Results",
+            "IntMon",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes\Bus 08 Results.IntMon",
+            {"obj_id": bus},
+        )
+
+        def remove_variable(variable):
+            if variable not in selected:
+                return 1
+            selected.remove(variable)
+            return 0
+
+        monitor.RemoveVar = Mock(side_effect=remove_variable)
+        result_file = FakeObject(
+            "Contingency Analysis AC",
+            "ElmRes",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis AC.ElmRes",
+        )
+        result_file.GetContents = Mock(return_value=[monitor])
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            r"\user\test.IntPrj\Case 1\Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        command.Execute = Mock()
+        app = Mock()
+        app.GetActiveStudyCase.return_value = object()
+        app.GetFromStudyCase.return_value = command
+        app.GetCalcRelevantObjects.return_value = [bus]
+        FakeAgent._shared_app = app
+
+        first = json.loads(mcp_module.remove_contingency_result_variables(
+            "Bus 08.ElmTerm", ["m:u", "m:phiu", "m:u"],
+        ))
+        self.assertTrue(first["success"])
+        self.assertEqual(first["variables"], ["m:u", "m:phiu"])
+        self.assertEqual(first["removed_variables"], 1)
+        self.assertEqual(first["already_absent_variables"], 1)
+        self.assertEqual(first["results"][0]["removed"], ["m:u"])
+        self.assertIn("rerun contingency analysis", first["message"])
+
+        repeat = json.loads(mcp_module.remove_contingency_result_variables(
+            "Bus 08.ElmTerm", ["m:u", "m:phiu"],
+        ))
+        self.assertTrue(repeat["success"])
+        self.assertEqual(repeat["removed_variables"], 0)
+        self.assertEqual(repeat["already_absent_variables"], 2)
+        self.assertNotIn("rerun", repeat["message"])
+        self.assertEqual(selected, set())
+        command.Execute.assert_not_called()
 
     def test_contingency_summary_reports_violations(self):
         bus = FakeObject(

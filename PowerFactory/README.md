@@ -57,7 +57,9 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `list_contingencies` | Lists configured fault-library cases, outage/switch events, and their target elements without modifying the project. |
 | `create_contingency` | Creates or reuses an idempotent switch-based contingency definition. |
 | `get_contingency_configuration` | Reads the active Contingency Analysis command settings without running a calculation. |
+| `configure_contingency_screening` | Persists selected DC/AC-linearised screening criteria without running a calculation. |
 | `add_contingency_result_variables` | Adds variables to the configured AC or DC contingency result recording selection without running a calculation. |
+| `remove_contingency_result_variables` | Removes variables from matching AC or DC result recording selections without running a calculation. |
 | `import_project` | Imports a `.pfd` project file and activates it. |
 | `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
 | `modify_parameter` | Sets one attribute on all PowerFactory objects matching a query string. Auto-casts string values to the correct type. |
@@ -75,6 +77,13 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 The contingency tools can create switch-based definitions and inspect or run
 the active `ComSimoutage` command. An explicit calculation mode applies only to
 that run; the study case's previous mode is restored afterward.
+
+`configure_contingency_screening` intentionally persists selected screening
+settings. It can choose DC or AC-linearised screening; enable the simple and
+combined loading criteria; set their loading and relative-change thresholds;
+ignore components already overloaded in the base case; and restrict screening
+to recorded elements. It returns the previous and resulting settings without
+executing the analysis.
 
 ### Simulation Engine (`Agent_DIgSILENT.py`)
 
