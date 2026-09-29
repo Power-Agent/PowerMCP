@@ -115,6 +115,8 @@ def _dep_status(t: Tool) -> tuple[str, str]:
         return "yellow", f"needs Python 3.12 to 3.14 (have {sys.version_info.major}.{sys.version_info.minor})"
     if t.name in _PATH_LOADED:
         return "cyan", "vendor engine, loaded from a configured path"
+    if t.name == "tellegen":
+        return _tellegen_status()
     if t.probe:
         if not probe_installed(t.probe):
             return "red", f"missing; {install_hint(t.extra)}"
@@ -122,6 +124,38 @@ def _dep_status(t: Tool) -> tuple[str, str]:
         if stale:
             return stale
     return "green", "ok"
+
+
+def _tellegen_status() -> tuple[str, str]:
+    """Whether the native Tellegen CLI is configured and answers `capabilities`.
+
+    The binary is not a Python package, so the import probe says nothing; the
+    one check that matters is that the configured executable runs and answers
+    `capabilities` with JSON.
+    """
+    import json
+    import subprocess
+
+    from . import tellegen
+
+    try:
+        command = tellegen._command(["capabilities"])
+    except Exception as exc:  # unconfigured, or the configured path is missing
+        return "yellow", f"native CLI not found; {exc}"
+    try:
+        completed = subprocess.run(
+            command, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return "red", f"{command[0]} does not run: {exc}"
+    if completed.returncode != 0:
+        return "red", f"{command[0]} capabilities failed: {completed.stderr.strip()[:200]}"
+    try:
+        json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return "red", f"{command[0]} capabilities returned no JSON"
+    return "green", f"ok, {command[0]}"
 
 
 def _sdk_status() -> tuple[str, str]:

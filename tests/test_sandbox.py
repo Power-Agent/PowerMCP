@@ -98,6 +98,14 @@ GUARDED = {
         "translate_to_sienna": ["xml_path", "output_path"],
         "compare_solutions": ["xml_path_a", "xml_path_b"],
     },
+    # Every tellegen tool reaches the filesystem through these three helpers:
+    # `_module_ir` for a grid exchange input, `_out_path` for a written module,
+    # `_path` for every Study bundle argument.
+    "powermcp/tellegen.py": {
+        "_module_ir": ["path"],
+        "_out_path": ["out_path"],
+        "_path": ["path"],
+    },
 }
 
 

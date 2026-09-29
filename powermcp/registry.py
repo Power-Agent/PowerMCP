@@ -153,6 +153,16 @@ TOOLS: dict[str, "Tool"] = {
             probe="powerio",
             notes="Format-neutral conversion, matrices, and auditable PowerIO IR modules. Its canonical MCP server owns module operations; pandapower, PyPSA, Egret, and ANDES resolve selected module states only when importing into a solver.",
         ),
+        # tellegen is a Rust CLI (cargo build -p tellegen-cli --features conic), not
+        # a pip package: the server lives inside powermcp and exchanges PowerIO IR
+        # with the binary over stdin and stdout.
+        Tool(
+            "tellegen", "Tellegen", "open-source", windows_only=False, extra="tellegen",
+            server_dir=None, run_kind="package", module="powermcp.tellegen", probe="mcp",
+            config_keys=(ConfigKey("binary", "Path to the native Tellegen CLI executable (cargo build -p tellegen-cli --features conic)", "file", required=False),),
+            external_solvers=("Clarabel",),
+            notes="DC and AC power flow, DC OPF prices and dispatch, the SOCWR relaxation, sensitivities, capacity planning and durable Studies over the native tellegen CLI; exchanges PowerIO IR only. Applying a Study proposal is a human action, not a tool. Configure POWERMCP_TELLEGEN_BINARY or install tellegen on PATH.",
+        ),
         # ---- CLOSED-SOURCE / VENDOR ----
         Tool(
             "powerworld", "PowerWorld", "closed-source", windows_only=_W, extra="powerworld",
