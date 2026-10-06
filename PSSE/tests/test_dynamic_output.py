@@ -1,11 +1,8 @@
 import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-import psse_mcp
+from PSSE import psse_mcp
 
 
 def test_dynamic_output_missing_file():

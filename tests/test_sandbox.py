@@ -90,6 +90,8 @@ GUARDED = {
     },
     "PSSE/psse_mcp.py": {
         "open_case": ["case"],
+        "list_dynamic_output_channels": ["outfile"],
+        "read_dynamic_output": ["outfile"],
     },
     "PSLF/pslf_mcp.py": {
         "open_case": ["case"],

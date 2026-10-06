@@ -740,6 +740,14 @@ def search_psspy_commands(query: str, category: Optional[str] = None) -> Dict[st
     return {"status": "success", "count": len(matches), "results": matches[:50]}
 
 
+def _dyntools():
+    """Import dyntools, which ships in the PSSPY dir that _ensure_psse adds."""
+    _ensure_psse()
+    import dyntools
+
+    return dyntools
+
+
 @mcp.tool()
 def list_dynamic_output_channels(
     outfile: str,
@@ -749,8 +757,8 @@ def list_dynamic_output_channels(
     List channels available in a PSS/E dynamic simulation output file.
 
     Args:
-        outfile: Path to the PSS/E dynamic output (.out) file.
-        outvrsn: PSS/E output format version. Use 0 for legacy .out files.
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
 
     Returns:
         Dict containing the output title and channel definitions.
@@ -770,9 +778,7 @@ def list_dynamic_output_channels(
         }
 
     try:
-        import dyntools
-
-        chnf = dyntools.CHNF(outfile, outvrsn=outvrsn)
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
         title, channels, _ = chnf.get_data()
 
         return {
@@ -801,10 +807,10 @@ def read_dynamic_output(
     Read time-series data from a PSS/E dynamic simulation output file.
 
     Args:
-        outfile: Path to the PSS/E dynamic output (.out) file.
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
         channels: Optional list of channel numbers to return. If omitted,
             all channels are returned.
-        outvrsn: PSS/E output format version. Use 0 for legacy .out files.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
 
     Returns:
         Dict containing the output title, selected channels, and time-series data.
@@ -842,9 +848,7 @@ def read_dynamic_output(
             }
 
     try:
-        import dyntools
-
-        chnf = dyntools.CHNF(outfile, outvrsn=outvrsn)
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
         title, channel_names, data = chnf.get_data()
 
         if channels is None:
