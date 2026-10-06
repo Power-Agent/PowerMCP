@@ -57,6 +57,7 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `list_contingencies` | Lists configured fault-library cases, outage/switch events, and their target elements without modifying the project. |
 | `create_contingency` | Creates or reuses an idempotent switch-based contingency definition. |
 | `get_contingency_configuration` | Reads the active Contingency Analysis command settings without running a calculation. |
+| `add_contingency_result_variables` | Adds variables to the configured AC or DC contingency result recording selection without running a calculation. |
 | `import_project` | Imports a `.pfd` project file and activates it. |
 | `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
 | `modify_parameter` | Sets one attribute on all PowerFactory objects matching a query string. Auto-casts string values to the correct type. |

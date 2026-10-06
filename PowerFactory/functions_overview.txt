@@ -29,6 +29,13 @@ Implemented MCP tools
 - list_objects: lists objects using a PowerFactory object query.
 - list_components: lists objects using friendly equipment categories.
 - list_study_cases: lists study cases and identifies the active case.
+- list_contingencies: lists configured fault-library cases and their outage and switch events.
+- get_contingency_configuration: reads the active ComSimoutage settings without running a calculation.
+- create_contingency: creates or reuses an idempotent switch-based contingency definition.
+- run_contingency_analysis: runs ComSimoutage in its configured or an explicit supported calculation mode.
+- get_contingency_results: reads a bounded slice of the configured AC or DC contingency result file.
+- add_contingency_result_variables: adds missing object-variable pairs to the AC or DC result recording selection without running a calculation.
+- get_contingency_summary: reports affected elements, convergence, overloads, and voltage violations from existing results.
 - add_component: creates a bus, load, generator, line, or transformer; connected equipment receives generated cubicle(s) and closed circuit breaker(s), and update_graphics can synchronize the active diagram.
 - delete_component: previews or confirms exact-name component deletion, including generated cubicle, switchgear, and requested graphical cleanup.
 
@@ -39,6 +46,7 @@ Implemented simulation engine behavior
 - DIgSILENTAgent.connect: connects to PowerFactory and activates the configured project.
 - DIgSILENTAgent.activate_study_case: activates or copies the configured study case.
 - DIgSILENTAgent.run_loadflow: runs ComLdf.
+- DIgSILENTAgent.run_contingency_analysis: executes ComSimoutage and optionally selects a validated calculation mode.
 - DIgSILENTAgent.run_rms_simulation: builds the event sequence and runs ComInc / ComSim.
 - DIgSILENTAgent._apply_fault_event: supports bus faults, line faults, and generator switch events.
 - DIgSILENTAgent.addSwitchEvent: creates PowerFactory EvtSwitch events.
