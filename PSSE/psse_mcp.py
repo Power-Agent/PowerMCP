@@ -740,5 +740,161 @@ def search_psspy_commands(query: str, category: Optional[str] = None) -> Dict[st
     return {"status": "success", "count": len(matches), "results": matches[:50]}
 
 
+def _dyntools():
+    """Import dyntools, which ships in the PSSPY dir that _ensure_psse adds."""
+    _ensure_psse()
+    import dyntools
+
+    return dyntools
+
+
+@mcp.tool()
+def list_dynamic_output_channels(
+    outfile: str,
+    outvrsn: int = 0,
+) -> Dict[str, Any]:
+    """
+    List channels available in a PSS/E dynamic simulation output file.
+
+    Args:
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
+
+    Returns:
+        Dict containing the output title and channel definitions.
+    """
+    try:
+        outfile = checked_path(outfile, purpose="dynamic output")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if not os.path.isfile(outfile):
+        return {
+            "status": "error",
+            "message": (
+                f"Dynamic output file does not exist: "
+                f"{os.path.abspath(outfile)}"
+            ),
+        }
+
+    try:
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
+        title, channels, _ = chnf.get_data()
+
+        return {
+            "status": "success",
+            "outfile": os.path.abspath(outfile),
+            "title": title,
+            "channels": {
+                str(key): value
+                for key, value in channels.items()
+            },
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to read dynamic output: {exc}",
+        }
+
+
+@mcp.tool()
+def read_dynamic_output(
+    outfile: str,
+    channels: Optional[List[int]] = None,
+    outvrsn: int = 0,
+) -> Dict[str, Any]:
+    """
+    Read time-series data from a PSS/E dynamic simulation output file.
+
+    Args:
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
+        channels: Optional list of channel numbers to return. If omitted,
+            all channels are returned.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
+
+    Returns:
+        Dict containing the output title, selected channels, and time-series data.
+    """
+    try:
+        outfile = checked_path(outfile, purpose="dynamic output")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if not os.path.isfile(outfile):
+        return {
+            "status": "error",
+            "message": (
+                f"Dynamic output file does not exist: "
+                f"{os.path.abspath(outfile)}"
+            ),
+        }
+
+    if channels is not None:
+        if not channels:
+            return {
+                "status": "error",
+                "message": "channels must contain at least one channel number",
+            }
+
+        if any(
+            not isinstance(channel, int)
+            or isinstance(channel, bool)
+            or channel < 1
+            for channel in channels
+        ):
+            return {
+                "status": "error",
+                "message": "channels must contain positive integer channel numbers",
+            }
+
+    try:
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
+        title, channel_names, data = chnf.get_data()
+
+        if channels is None:
+            selected = list(channel_names.keys())
+        else:
+            missing = [
+                channel
+                for channel in channels
+                if channel not in channel_names
+            ]
+
+            if missing:
+                return {
+                    "status": "error",
+                    "message": f"Requested channel(s) not found: {missing}",
+                }
+
+            selected = ["time"] + channels
+
+        selected_names = {
+            str(channel): channel_names[channel]
+            for channel in selected
+            if channel in channel_names
+        }
+
+        selected_data = {
+            str(channel): list(data[channel])
+            for channel in selected
+            if channel in data
+        }
+
+        return {
+            "status": "success",
+            "outfile": os.path.abspath(outfile),
+            "title": title,
+            "channels": selected_names,
+            "data": selected_data,
+            "num_points": len(data.get("time", [])),
+        }
+
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to read dynamic output: {exc}",
+        }
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")
