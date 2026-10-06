@@ -1,4 +1,4 @@
-﻿"""PSS/E MCP session and error-recovery regression tests.
+"""PSS/E MCP session and error-recovery regression tests.
 
 These tests exercise the PowerMCP PSS/E tool handlers through realistic
 operation sequences. They are skipped automatically when PSS/E or the
@@ -220,4 +220,4 @@ def test_lookup_and_search_remain_available_after_operations(
     search = psse.search_psspy_commands("bus")
 
     assert search["status"] == "success", search
-    assert search["count"] >= 0
+    assert search["count"] > 0
