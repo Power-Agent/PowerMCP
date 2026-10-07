@@ -1,0 +1,58 @@
+Evidence ID: UT-02
+Title: PR95 review-fix automated validation
+Date: 7 October 2026
+Classification: Compiled evidence record with captured output extracts
+Source revision: PR #95 commit 04c1cbb (reported by contributor after validation)
+
+Provenance:
+Commands and output extracts were supplied by the contributor in this chat.
+They were separate runs, not one continuous capture. Tested changes were
+subsequently committed as 04c1cbb; no independent byte-for-byte revision
+comparison was performed. Full successful-run output was not saved here.
+Absolute machine-local paths are represented as <repository> and <python>.
+The contributor's traceback identified Python 3.10 on Windows. Exact Python
+patch, pytest version, and PowerFactory build were not captured.
+
+PowerFactory automated suite:
+----------------------------
+Working directory: <repository>
+PYTHONPATH: <repository>/PSCAD;<repository>/PowerFactory
+Command: <python> -m pytest PowerFactory -q
+
+Captured summary:
+57 passed, 31 subtests passed in 0.82s
+
+These tests use fake/mock PowerFactory objects. They are separate from the
+live recording checks documented in FT-12.
+
+Repository automated suite:
+--------------------------
+Command: <python> -m pytest tests/ -q
+
+Initial captured summary:
+2 failed, 2206 passed, 25 skipped, 1 warning in 204.95s (0:03:24)
+
+Both failures occurred when subprocess tried to launch bash -n:
+FileNotFoundError: [WinError 2] The system cannot find the file specified
+Affected tests:
+- tests/test_genx_server.py::test_generated_script_quotes_the_case_path
+- tests/test_genx_server.py::test_generated_script_is_valid_bash
+
+Git Bash's bin directory was added to PATH in the terminal, and the complete
+tests/ suite was rerun. No repository code change was needed for this failure.
+
+Captured warning and final summary:
+tests/test_powerio_server.py::test_pypsa_interchange_accepts_module
+  <frozen importlib._bootstrap>:241: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 16 from C header, got 96 from PyObject
+
+2208 passed, 25 skipped, 1 warning in 131.34s (0:02:11)
+
+Result: PASS for both automated suites, with the retained warning above.
+
+Limitations:
+------------
+Skipped tests were not validated by this run. The NumPy warning remains;
+this record does not claim that dependency compatibility was repaired.
+These local runs do not establish GitHub Actions/CI status.
+Live recording lifecycle and class-selection protection are recorded in FT-12;
+no new live screening validation is claimed here.
