@@ -175,6 +175,9 @@ def test_reading_selected_channels_includes_time(dyntools, outfile):
     assert result["channels"] == {"time": "Time(s)", "2": "POWR 102[NUC-B 21.600]1"}
     assert result["data"] == {"time": DATA["time"], "2": DATA[2]}
     assert result["num_points"] == 3
+    assert result["total_points"] == 3
+    assert result["downsampled"] is False
+    assert result["max_points"] == 10_000
     assert dyntools.opened == [(str(outfile), 1)]
 
 
@@ -183,6 +186,41 @@ def test_reading_without_a_selection_returns_every_channel(dyntools, outfile):
 
     assert result["status"] == "success", result
     assert set(result["data"]) == {"time", "1", "2"}
+    assert result["num_points"] == 3
+    assert result["total_points"] == 3
+    assert result["downsampled"] is False
+
+
+def test_reading_dynamic_output_can_be_deterministically_capped(dyntools, outfile):
+    result = psse_mcp.read_dynamic_output(
+        str(outfile), channels=[1, 2], max_points=2
+    )
+
+    assert result["status"] == "success", result
+    assert result["num_points"] == 2
+    assert result["total_points"] == 3
+    assert result["downsampled"] is True
+    assert result["max_points"] == 2
+    assert result["data"]["time"] == [DATA["time"][0], DATA["time"][-1]]
+    assert result["data"]["1"] == [DATA[1][0], DATA[1][-1]]
+    assert result["data"]["2"] == [DATA[2][0], DATA[2][-1]]
+
+
+@pytest.mark.parametrize("max_points", [None, 0, 1, True, 1.5, "10"])
+def test_invalid_dynamic_output_point_caps_are_rejected_before_engine_start(
+    dyntools, outfile, max_points
+):
+    if max_points is None:
+        # None is valid: it selects the server's safe default cap.
+        return
+
+    result = psse_mcp.read_dynamic_output(
+        str(outfile), max_points=max_points
+    )
+
+    assert result["status"] == "error"
+    assert "max_points must be an integer of at least 2" in result["message"]
+    assert dyntools.engine_starts == 0
 
 
 def test_reading_an_unknown_channel_names_it(dyntools, outfile):
