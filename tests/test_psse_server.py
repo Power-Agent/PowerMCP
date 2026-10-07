@@ -206,14 +206,40 @@ def test_reading_dynamic_output_can_be_deterministically_capped(dyntools, outfil
     assert result["data"]["2"] == [DATA[2][0], DATA[2][-1]]
 
 
-@pytest.mark.parametrize("max_points", [None, 0, 1, True, 1.5, "10"])
+def test_default_point_cap_bounds_a_large_dynamic_output(dyntools, outfile):
+    point_count = 12_001
+    large_data = {
+        "time": list(range(point_count)),
+        1: list(range(point_count)),
+        2: list(range(point_count)),
+    }
+
+    class LargeCHNF:
+        def __init__(self, outfile, outvrsn=0):
+            dyntools.opened.append((outfile, outvrsn))
+
+        def get_data(self):
+            return "LARGE RUN", dict(CHANNELS), large_data
+
+    dyntools.CHNF = LargeCHNF
+
+    result = psse_mcp.read_dynamic_output(str(outfile))
+
+    assert result["status"] == "success", result
+    assert result["total_points"] == point_count
+    assert result["num_points"] == 10_000
+    assert result["downsampled"] is True
+    assert result["max_points"] == 10_000
+    assert result["data"]["time"][0] == 0
+    assert result["data"]["time"][-1] == point_count - 1
+    assert len(result["data"]["1"]) == 10_000
+    assert len(result["data"]["2"]) == 10_000
+
+
+@pytest.mark.parametrize("max_points", [0, 1, True, 1.5, "10"])
 def test_invalid_dynamic_output_point_caps_are_rejected_before_engine_start(
     dyntools, outfile, max_points
 ):
-    if max_points is None:
-        # None is valid: it selects the server's safe default cap.
-        return
-
     result = psse_mcp.read_dynamic_output(
         str(outfile), max_points=max_points
     )
