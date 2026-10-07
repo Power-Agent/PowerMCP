@@ -748,6 +748,51 @@ def _dyntools():
     return dyntools
 
 
+_DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS = 10_000
+
+
+def _sample_dynamic_data(
+    data: Dict[Any, Any], max_points: int
+) -> tuple[Dict[str, List[Any]], int, bool]:
+    """Return a deterministic, endpoint-preserving sample of dynamic data.
+
+    The PSS/E time vector defines the number of samples. When the cap is
+    exceeded, evenly spaced indices are selected with both endpoints retained.
+    Every returned time-series channel must have the same length as the time
+    vector so sampling cannot silently misalign channels.
+    """
+    time = list(data.get("time", []))
+    total_points = len(time)
+
+    if total_points == 0 or total_points <= max_points:
+        return (
+            {str(key): list(value) for key, value in data.items()},
+            total_points,
+            False,
+        )
+
+    if max_points < 2:
+        raise ValueError("max_points must be at least 2")
+
+    indices = [
+        (i * (total_points - 1)) // (max_points - 1)
+        for i in range(max_points)
+    ]
+
+    sampled = {}
+    for key, value in data.items():
+        values = list(value)
+        if len(values) != total_points:
+            raise ValueError(
+                f"Dynamic output channel {key!r} has {len(values)} points; "
+                f"expected {total_points} to match the time vector"
+            )
+        sampled[str(key)] = [values[index] for index in indices]
+
+    return sampled, total_points, True
+
+
+
 @mcp.tool()
 def list_dynamic_output_channels(
     outfile: str,
@@ -802,6 +847,7 @@ def read_dynamic_output(
     outfile: str,
     channels: Optional[List[int]] = None,
     outvrsn: int = 0,
+    max_points: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Read time-series data from a PSS/E dynamic simulation output file.
@@ -811,9 +857,13 @@ def read_dynamic_output(
         channels: Optional list of channel numbers to return. If omitted,
             all channels are returned.
         outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
+        max_points: Maximum number of time points in the response. If omitted,
+            the default cap of 10,000 points is used. When the source contains
+            more points, deterministic endpoint-preserving sampling is applied.
 
     Returns:
-        Dict containing the output title, selected channels, and time-series data.
+        Dict containing the output title, selected channels, time-series data,
+        the original point count, and whether sampling was applied.
     """
     try:
         outfile = checked_path(outfile, purpose="dynamic output")
@@ -846,6 +896,18 @@ def read_dynamic_output(
                 "status": "error",
                 "message": "channels must contain positive integer channel numbers",
             }
+
+    if max_points is None:
+        max_points = _DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS
+    elif (
+        not isinstance(max_points, int)
+        or isinstance(max_points, bool)
+        or max_points < 2
+    ):
+        return {
+            "status": "error",
+            "message": "max_points must be an integer of at least 2",
+        }
 
     try:
         chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
@@ -880,13 +942,25 @@ def read_dynamic_output(
             if channel in data
         }
 
+        sampled_data, total_points, downsampled = _sample_dynamic_data(
+            {
+                key: data[key]
+                for key in selected
+                if key in data
+            },
+            max_points,
+        )
+
         return {
             "status": "success",
             "outfile": os.path.abspath(outfile),
             "title": title,
             "channels": selected_names,
-            "data": selected_data,
-            "num_points": len(data.get("time", [])),
+            "data": sampled_data,
+            "num_points": len(sampled_data.get("time", [])),
+            "total_points": total_points,
+            "downsampled": downsampled,
+            "max_points": max_points,
         }
 
     except Exception as exc:
