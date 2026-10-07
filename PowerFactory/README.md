@@ -85,6 +85,29 @@ ignore components already overloaded in the base case; and restrict screening
 to recorded elements. It returns the previous and resulting settings without
 executing the analysis.
 
+Result recording is read from `IntMon` selections, never from stale result
+columns. Both recording tools report each unreadable monitor once and keep
+the record of successful changes to other objects. Class selections identified
+by `IntMon.className` count as recorded for objects of that exact class.
+Object-specific removal of a class-recorded variable is reported as failed,
+without changing either its class or object selections. Other variables can
+still be removed. Unidentified targetless selections remain errors; additions
+and absence claims are skipped when their state is unknown.
+
+Removal reports `failed_variables` separately from `already_absent_variables`.
+A variable can appear in both `removed` and `failed` when different monitors
+produce a partial change; rerun the analysis whenever `removed_variables` is
+non-zero. `configured_objects` counts objects with readable matching selections,
+and `objects_without_selection` counts objects with no known selection.
+The tool schemas require strings; blank or whitespace-only variables are also
+rejected. Missing screening flags are returned as `null`, rather than disabled.
+
+PowerFactory 2026's User Manual, section 19.3.1.1, explicitly supports class-name
+variable selections for contingency analysis. These tools report them rather
+than attempting to remove a class-wide variable for an individual object.
+Its Python Reference, section 5.6.26, documents `IntMon.RemoveVar` return codes:
+`0` means removed, `1` means not found; other codes or exceptions are failures.
+
 ### Simulation Engine (`Agent_DIgSILENT.py`)
 
 | Class / Method | Description |
