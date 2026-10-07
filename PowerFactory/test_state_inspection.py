@@ -121,6 +121,13 @@ class FakeApplication:
         return self.study_folder if folder_name == "study" else None
 
 
+def set_contingency_command(app, command, study_case=None):
+    study_case = study_case or Mock()
+    study_case.GetContents = Mock(return_value=[command])
+    app.GetActiveStudyCase.return_value = study_case
+    return study_case
+
+
 class StateInspectionTest(unittest.TestCase):
     def test_contingency_listing_and_bounded_results(self):
         fault_cases_folder = FakeObject(
@@ -155,6 +162,18 @@ class StateInspectionTest(unittest.TestCase):
                 "outserv": 0,
             },
         )
+        fault = FakeObject(
+            "Three-Phase Fault",
+            "EvtShc",
+            r"\user\test.IntPrj\Fault Cases\N-1.IntEvt\Three-Phase Fault.EvtShc",
+            {
+                "p_target": target,
+                "time": 0.0,
+                "i_shc": 0,
+                "shcLocation": 50.0,
+                "outserv": 0,
+            },
+        )
         fault_case = FakeObject(
             "N-1",
             "IntEvt",
@@ -163,7 +182,8 @@ class StateInspectionTest(unittest.TestCase):
         )
         fault_case.GetContents = lambda pattern, recursive: (
             [outage] if pattern == "*.EvtOutage" else
-            [switch] if pattern == "*.EvtSwitch" else []
+            [switch] if pattern == "*.EvtSwitch" else
+            [fault] if pattern == "*.EvtShc" else []
         )
         empty_fault_case = FakeObject(
             "Empty",
@@ -252,8 +272,7 @@ class StateInspectionTest(unittest.TestCase):
         )
         app = Mock()
         app.GetActiveProject.return_value = project
-        app.GetActiveStudyCase.return_value = study_case
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command, study_case)
         FakeAgent._shared_app = app
 
         configuration = json.loads(
@@ -293,7 +312,16 @@ class StateInspectionTest(unittest.TestCase):
             0,
         )
         self.assertEqual(contingencies["results"][1]["outages"], [])
-        self.assertEqual(contingencies["results"][0]["event_count"], 2)
+        self.assertEqual(contingencies["results"][0]["event_count"], 3)
+        self.assertEqual(contingencies["results"][0]["fault_count"], 1)
+        self.assertEqual(
+            contingencies["results"][0]["faults"][0]["target"]["name"],
+            "Line 01 - 02",
+        )
+        self.assertEqual(
+            contingencies["results"][0]["faults"][0]["fault_position_pct"],
+            50.0,
+        )
         self.assertEqual(contingencies["results"][0]["switch_count"], 1)
         self.assertEqual(
             contingencies["results"][0]["switches"][0]["target"]["name"],
@@ -330,6 +358,7 @@ class StateInspectionTest(unittest.TestCase):
         })
         self.assertTrue(results["truncated"])
         self.assertEqual(released, [True])
+        app.GetFromStudyCase.assert_not_called()
 
         oversized = json.loads(mcp_module.get_contingency_results(
             "ac",
@@ -337,6 +366,98 @@ class StateInspectionTest(unittest.TestCase):
             max_columns=1000,
         ))
         self.assertFalse(oversized["success"])
+
+    def test_contingency_results_filter_uses_bulk_columns_and_cleans_up(self):
+        contingency = FakeObject(
+            "N-1 Line",
+            "IntEvt",
+            r"\user\test.IntPrj\Fault Cases\N-1 Line.IntEvt",
+        )
+        line = FakeObject(
+            "Line 01 - 02",
+            "ElmLne",
+            r"\user\test.IntPrj\Grid\Line 01 - 02.ElmLne",
+        )
+        result_file = Mock()
+        result_file.Load.return_value = 0
+        result_file.GetNumberOfRows.return_value = 2
+        result_file.GetNumberOfColumns.return_value = 838
+        result_file.GetVariable.side_effect = lambda column: (
+            "b:i_obj" if column == 0 else f"unused:{column}"
+        )
+        result_file.GetObject.return_value = None
+        result_file.GetObj.return_value = (0, contingency)
+        result_file.GetAttribute.return_value = "Contingency Analysis AC"
+        result_file.GetClassName.return_value = "ElmRes"
+        result_file.GetFullName.return_value = "Case 1/Contingency Analysis AC.ElmRes"
+        monitor = FakeObject(
+            "Line",
+            "IntMon",
+            "Case 1/Contingency Analysis AC.ElmRes/Line.IntMon",
+            {"obj_id": None, "className": "ElmLne"},
+        )
+        monitor.NVars = Mock(return_value=1)
+        monitor.GetVar = Mock(return_value="c:loading")
+        result_file.GetContents.return_value = [monitor]
+        result_file.FindColumn.return_value = 57
+
+        vector = Mock()
+        values = []
+        column_values = {0: [0, 0], 57: [90.0, 110.0]}
+
+        def load_column(_vector, column):
+            values[:] = column_values[column]
+            return 0
+
+        result_file.GetColumnValues.side_effect = load_column
+        vector.GetAttribute.side_effect = lambda name: list(values)
+        command = FakeObject(
+            "Contingency Analysis",
+            "ComSimoutage",
+            "Case 1/Contingency Analysis.ComSimoutage",
+            {"p_rescnt": result_file},
+        )
+        app = Mock()
+        set_contingency_command(app, command)
+        app.GetCurrentUser.return_value.CreateObject.return_value = vector
+        app.GetCalcRelevantObjects.return_value = [line]
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.get_contingency_results(
+            "ac", max_rows=2, max_columns=10, variables=["c:loading"],
+        ))
+
+        self.assertTrue(result["success"], result.get("message"))
+        self.assertEqual(result["matching_columns"], 2)
+        self.assertEqual(
+            [(column["index"], column["variable"]) for column in result["columns"]],
+            [(0, "b:i_obj"), (57, "c:loading")],
+        )
+        self.assertTrue(result["matching_columns_complete"])
+        self.assertEqual(result["columns"][1]["object"]["name"], "Line 01 - 02")
+        self.assertEqual(result["rows"][0]["values"], [0, 90.0])
+        self.assertEqual(result["rows"][1]["values"], [0, 110.0])
+        result_file.GetValue.assert_not_called()
+        result_file.GetVariable.assert_called_once_with(0)
+        result_file.FindColumn.assert_called_once_with(line, "c:loading")
+        self.assertEqual(result_file.GetColumnValues.call_count, 2)
+        vector.Delete.assert_called_once_with()
+        result_file.Release.assert_called_once_with()
+        app.GetFromStudyCase.assert_not_called()
+
+    def test_contingency_results_does_not_create_missing_command(self):
+        app = Mock()
+        study_case = Mock()
+        study_case.GetContents.return_value = []
+        app.GetActiveStudyCase.return_value = study_case
+        FakeAgent._shared_app = app
+
+        result = json.loads(mcp_module.get_contingency_results())
+
+        self.assertFalse(result["success"])
+        self.assertIn("unavailable", result["message"])
+        study_case.GetContents.assert_called_once_with("*.ComSimoutage", 0)
+        app.GetFromStudyCase.assert_not_called()
 
     def test_add_contingency_result_variables_updates_elmres_selection(self):
         bus = FakeObject(
@@ -367,8 +488,7 @@ class StateInspectionTest(unittest.TestCase):
         )
         command.Execute = Mock()
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         app.GetCalcRelevantObjects.return_value = [bus]
         FakeAgent._shared_app = app
 
@@ -446,8 +566,7 @@ class StateInspectionTest(unittest.TestCase):
         )
         command.Execute = Mock()
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         app.GetCalcRelevantObjects.return_value = objects
         FakeAgent._shared_app = app
         return result_file, columns
@@ -534,8 +653,7 @@ class StateInspectionTest(unittest.TestCase):
             },
         )
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         FakeAgent._shared_app = app
 
         result = json.loads(mcp_module.configure_contingency_screening(
@@ -621,8 +739,7 @@ class StateInspectionTest(unittest.TestCase):
             {"p_rescnt": result_file},
         )
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         app.GetCalcRelevantObjects.return_value = [bus]
         FakeAgent._shared_app = app
 
@@ -674,8 +791,7 @@ class StateInspectionTest(unittest.TestCase):
         )
         command.Execute = Mock()
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         app.GetCalcRelevantObjects.return_value = [bus]
         FakeAgent._shared_app = app
 
@@ -860,8 +976,7 @@ class StateInspectionTest(unittest.TestCase):
     def test_missing_screening_booleans_are_unknown(self):
         command = FakeObject("Contingency Analysis", "ComSimoutage", "Contingency Analysis.ComSimoutage", {"scrCritSimple": 0})
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         FakeAgent._shared_app = app
         settings = json.loads(mcp_module.get_contingency_configuration())["settings"]
         self.assertIs(settings["simple_loading_criterion"], False)
@@ -958,8 +1073,7 @@ class StateInspectionTest(unittest.TestCase):
             {"p_rescnt": result_file},
         )
         app = Mock()
-        app.GetActiveStudyCase.return_value = object()
-        app.GetFromStudyCase.return_value = command
+        set_contingency_command(app, command)
         FakeAgent._shared_app = app
 
         summary = json.loads(mcp_module.get_contingency_summary(

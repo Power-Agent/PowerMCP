@@ -13,6 +13,7 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 |---|---|---|
 | UT-01 | `UT-01_automated_tests.txt` | Captured automated transcript |
 | UT-02 | `UT-02_pr95_review_tests.txt` | Compiled evidence record with captured output extracts |
+| UT-03 | `UT-03_contingency_inspection_followup_tests.txt` | Compiled evidence record with captured output extracts |
 | FT-01 | `FT-01_active_context.txt` | Verbatim extract |
 | FT-02 | `FT-02_parameter_inspection.txt` | Verbatim extract |
 | FT-03 | `FT-03_component_discovery.txt` | Verbatim extract |
@@ -25,6 +26,7 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-10 | `FT-10_graphical_synchronization.txt` | Compiled evidence record |
 | FT-11 | `FT-11_circuit_breaker_lifecycle.txt` | Compiled evidence record |
 | FT-12 | `FT-12_contingency_recording_lifecycle.txt` | Compiled evidence record |
+| FT-13 | `FT-13_contingency_inspection_sp1.txt` | Compiled evidence record |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -34,3 +36,9 @@ that no independent byte-for-byte revision comparison was performed.
 UT-02 retains the automated-run warning and distinguishes local tests from CI.
 FT-12 records removal/repeat/restoration and the expected class-selection
 removal rejection, without executing a calculation. Older records are unchanged.
+
+UT-03 and FT-13 record the follow-up contingency inspection fixes developed on
+top of PR #95. UT-03 covers the final automated suites. FT-13 records the live
+PowerFactory 2026 SP1 bounded result read and explicitly distinguishes it from
+the original SP4 reproduction. The restricted SP4 test machine consumes only
+GitHub `main`, so post-fix SP4 validation remains pending until after merge.

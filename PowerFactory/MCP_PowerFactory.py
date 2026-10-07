@@ -18,7 +18,7 @@ Tools
   list_objects                          List objects using a PowerFactory object query.
   list_components                       List objects using friendly equipment categories.
   list_study_cases                      List study cases and identify the active case.
-  list_contingencies                    List available fault cases and outage events.
+  list_contingencies                    List EvtOutage/EvtSwitch/EvtShc fault-case events.
   create_contingency                    Create an idempotent switch-based contingency definition.
   get_contingency_configuration         Read the active ComSimoutage settings.
   configure_contingency_screening       Configure persistent ComSimoutage screening criteria.
@@ -32,7 +32,7 @@ Tools
   run_loadflow                          Run a load flow calculation (ComLdf) on the active study case.
   run_short_circuit                     Run a short-circuit calculation (ComShc) on the active study case.
   run_contingency_analysis              Execute ComSimoutage with an optional method.
-  get_contingency_results               Read a bounded slice of AC or DC contingency results.
+  get_contingency_results               Read/filter bounded AC or DC contingency results.
   get_contingency_summary               Summarize contingency overloads and voltage violations.
   run_simulation                        Run the full pipeline from simulation_config.json.
   run_custom_case                       Run a one-off case with parameters supplied at call-time.
@@ -48,6 +48,7 @@ import sys
 import os
 import json
 import math
+import time
 import concurrent.futures
 from datetime import datetime
 from typing import Any
@@ -234,6 +235,173 @@ def _attribute(obj, name, default=None):
         return default
 
 
+def _existing_contingency_command(app):
+    """Find an existing command without GetFromStudyCase's creation side effect."""
+    case = app.GetActiveStudyCase()
+    if case is None:
+        return None
+    commands = case.GetContents("*.ComSimoutage", 0) or []
+    if len(commands) > 1:
+        raise ValueError("Multiple ComSimoutage commands exist; select a study case with one command")
+    return commands[0] if commands else None
+
+
+def _result_cells(app, result_file, row_count, columns, deadline):
+    """Read selected columns in bulk, with a sparse/cell fallback."""
+    selected = set(columns)
+    vector = None
+    try:
+        current_user = app.GetCurrentUser()
+        vector = current_user.CreateObject(
+            "IntVec", f"PowerMCP result read {time.time_ns()}"
+        )
+        if vector is not None and callable(getattr(result_file, "GetColumnValues", None)):
+            rows = [{} for _ in range(row_count)]
+            for column in columns:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "Result read time budget exceeded; reduce rows/columns or filter variables"
+                    )
+                code = result_file.GetColumnValues(vector, column)
+                if code not in (0, None):
+                    raise RuntimeError(f"ElmRes.GetColumnValues returned error code {code}")
+                values = vector.GetAttribute("V") or []
+                for row, value in enumerate(values[:row_count]):
+                    rows[row][column] = (0, value)
+            return rows
+    except TimeoutError:
+        raise
+    except Exception:
+        pass
+    finally:
+        if vector is not None:
+            try:
+                vector.Delete()
+            except Exception:
+                pass
+
+    sparse = callable(getattr(result_file, "GetFirstValidVariable", None)) and callable(
+        getattr(result_file, "GetNextValidVariable", None)
+    )
+    if not sparse and row_count * len(selected) > 2000:
+        raise ValueError("Result interface lacks sparse readers; request at most 2,000 cells")
+    rows = []
+    for row in range(row_count):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+        cells = {}
+        if sparse and selected:
+            column = result_file.GetFirstValidVariable(row)
+            previous = -1
+            while column >= 0 and column <= max(selected):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+                if column <= previous:
+                    raise ValueError("Sparse result iterator did not advance")
+                if column in selected:
+                    cells[column] = _decode_cell(result_file.GetValue(row, column))
+                previous = column
+                column = result_file.GetNextValidVariable()
+        elif not sparse:
+            for column in selected:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+                cells[column] = _decode_cell(result_file.GetValue(row, column))
+        rows.append(cells)
+    return rows
+
+
+def _filtered_result_columns(
+    app, result_file, total_columns, variables, column_limit, deadline,
+):
+    """Resolve filtered columns from IntMon selections instead of scanning ElmRes."""
+    columns = {}
+    errors = []
+
+    # b:i_obj maps result rows to contingency objects. It is normally the first
+    # column; keep the probe bounded so large files do not recreate the slow
+    # full metadata scan this helper avoids.
+    for column in range(min(total_columns, 16)):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result metadata time budget exceeded")
+        if result_file.GetVariable(column) == "b:i_obj":
+            item = {"index": column, "variable": "b:i_obj", "object": None}
+            try:
+                result_object = result_file.GetObject(column)
+                if result_object is not None:
+                    item["object"] = _object_summary(result_object)
+            except Exception:
+                pass
+            columns[column] = item
+            break
+
+    requested_limit = max(0, column_limit - len(columns))
+    requested = set(variables)
+
+    for monitor_index, monitor in enumerate(
+        result_file.GetContents("*.IntMon", 1) or []
+    ):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result metadata time budget exceeded")
+        try:
+            selected = {
+                monitor.GetVar(index)
+                for index in range(int(monitor.NVars()))
+            }
+            selected.intersection_update(requested)
+            if not selected:
+                continue
+
+            target = monitor.GetAttribute("obj_id")
+            if target is not None:
+                targets = [target]
+            else:
+                class_name = monitor.GetAttribute("className")
+                if not isinstance(class_name, str) or not class_name.strip():
+                    raise ValueError("selection has no object target or className")
+                targets = app.GetCalcRelevantObjects(
+                    f"*.{class_name.strip()}"
+                ) or []
+
+            for target in targets:
+                for variable in selected:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Result metadata time budget exceeded")
+                    column = result_file.FindColumn(target, variable)
+                    if not isinstance(column, int) or not 0 <= column < total_columns:
+                        continue
+                    columns.setdefault(column, {
+                        "index": column,
+                        "variable": variable,
+                        "object": _object_summary(target),
+                    })
+                    requested_count = sum(
+                        item["variable"] != "b:i_obj"
+                        for item in columns.values()
+                    )
+                    if requested_count > requested_limit:
+                        ordered = sorted(columns.values(), key=lambda item: item["index"])
+                        retained = []
+                        kept_requested = 0
+                        for item in ordered:
+                            if item["variable"] == "b:i_obj":
+                                retained.append(item)
+                            elif kept_requested < requested_limit:
+                                retained.append(item)
+                                kept_requested += 1
+                        return retained, len(columns), False, errors
+        except TimeoutError:
+            raise
+        except Exception as exc:
+            errors.append({
+                "monitor_index": monitor_index,
+                "message": f"Could not inspect result selection: {exc}",
+            })
+
+    ordered = sorted(columns.values(), key=lambda item: item["index"])
+    return ordered, len(ordered), True, errors
+
+
 def _contingency_screening_settings(command):
     """Return the supported ComSimoutage screening settings."""
     def optional_bool(attribute):
@@ -327,7 +495,7 @@ def _contingency_recording_context(app, method, query):
     """Resolve the active result selection and requested objects for either tool."""
     if app.GetActiveStudyCase() is None:
         raise ValueError("No PowerFactory study case is active")
-    command = app.GetFromStudyCase("ComSimoutage")
+    command = _existing_contingency_command(app)
     if command is None:
         raise ValueError("ComSimoutage is unavailable")
     result_file = command.GetAttribute("p_rescnt" if method == "ac" else "p_rescntDC")
@@ -665,7 +833,7 @@ def list_study_cases(max_results: int = 100) -> str:
 
 @mcp.tool()
 def list_contingencies(max_results: int = 100) -> str:
-    """List direct ``IntEvt`` children of fault-case folders, including empty cases."""
+    """List fault-library cases, including EvtShc faults, without creating commands."""
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -693,15 +861,24 @@ def list_contingencies(max_results: int = 100) -> str:
                 continue
             outages = fault_case.GetContents("*.EvtOutage", 1) or []
             switches = fault_case.GetContents("*.EvtSwitch", 1) or []
-            fault_cases.append((fault_case, outages, switches))
+            faults = fault_case.GetContents("*.EvtShc", 1) or []
+            fault_cases.append((fault_case, outages, switches, faults))
 
-        fault_cases.sort(key=lambda entry: not (entry[1] or entry[2]))
+        fault_cases.sort(key=lambda entry: not (entry[1] or entry[2] or entry[3]))
         limit = max(1, min(int(max_results), 1000))
         results = []
-        for fault_case, outages, switches in fault_cases[:limit]:
+        for fault_case, outages, switches, faults in fault_cases[:limit]:
             results.append({
                 **_object_summary(fault_case),
-                "event_count": len(outages) + len(switches),
+                "event_count": len(outages) + len(switches) + len(faults),
+                "fault_count": len(faults),
+                "faults": [
+                    {
+                        **event_summary(fault, "i_shc"),
+                        "fault_position_pct": _attribute(fault, "shcLocation"),
+                    }
+                    for fault in faults
+                ],
                 "outage_count": len(outages),
                 "outages": [
                     event_summary(outage, "i_what")
@@ -735,7 +912,7 @@ def get_contingency_configuration() -> str:
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {
                 "success": False,
@@ -845,7 +1022,7 @@ def configure_contingency_screening(
                 "success": False,
                 "message": "No PowerFactory study case is active",
             }
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {"success": False, "message": "ComSimoutage is unavailable"}
 
@@ -1219,12 +1396,23 @@ def get_contingency_results(
     calculation_method: str = "ac",
     max_rows: int = 100,
     max_columns: int = 100,
+    variables: list[str] | None = None,
+    max_read_seconds: float = 5.0,
 ) -> str:
     """Read a bounded rectangular slice of a contingency result file.
 
     ``calculation_method`` selects the configured AC or DC ``ElmRes`` object.
     The result is deliberately bounded because contingency files are sparse
     and can contain hundreds of columns even for a single fault case.
+    ``variables`` filters exact identifiers (e.g. ["c:loading"]); None reads
+    all identifiers. Column indexes remain original file indexes. Sparse holes
+    become null without per-cell API calls. ``max_read_seconds`` (0 < value <=
+    30) is a cooperative budget, not an interrupt of a blocked native call.
+    Filtered metadata is resolved from ``IntMon`` selections and ``FindColumn``
+    rather than scanning every result column. No command is created. A
+    transient ``IntVec`` is deleted after bulk reads; sparse iterators are the
+    fallback. Object metadata may be null for non-element columns. Reading does
+    not run or refresh the analysis.
     """
     method = calculation_method.strip().lower()
     if method not in {"ac", "dc"}:
@@ -1252,6 +1440,22 @@ def get_contingency_results(
             "message": "Requested result slice exceeds 20,000 cells",
         })
 
+    try:
+        if variables is None:
+            variable_filter = None
+        else:
+            variable_names, variable_error = _contingency_variable_names(variables)
+            if variable_error:
+                raise ValueError(variable_error)
+            if not variable_names:
+                raise ValueError("variables must contain at least one variable name")
+            variable_filter = set(variable_names)
+        read_seconds = float(max_read_seconds)
+        if not math.isfinite(read_seconds) or not 0 < read_seconds <= 30:
+            raise ValueError("max_read_seconds must be finite, positive, and at most 30")
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
+
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -1261,7 +1465,7 @@ def get_contingency_results(
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {
                 "success": False,
@@ -1284,43 +1488,69 @@ def get_contingency_results(
             }
 
         try:
+            deadline = time.monotonic() + read_seconds
             total_rows = result_file.GetNumberOfRows()
             total_columns = result_file.GetNumberOfColumns()
             returned_rows = min(total_rows, row_limit)
-            returned_columns = min(total_columns, column_limit)
-
-            columns = []
-            for column in range(returned_columns):
-                item = {
-                    "index": column,
-                    "variable": result_file.GetVariable(column),
-                }
-                result_object = result_file.GetObject(column)
-                if result_object is not None:
-                    item["object"] = _object_summary(result_object)
-                columns.append(item)
+            metadata_errors = []
+            if variable_filter is not None:
+                (
+                    columns,
+                    matching_columns,
+                    matching_columns_complete,
+                    metadata_errors,
+                ) = _filtered_result_columns(
+                    app,
+                    result_file,
+                    total_columns,
+                    variable_filter,
+                    column_limit,
+                    deadline,
+                )
+            else:
+                columns = []
+                for column in range(min(total_columns, column_limit)):
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "Result metadata time budget exceeded; "
+                            "request fewer columns"
+                        )
+                    variable = result_file.GetVariable(column)
+                    item = {
+                        "index": column,
+                        "variable": variable,
+                        "object": None,
+                    }
+                    result_object = result_file.GetObject(column)
+                    if result_object is not None:
+                        item["object"] = _object_summary(result_object)
+                    columns.append(item)
+                matching_columns = total_columns
+                matching_columns_complete = True
+            returned_columns = len(columns)
             object_column = next(
                 (
-                    column["index"]
-                    for column in columns
+                    position
+                    for position, column in enumerate(columns)
                     if column["variable"] == "b:i_obj"
                 ),
                 None,
             )
 
             rows = []
-            for row in range(returned_rows):
+            cell_rows = _result_cells(app, result_file, returned_rows,
+                                      [column["index"] for column in columns], deadline)
+            for row, cells in enumerate(cell_rows):
                 values = []
                 errors = []
-                for column in range(returned_columns):
-                    error_code, value = _decode_cell(
-                        result_file.GetValue(row, column)
-                    )
+                for column in columns:
+                    index = column["index"]
+                    error_code, value = cells.get(index, (0, None))
 
                     values.append(value if error_code == 0 else None)
                     if error_code != 0:
                         errors.append({
-                            "column": column,
+                            "column": index,
                             "code": error_code,
                         })
 
@@ -1345,14 +1575,17 @@ def get_contingency_results(
                 "result_file": _object_summary(result_file),
                 "total_rows": total_rows,
                 "total_columns": total_columns,
+                "matching_columns": matching_columns,
+                "matching_columns_complete": matching_columns_complete,
                 "returned_rows": returned_rows,
                 "returned_columns": returned_columns,
                 "truncated": (
                     returned_rows < total_rows
-                    or returned_columns < total_columns
+                    or returned_columns < matching_columns
                 ),
                 "columns": columns,
                 "rows": rows,
+                **({"metadata_errors": metadata_errors} if metadata_errors else {}),
             }
         finally:
             result_file.Release()
@@ -1711,7 +1944,7 @@ def get_contingency_summary(
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {"success": False, "message": "ComSimoutage is unavailable"}
 
