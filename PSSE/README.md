@@ -40,7 +40,7 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - **lookup_psspy_command(function_name)**: Look up the API reference for a psspy function without executing it.
 - **search_psspy_commands(query, category)**: Search the psspy API index for functions matching a query.
 - **list_dynamic_output_channels(outfile, outvrsn)**: List the channels recorded in a dynamic simulation output file (`.out`/`.outx`).
-- **read_dynamic_output(outfile, channels, outvrsn)**: Read the time series of selected channels (all when omitted) from a dynamic simulation output file.
+- **read_dynamic_output(outfile, channels, outvrsn, max_points)**: Read the time series of selected channels (all when omitted). Responses are capped at 10,000 time points by default using deterministic endpoint-preserving sampling; set a smaller `max_points` for tighter response bounds.
 
 ## Prompt Example
 
