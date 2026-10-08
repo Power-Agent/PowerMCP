@@ -7,7 +7,7 @@ from mcp.server.mcpserver import MCPServer as FastMCP
 from py_dss_toolkit import dss_tools
 
 from core import state
-from core.engine import dss
+import core.engine as engine
 from powermcp.sandbox import (
     PathNotAllowed,
     allowed_roots,
@@ -27,6 +27,7 @@ def compile_opendss_file(dss_file: str, force_recompile: bool = False) -> Dict[s
     Returns dss_file, circuit_readiness, circuit_loaded, and whether the compile was skipped.
     """
     try:
+        engine.ensure_engine()
         dss_file = checked_path(dss_file, purpose="dss_file")
         # A DSS model may Redirect/Compile sibling files.  Preflight the whole
         # project tree when containment is enabled; preserve the historical
@@ -80,7 +81,7 @@ def compile_opendss_file(dss_file: str, force_recompile: bool = False) -> Dict[s
 def clear_all_opendss_memory() -> Dict[str, Any]:
     """Clear OpenDSS engine memory (ClearAll); resets circuit_loaded, solution_available, and last compiled path."""
     try:
-        dss.text("ClearAll")
+        engine.ensure_engine().text("ClearAll")
         state.circuit_loaded = False
         state.solution_available = False
         state.last_compiled_dss_file = None
