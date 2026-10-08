@@ -180,6 +180,7 @@ def test_reading_selected_channels_includes_time(dyntools, outfile):
     assert result["max_points"] == 10_000
     assert result["max_cells"] == 100_000
     assert result["effective_points"] == 10_000
+    assert result["returned_cells"] == 20_000
     assert dyntools.opened == [(str(outfile), 1)]
 
 
@@ -335,6 +336,9 @@ def test_default_point_cap_bounds_a_large_dynamic_output(dyntools, outfile):
     assert result["num_points"] == 10_000
     assert result["downsampled"] is True
     assert result["max_points"] == 10_000
+    assert result["max_cells"] == 100_000
+    assert result["effective_points"] == 10_000
+    assert result["returned_cells"] == 30_000
     assert result["data"]["time"][0] == 0
     assert result["data"]["time"][-1] == point_count - 1
     assert len(result["data"]["1"]) == 10_000
