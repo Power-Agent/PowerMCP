@@ -12,6 +12,7 @@ if _repo_root_added:
     sys.path.insert(0, _repo_root)
 try:
     from powermcp.solver_case import resolve_solver_case
+    from operating_point import validate_operating_point as _validate_operating_point
     from powermcp.sandbox import PathNotAllowed, checked_path
 finally:
     if _repo_root_added:
