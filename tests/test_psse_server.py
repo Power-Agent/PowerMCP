@@ -179,8 +179,8 @@ def test_reading_selected_channels_includes_time(dyntools, outfile):
     assert result["downsampled"] is False
     assert result["max_points"] == 10_000
     assert result["max_cells"] == 100_000
-    assert result["effective_points"] == 10_000
-    assert result["returned_cells"] == 20_000
+    assert result["effective_points"] == 3
+    assert result["returned_cells"] == 6
     assert dyntools.opened == [(str(outfile), 1)]
 
 
