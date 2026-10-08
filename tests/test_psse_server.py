@@ -178,6 +178,8 @@ def test_reading_selected_channels_includes_time(dyntools, outfile):
     assert result["total_points"] == 3
     assert result["downsampled"] is False
     assert result["max_points"] == 10_000
+    assert result["max_cells"] == 100_000
+    assert result["effective_points"] == 10_000
     assert dyntools.opened == [(str(outfile), 1)]
 
 
@@ -189,6 +191,8 @@ def test_reading_without_a_selection_returns_every_channel(dyntools, outfile):
     assert result["num_points"] == 3
     assert result["total_points"] == 3
     assert result["downsampled"] is False
+    assert result["max_cells"] == 100_000
+    assert result["effective_points"] == 3
 
 
 def test_reading_dynamic_output_can_be_deterministically_capped(dyntools, outfile):
@@ -201,9 +205,110 @@ def test_reading_dynamic_output_can_be_deterministically_capped(dyntools, outfil
     assert result["total_points"] == 3
     assert result["downsampled"] is True
     assert result["max_points"] == 2
+    assert result["max_cells"] == 100_000
+    assert result["effective_points"] == 2
     assert result["data"]["time"] == [DATA["time"][0], DATA["time"][-1]]
     assert result["data"]["1"] == [DATA[1][0], DATA[1][-1]]
     assert result["data"]["2"] == [DATA[2][0], DATA[2][-1]]
+
+
+def test_cell_budget_reduces_effective_points_for_many_channels(dyntools, outfile):
+    point_count = 12_001
+    channels = {"time": "Time(s)"}
+    large_data = {"time": list(range(point_count))}
+    for channel in range(1, 5):
+        channels[channel] = f"CHANNEL {channel}"
+        large_data[channel] = list(range(point_count))
+
+    class LargeCHNF:
+        def __init__(self, outfile, outvrsn=0):
+            dyntools.opened.append((outfile, outvrsn))
+
+        def get_data(self):
+            return "LARGE RUN", channels, large_data
+
+    dyntools.CHNF = LargeCHNF
+
+    result = psse_mcp.read_dynamic_output(
+        str(outfile), max_points=10_000, max_cells=10
+    )
+
+    assert result["status"] == "success", result
+    assert result["total_points"] == point_count
+    assert result["effective_points"] == 2
+    assert result["num_points"] == 2
+    assert result["returned_cells"] == 10
+    assert result["downsampled"] is True
+
+
+def test_downsampled_output_reports_full_resolution_extrema(dyntools, outfile):
+    data = {"time": [0, 1, 2, 3, 4], 1: [10.0, 8.0, 2.0, 9.0, 7.0]}
+
+    class ExtremaCHNF:
+        def __init__(self, outfile, outvrsn=0):
+            dyntools.opened.append((outfile, outvrsn))
+
+        def get_data(self):
+            return "EXTREMA RUN", {"time": "Time(s)", 1: "VOLTAGE"}, data
+
+    dyntools.CHNF = ExtremaCHNF
+    result = psse_mcp.read_dynamic_output(str(outfile), channels=[1], max_points=3)
+
+    assert result["status"] == "success", result
+    assert result["data"]["1"] == [10.0, 2.0, 7.0]
+    assert result["extrema"]["1"] == {
+        "min": 2.0,
+        "min_index": 2,
+        "min_time": 2,
+        "max": 10.0,
+        "max_index": 0,
+        "max_time": 0,
+    }
+
+
+def test_mismatched_dynamic_channel_is_rejected_without_sampling(dyntools, outfile):
+    data = {"time": [0, 1, 2], 1: [10.0, 9.0]}
+
+    class MismatchCHNF:
+        def __init__(self, outfile, outvrsn=0):
+            dyntools.opened.append((outfile, outvrsn))
+
+        def get_data(self):
+            return "BAD RUN", {"time": "Time(s)", 1: "VOLTAGE"}, data
+
+    dyntools.CHNF = MismatchCHNF
+    result = psse_mcp.read_dynamic_output(str(outfile))
+
+    assert result["status"] == "error"
+    assert "expected 3 to match the time vector" in result["message"]
+
+
+def test_missing_dynamic_time_vector_is_rejected(dyntools, outfile):
+    data = {1: [1.0, 2.0, 3.0]}
+
+    class MissingTimeCHNF:
+        def __init__(self, outfile, outvrsn=0):
+            dyntools.opened.append((outfile, outvrsn))
+
+        def get_data(self):
+            return "BAD RUN", {1: "VOLTAGE"}, data
+
+    dyntools.CHNF = MissingTimeCHNF
+    result = psse_mcp.read_dynamic_output(str(outfile))
+
+    assert result["status"] == "error"
+    assert "missing a non-empty time vector" in result["message"]
+
+
+@pytest.mark.parametrize("max_cells", [0, 1, True, 1.5, "10"])
+def test_invalid_dynamic_output_cell_caps_are_rejected_before_engine_start(
+    dyntools, outfile, max_cells
+):
+    result = psse_mcp.read_dynamic_output(str(outfile), max_cells=max_cells)
+
+    assert result["status"] == "error"
+    assert "max_cells must be an integer of at least 2" in result["message"]
+    assert dyntools.engine_starts == 0
 
 
 def test_default_point_cap_bounds_a_large_dynamic_output(dyntools, outfile):
