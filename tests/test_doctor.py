@@ -61,6 +61,28 @@ def test_path_status_missing_and_configured(isolated_config):
     assert style == "green"
 
 
+def test_path_status_rejects_existing_path_with_wrong_type(isolated_config):
+    from powermcp import config as cfg
+
+    # LTspice expects a file. An existing directory must not be reported as ready.
+    target_dir = isolated_config / "LTspice.exe"
+    target_dir.mkdir()
+    cfg.set_value("ltspice", "exe", str(target_dir))
+    style, msg = doctor._path_status(get_tool("ltspice"))
+    assert style == "yellow"
+    assert "wrong type" in msg
+    assert "expected file" in msg
+
+    # HOPE expects a directory. An existing file must not be reported as ready.
+    target_file = isolated_config / "hope-repo"
+    target_file.write_text("")
+    cfg.set_value("hope", "repo_root", str(target_file))
+    style, msg = doctor._path_status(get_tool("hope"))
+    assert style == "yellow"
+    assert "wrong type" in msg
+    assert "expected dir" in msg
+
+
 def test_namespace_shadow_not_false_positive(monkeypatch):
     """A PEP 420 namespace portion must not be read as an installed library.
 
