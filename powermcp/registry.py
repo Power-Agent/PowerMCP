@@ -136,6 +136,18 @@ TOOLS: dict[str, "Tool"] = {
             external_solvers=("Julia",),
         ),
         Tool(
+            "sienna", "SIENNA", "open-source", windows_only=False, extra="sienna",
+            server_dir="SIENNA", run_kind="module",
+            module="sienna_mcp.main", module_root_rel=None,
+            probe="r2x_core",
+            config_keys=(
+                ConfigKey("julia_bin", "Path to the Julia executable", "file"),
+                ConfigKey("julia_depot_path", "JULIA_DEPOT_PATH (optional, Enter to skip)", "dir", required=False),
+            ),
+            external_solvers=("Julia", "HiGHS"),
+            notes="Open-source Sienna connector using r2x for Python-side translation and local Julia for PowerSystems.jl/PowerSimulations.jl solves.",
+        ),
+        Tool(
             "genx", "GenX", "open-source", windows_only=False, extra="genx",
             server_dir="GenX", run_kind="script", entry_rel="server.py",
             probe="matplotlib",
