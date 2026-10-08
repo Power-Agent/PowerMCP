@@ -1,0 +1,57 @@
+Evidence ID: FT-13
+Title: Contingency inspection bounded-read live validation
+Date: 7 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on PR #95 commit ea5da60 plus follow-up changes
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. PowerFactory account identifiers are omitted.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Study case: Case 1
+- Result file: Contingency Analysis AC.ElmRes
+
+Filtered result-read request:
+- calculation_method: ac
+- max_rows: 100
+- max_columns: 100
+- variables: ["c:loading"]
+- max_read_seconds: 30
+
+Before the follow-up metadata optimization, both 10-second and 30-second calls
+returned a controlled "Result metadata time budget exceeded" failure while
+enumerating the result's columns. The MCP server remained available.
+
+After resolving filtered columns from IntMon selections and FindColumn, the
+same live workflow completed successfully:
+- success: true
+- total_rows: 3
+- total_columns: 840
+- matching_columns: 47
+- matching_columns_complete: true
+- returned_rows: 3
+- returned_columns: 47
+- truncated: false
+
+The client displayed object names and classes for object-specific c:loading
+columns. A subsequent powerFactoryUnified-ping returned pong, confirming that
+the server and PowerFactory session remained available after the result read.
+
+Contingency-list regression check:
+The active SP1 project contained one MCP-created IntEvt with one EvtOutage and
+one EvtSwitch. list_contingencies returned event_count=2, fault_count=0 and the
+expected event targets. No EvtShc existed in that project during this live run,
+so positive EvtShc discovery is supported by UT-03 rather than claimed here.
+
+Version boundary and remaining validation:
+The original EvtShc omission and large-result timeout were reported from a
+separate PowerFactory 2026 SP4 test PC running the latest GitHub main through
+Claude Desktop. That machine is not a development environment and cannot load
+unmerged patches. This record therefore does not claim a post-fix SP4 run.
+Repeat the EvtShc and filtered-result checks on that machine after merge.

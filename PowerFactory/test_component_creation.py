@@ -135,6 +135,36 @@ class FakePowerFactory:
 
 
 class ComponentCreationTest(unittest.TestCase):
+    def test_activate_study_case_reports_when_it_creates_the_case(self):
+        agent = object.__new__(agent_module.DIgSILENTAgent)
+        agent.cfg = Mock(study_case="Case 1", base_study_case="0. Base")
+        agent.app = Mock()
+        folder = Mock()
+        base_case = Mock()
+        new_case = Mock()
+        agent.app.GetProjectFolder.return_value = folder
+        agent._find_study_case_exact = Mock(side_effect=[None, base_case])
+        folder.AddCopy.return_value = new_case
+
+        success, message = agent.activate_study_case()
+
+        self.assertTrue(success, message)
+        self.assertEqual(message, "Study case created and activated")
+        folder.AddCopy.assert_called_once_with(base_case, "Case 1")
+        new_case.Activate.assert_called_once_with()
+
+    def test_large_plot_legend_is_placed_below_the_axes(self):
+        axes = Mock()
+
+        agent_module._add_plot_legend(axes, 39)
+
+        axes.legend.assert_called_once_with(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.15),
+            ncol=6,
+            fontsize=8,
+        )
+
     def test_run_contingency_analysis_uses_configured_command(self):
         command = Mock()
         command.Execute.return_value = 0

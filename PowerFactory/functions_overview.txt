@@ -29,12 +29,14 @@ Implemented MCP tools
 - list_objects: lists objects using a PowerFactory object query.
 - list_components: lists objects using friendly equipment categories.
 - list_study_cases: lists study cases and identifies the active case.
-- list_contingencies: lists configured fault-library cases and their outage and switch events.
+- list_contingencies: lists configured fault-library cases and their EvtOutage, EvtSwitch, and EvtShc events.
 - get_contingency_configuration: reads the active ComSimoutage settings without running a calculation.
+- configure_contingency_screening: persists selected ComSimoutage screening criteria without running a calculation.
 - create_contingency: creates or reuses an idempotent switch-based contingency definition.
 - run_contingency_analysis: runs ComSimoutage in its configured or an explicit supported calculation mode.
-- get_contingency_results: reads a bounded slice of the configured AC or DC contingency result file.
+- get_contingency_results: reads a bounded, optionally variable-filtered AC or DC result slice using IntMon/FindColumn metadata and bulk/sparse values.
 - add_contingency_result_variables: adds missing object-variable pairs to the AC or DC result recording selection without running a calculation.
+- remove_contingency_result_variables: removes object-variable pairs from the AC or DC result recording selection without running a calculation.
 - get_contingency_summary: reports affected elements, convergence, overloads, and voltage violations from existing results.
 - add_component: creates a bus, load, generator, line, or transformer; connected equipment receives generated cubicle(s) and closed circuit breaker(s), and update_graphics can synchronize the active diagram.
 - delete_component: previews or confirms exact-name component deletion, including generated cubicle, switchgear, and requested graphical cleanup.
@@ -44,7 +46,7 @@ Implemented simulation engine behavior
 - SimulationConfig.from_json: loads known JSON keys into the dataclass.
 - Logger.info / Logger.ok / Logger.warn / Logger.error / Logger.section: console logging helpers.
 - DIgSILENTAgent.connect: connects to PowerFactory and activates the configured project.
-- DIgSILENTAgent.activate_study_case: activates or copies the configured study case.
+- DIgSILENTAgent.activate_study_case: activates or copies the configured study case and reports which action occurred.
 - DIgSILENTAgent.run_loadflow: runs ComLdf.
 - DIgSILENTAgent.run_contingency_analysis: executes ComSimoutage and optionally selects a validated calculation mode.
 - DIgSILENTAgent.run_rms_simulation: builds the event sequence and runs ComInc / ComSim.
@@ -52,7 +54,7 @@ Implemented simulation engine behavior
 - DIgSILENTAgent.addSwitchEvent: creates PowerFactory EvtSwitch events.
 - DIgSILENTAgent.export_results_to_csv: exports the RMS results to CSV via ComRes.
 - DIgSILENTAgent.export_project_to_pfd: exports the active project to .pfd via ComPfdexport.
-- DIgSILENTAgent.generate_standard_plots: creates voltage and generator speed plots from the CSV output.
+- DIgSILENTAgent.generate_standard_plots: creates voltage and generator speed plots, placing large voltage legends below the axes.
 - DIgSILENTAgent.import_project: imports a .pfd project file.
 - DIgSILENTAgent.create_study_case: creates or reuses study cases with exact-name matching.
 - DIgSILENTAgent.modify_parameter: writes attributes through SetAttribute with type coercion.

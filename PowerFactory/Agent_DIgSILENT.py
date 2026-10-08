@@ -25,6 +25,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+
+def _add_plot_legend(ax, series_count: int) -> None:
+    """Keep large legends outside the axes so they do not cover the plot."""
+    if series_count > 12:
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.15),
+            ncol=min(6, series_count),
+            fontsize=8,
+        )
+    else:
+        ax.legend(loc="best", fontsize=9)
+
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
@@ -418,6 +431,7 @@ class DIgSILENTAgent:
             folder = self.app.GetProjectFolder('study')
             target_name = self.cfg.study_case
             base_name = getattr(self.cfg, "base_study_case", "0. Base")
+            created = False
 
             if folder is not None:
                 # Standard project: study cases folder exists
@@ -433,6 +447,7 @@ class DIgSILENTAgent:
                     if target_name == base_name:
                         base_case.Activate()
                     else:
+                        created = True
                         new_study_case = folder.AddCopy(base_case, target_name)
                         if new_study_case is None:
                             target_case = self._find_study_case_exact(folder, target_name)
@@ -456,7 +471,7 @@ class DIgSILENTAgent:
                 matches[0].Activate()
 
             log.ok(f"Study case activated: {target_name}")
-            return True, "Study case activated"
+            return True, "Study case created and activated" if created else "Study case activated"
         except Exception as e:
             log.error(f"Study case activation failed: {e}")
             return False, str(e)
@@ -800,7 +815,7 @@ class DIgSILENTAgent:
                 ax.set_ylabel('Voltage (pu)', fontsize=11)
                 ax.set_title(f'Bus Voltages — {self.cfg.run_label}', fontsize=13, fontweight='bold')
                 ax.grid(True, alpha=0.3)
-                ax.legend(loc='best', fontsize=9)
+                _add_plot_legend(ax, len(voltage_series))
                 fig.tight_layout()
                 voltage_plot = checked_path(
                     os.path.join(run_dir, f"{safe_label}_voltages.png"),

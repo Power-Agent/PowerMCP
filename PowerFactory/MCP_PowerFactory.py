@@ -10,31 +10,33 @@ Author
 
 Tools
 -----
-  ping                  Connectivity check.
-  get_config            Return simulation_config.json as a JSON string.
-  get_active_project    Return the active PowerFactory project.
-  get_active_study_case Return the active PowerFactory study case.
-  get_parameters        Read selected attributes from matching objects.
-  list_objects          List objects using a PowerFactory object query.
-  list_components       List objects using friendly equipment categories.
-  list_study_cases      List study cases and identify the active case.
-  list_contingencies    List available fault cases and outage events.
-  create_contingency    Create an idempotent switch-based contingency definition.
-  get_contingency_configuration Read the active ComSimoutage settings.
-  add_contingency_result_variables Add variables to AC/DC result recording.
-  import_project        Import a .pfd file and activate it in PowerFactory.
-  create_study_case     Create/activate a study case by name (no simulation run).
-  modify_parameter      Modify an object attribute by object query + variable name.
-  add_component         Create a bus, load, generator, line, or transformer.
-  delete_component      Preview or delete an exactly named grid component.
-  run_loadflow          Run a load flow calculation (ComLdf) on the active study case.
-  run_short_circuit     Run a short-circuit calculation (ComShc) on the active study case.
-  run_contingency_analysis Execute ComSimoutage with an optional method.
-  get_contingency_results Read a bounded slice of AC or DC contingency results.
-  get_contingency_summary Summarize contingency overloads and voltage violations.
-  run_simulation        Run the full pipeline from simulation_config.json.
-  run_custom_case       Run a one-off case with parameters supplied at call-time.
-  read_results_csv      Read the latest (or a specific) RMS results CSV.
+  ping                                  Connectivity check.
+  get_config                            Return simulation_config.json as a JSON string.
+  get_active_project                    Return the active PowerFactory project.
+  get_active_study_case                 Return the active PowerFactory study case.
+  get_parameters                        Read selected attributes from matching objects.
+  list_objects                          List objects using a PowerFactory object query.
+  list_components                       List objects using friendly equipment categories.
+  list_study_cases                      List study cases and identify the active case.
+  list_contingencies                    List EvtOutage/EvtSwitch/EvtShc fault-case events.
+  create_contingency                    Create an idempotent switch-based contingency definition.
+  get_contingency_configuration         Read the active ComSimoutage settings.
+  configure_contingency_screening       Configure persistent ComSimoutage screening criteria.
+  add_contingency_result_variables      Add variables to AC/DC result recording.
+  remove_contingency_result_variables   Remove variables from AC/DC result recording.
+  import_project                        Import a .pfd file and activate it in PowerFactory.
+  create_study_case                     Create/activate a study case by name (no simulation run).
+  modify_parameter                      Modify an object attribute by object query + variable name.
+  add_component                         Create a bus, load, generator, line, or transformer.
+  delete_component                      Preview or delete an exactly named grid component.
+  run_loadflow                          Run a load flow calculation (ComLdf) on the active study case.
+  run_short_circuit                     Run a short-circuit calculation (ComShc) on the active study case.
+  run_contingency_analysis              Execute ComSimoutage with an optional method.
+  get_contingency_results               Read/filter bounded AC or DC contingency results.
+  get_contingency_summary               Summarize contingency overloads and voltage violations.
+  run_simulation                        Run the full pipeline from simulation_config.json.
+  run_custom_case                       Run a one-off case with parameters supplied at call-time.
+  read_results_csv                      Read the latest (or a specific) RMS results CSV.
 
 Usage
 -----
@@ -46,6 +48,7 @@ import sys
 import os
 import json
 import math
+import time
 import concurrent.futures
 from datetime import datetime
 from typing import Any
@@ -230,6 +233,278 @@ def _attribute(obj, name, default=None):
         return obj.GetAttribute(name)
     except Exception:
         return default
+
+
+def _existing_contingency_command(app):
+    """Find an existing command without GetFromStudyCase's creation side effect."""
+    case = app.GetActiveStudyCase()
+    if case is None:
+        return None
+    commands = case.GetContents("*.ComSimoutage", 0) or []
+    if len(commands) > 1:
+        raise ValueError("Multiple ComSimoutage commands exist; select a study case with one command")
+    return commands[0] if commands else None
+
+
+def _result_cells(app, result_file, row_count, columns, deadline):
+    """Read selected columns in bulk, with a sparse/cell fallback."""
+    selected = set(columns)
+    vector = None
+    try:
+        current_user = app.GetCurrentUser()
+        vector = current_user.CreateObject(
+            "IntVec", f"PowerMCP result read {time.time_ns()}"
+        )
+        if vector is not None and callable(getattr(result_file, "GetColumnValues", None)):
+            rows = [{} for _ in range(row_count)]
+            for column in columns:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "Result read time budget exceeded; reduce rows/columns or filter variables"
+                    )
+                code = result_file.GetColumnValues(vector, column)
+                if code not in (0, None):
+                    raise RuntimeError(f"ElmRes.GetColumnValues returned error code {code}")
+                values = vector.GetAttribute("V") or []
+                for row, value in enumerate(values[:row_count]):
+                    rows[row][column] = (0, value)
+            return rows
+    except TimeoutError:
+        raise
+    except Exception:
+        pass
+    finally:
+        if vector is not None:
+            try:
+                vector.Delete()
+            except Exception:
+                pass
+
+    sparse = callable(getattr(result_file, "GetFirstValidVariable", None)) and callable(
+        getattr(result_file, "GetNextValidVariable", None)
+    )
+    if not sparse and row_count * len(selected) > 2000:
+        raise ValueError("Result interface lacks sparse readers; request at most 2,000 cells")
+    rows = []
+    for row in range(row_count):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+        cells = {}
+        if sparse and selected:
+            column = result_file.GetFirstValidVariable(row)
+            previous = -1
+            while column >= 0 and column <= max(selected):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+                if column <= previous:
+                    raise ValueError("Sparse result iterator did not advance")
+                if column in selected:
+                    cells[column] = _decode_cell(result_file.GetValue(row, column))
+                previous = column
+                column = result_file.GetNextValidVariable()
+        elif not sparse:
+            for column in selected:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("Result read time budget exceeded; reduce rows/columns or filter variables")
+                cells[column] = _decode_cell(result_file.GetValue(row, column))
+        rows.append(cells)
+    return rows
+
+
+def _filtered_result_columns(
+    app, result_file, total_columns, variables, column_limit, deadline,
+):
+    """Resolve filtered columns from IntMon selections instead of scanning ElmRes."""
+    columns = {}
+    errors = []
+
+    # b:i_obj maps result rows to contingency objects. It is normally the first
+    # column; keep the probe bounded so large files do not recreate the slow
+    # full metadata scan this helper avoids.
+    for column in range(min(total_columns, 16)):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result metadata time budget exceeded")
+        if result_file.GetVariable(column) == "b:i_obj":
+            item = {"index": column, "variable": "b:i_obj", "object": None}
+            try:
+                result_object = result_file.GetObject(column)
+                if result_object is not None:
+                    item["object"] = _object_summary(result_object)
+            except Exception:
+                pass
+            columns[column] = item
+            break
+
+    requested_limit = max(0, column_limit - len(columns))
+    requested = set(variables)
+
+    for monitor_index, monitor in enumerate(
+        result_file.GetContents("*.IntMon", 1) or []
+    ):
+        if time.monotonic() >= deadline:
+            raise TimeoutError("Result metadata time budget exceeded")
+        try:
+            selected = {
+                monitor.GetVar(index)
+                for index in range(int(monitor.NVars()))
+            }
+            selected.intersection_update(requested)
+            if not selected:
+                continue
+
+            target = monitor.GetAttribute("obj_id")
+            if target is not None:
+                targets = [target]
+            else:
+                class_name = monitor.GetAttribute("className")
+                if not isinstance(class_name, str) or not class_name.strip():
+                    raise ValueError("selection has no object target or className")
+                targets = app.GetCalcRelevantObjects(
+                    f"*.{class_name.strip()}"
+                ) or []
+
+            for target in targets:
+                for variable in selected:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("Result metadata time budget exceeded")
+                    column = result_file.FindColumn(target, variable)
+                    if not isinstance(column, int) or not 0 <= column < total_columns:
+                        continue
+                    columns.setdefault(column, {
+                        "index": column,
+                        "variable": variable,
+                        "object": _object_summary(target),
+                    })
+                    requested_count = sum(
+                        item["variable"] != "b:i_obj"
+                        for item in columns.values()
+                    )
+                    if requested_count > requested_limit:
+                        ordered = sorted(columns.values(), key=lambda item: item["index"])
+                        retained = []
+                        kept_requested = 0
+                        for item in ordered:
+                            if item["variable"] == "b:i_obj":
+                                retained.append(item)
+                            elif kept_requested < requested_limit:
+                                retained.append(item)
+                                kept_requested += 1
+                        return retained, len(columns), False, errors
+        except TimeoutError:
+            raise
+        except Exception as exc:
+            errors.append({
+                "monitor_index": monitor_index,
+                "message": f"Could not inspect result selection: {exc}",
+            })
+
+    ordered = sorted(columns.values(), key=lambda item: item["index"])
+    return ordered, len(ordered), True, errors
+
+
+def _contingency_screening_settings(command):
+    """Return the supported ComSimoutage screening settings."""
+    def optional_bool(attribute):
+        value = _attribute(command, attribute)
+        return None if value is None else bool(value)
+
+    method = _attribute(command, "screeningMeth")
+    return {
+        "screening_method": {0: "dc", 1: "ac_linearised"}.get(
+            method, "unknown" if method is None else f"unknown:{method}"
+        ),
+        "simple_loading_criterion": optional_bool("scrCritSimple"),
+        "simple_loading_threshold_pct": _attribute(command, "maxLoadAbs"),
+        "combined_loading_criterion": optional_bool("scrCritComb"),
+        "combined_loading_threshold_pct": _attribute(command, "maxLoad"),
+        "relative_loading_change_pct": _attribute(command, "diffLoadBase"),
+        "ignore_base_case_overloads": optional_bool("iIgnCriticalBC"),
+        "screen_only_recorded_elements": optional_bool("screenRecOnly"),
+    }
+
+
+def _contingency_variable_names(variables):
+    """Validate and de-duplicate a result-variable list."""
+    if not isinstance(variables, list):
+        return [], "variables must be a list of non-empty strings"
+    invalid = [
+        index for index, variable in enumerate(variables)
+        if not isinstance(variable, str) or not variable.strip()
+    ]
+    if invalid:
+        indexes = ", ".join(str(index) for index in invalid)
+        return [], (
+            "variables entries at indexes " + indexes
+            + " must be non-empty strings"
+        )
+    return list(dict.fromkeys(variable.strip() for variable in variables)), ""
+
+
+def _contingency_monitor_index(result_file):
+    """Read each IntMon once; retain healthy selections and report failures once."""
+    indexed, classes, errors = {}, {}, []
+    for index, monitor in enumerate(result_file.GetContents("*.IntMon", 1) or []):
+        full_name = None
+        try:
+            obj = monitor.GetAttribute("obj_id")
+            if obj is not None:
+                full_name = obj.GetFullName()
+            variables = {monitor.GetVar(i) for i in range(int(monitor.NVars()))}
+            if obj is None:
+                if not variables:
+                    continue
+                class_name = monitor.GetAttribute("className")
+                if isinstance(class_name, str) and class_name.strip():
+                    classes.setdefault(class_name.strip(), set()).update(variables)
+                    continue
+                raise RuntimeError(
+                    "Selection has no object target or readable className; "
+                    "unidentified class/group selections are unsupported. "
+                    "Inspect this IntMon in PowerFactory before "
+                    "changing recording; it has been left unchanged."
+                )
+            indexed.setdefault(full_name, []).append((monitor, variables))
+        except Exception as exc:
+            errors.append({
+                "monitor_index": index,
+                "object_full_name": full_name,
+                "message": f"Could not inspect result selection: {exc}",
+            })
+    return indexed, classes, errors
+
+
+def _contingency_recording_request(object_query, variables, calculation_method, max_objects):
+    """Validate the common add/remove recording arguments."""
+    method = str(calculation_method or "").strip().lower()
+    if method not in {"ac", "dc"}:
+        raise ValueError("calculation_method must be 'ac' or 'dc'")
+    query = str(object_query or "").strip()
+    names, error = _contingency_variable_names(variables)
+    if error:
+        raise ValueError(error)
+    if not query or not names:
+        raise ValueError("object_query and at least one variable are required")
+    try:
+        limit = max(1, min(int(max_objects), 1000))
+    except (TypeError, ValueError):
+        raise ValueError("max_objects must be an integer") from None
+    return method, query, names, limit
+
+
+def _contingency_recording_context(app, method, query):
+    """Resolve the active result selection and requested objects for either tool."""
+    if app.GetActiveStudyCase() is None:
+        raise ValueError("No PowerFactory study case is active")
+    command = _existing_contingency_command(app)
+    if command is None:
+        raise ValueError("ComSimoutage is unavailable")
+    result_file = command.GetAttribute("p_rescnt" if method == "ac" else "p_rescntDC")
+    if result_file is None:
+        raise ValueError(f"{method.upper()} contingency result file is not configured")
+    objects = app.GetCalcRelevantObjects(query) or []
+    if not objects:
+        raise ValueError(f"No objects found for query: {query}")
+    return result_file, _object_summary(result_file), objects
 
 
 def _decode_cell(raw):
@@ -558,7 +833,7 @@ def list_study_cases(max_results: int = 100) -> str:
 
 @mcp.tool()
 def list_contingencies(max_results: int = 100) -> str:
-    """List direct ``IntEvt`` children of fault-case folders, including empty cases."""
+    """List fault-library cases, including EvtShc faults, without creating commands."""
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -586,15 +861,24 @@ def list_contingencies(max_results: int = 100) -> str:
                 continue
             outages = fault_case.GetContents("*.EvtOutage", 1) or []
             switches = fault_case.GetContents("*.EvtSwitch", 1) or []
-            fault_cases.append((fault_case, outages, switches))
+            faults = fault_case.GetContents("*.EvtShc", 1) or []
+            fault_cases.append((fault_case, outages, switches, faults))
 
-        fault_cases.sort(key=lambda entry: not (entry[1] or entry[2]))
+        fault_cases.sort(key=lambda entry: not (entry[1] or entry[2] or entry[3]))
         limit = max(1, min(int(max_results), 1000))
         results = []
-        for fault_case, outages, switches in fault_cases[:limit]:
+        for fault_case, outages, switches, faults in fault_cases[:limit]:
             results.append({
                 **_object_summary(fault_case),
-                "event_count": len(outages) + len(switches),
+                "event_count": len(outages) + len(switches) + len(faults),
+                "fault_count": len(faults),
+                "faults": [
+                    {
+                        **event_summary(fault, "i_shc"),
+                        "fault_position_pct": _attribute(fault, "shcLocation"),
+                    }
+                    for fault in faults
+                ],
                 "outage_count": len(outages),
                 "outages": [
                     event_summary(outage, "i_what")
@@ -628,7 +912,7 @@ def get_contingency_configuration() -> str:
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {
                 "success": False,
@@ -645,7 +929,145 @@ def get_contingency_configuration() -> str:
                 "linear_option": _attribute(command, "copt_Linear"),
                 "combine_ac_dc": _attribute(command, "iACDCCombine"),
                 "dynamic_contingencies": _attribute(command, "dynamicCase"),
+                **_contingency_screening_settings(command),
             },
+        }
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def configure_contingency_screening(
+    screening_method: str = "",
+    simple_loading_criterion: bool | None = None,
+    simple_loading_threshold_pct: float | None = None,
+    combined_loading_criterion: bool | None = None,
+    combined_loading_threshold_pct: float | None = None,
+    relative_loading_change_pct: float | None = None,
+    ignore_base_case_overloads: bool | None = None,
+    screen_only_recorded_elements: bool | None = None,
+) -> str:
+    """Configure persistent screening settings in the active study case.
+
+    No calculation is executed. Changes persist after this call; original
+    values are restored if a write fails. ``screening_method='dc'`` selects
+    DC load-flow screening; ``'ac_linearised'`` selects linearised AC screening.
+    An empty method string leaves that setting unchanged; ``None`` leaves
+    each other argument unchanged.
+
+    ``simple_loading_criterion`` enables recalculation when loading exceeds
+    ``simple_loading_threshold_pct`` (percentage of rated loading).
+    ``combined_loading_criterion`` enables the combined test: loading exceeds
+    ``combined_loading_threshold_pct`` AND its relative change from the base
+    case exceeds ``relative_loading_change_pct``. All thresholds are finite,
+    non-negative percentages, not fractions.
+    ``ignore_base_case_overloads`` excludes components overloaded in the base
+    case; ``screen_only_recorded_elements`` restricts screening to elements
+    included in result recording. Supply at least one setting to update.
+    """
+    method_name = str(screening_method or "").strip().casefold()
+    methods = {"dc": 0, "ac_linearised": 1}
+    if method_name and method_name not in methods:
+        return _to_json({
+            "success": False,
+            "message": "screening_method must be 'dc' or 'ac_linearised'",
+        })
+
+    parsed = {}
+    try:
+        for name, value in (
+            ("simple_loading_threshold_pct", simple_loading_threshold_pct),
+            ("combined_loading_threshold_pct", combined_loading_threshold_pct),
+            ("relative_loading_change_pct", relative_loading_change_pct),
+        ):
+            if value is None:
+                continue
+            number = float(value)
+            if not math.isfinite(number) or number < 0:
+                raise ValueError(f"{name} must be finite and non-negative")
+            parsed[name] = number
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
+
+    updates = {}
+    if method_name:
+        updates["screeningMeth"] = methods[method_name]
+    for value, attribute in (
+        (simple_loading_criterion, "scrCritSimple"),
+        (combined_loading_criterion, "scrCritComb"),
+        (ignore_base_case_overloads, "iIgnCriticalBC"),
+        (screen_only_recorded_elements, "screenRecOnly"),
+    ):
+        if value is not None:
+            updates[attribute] = int(value)
+    for name, attribute in (
+        ("simple_loading_threshold_pct", "maxLoadAbs"),
+        ("combined_loading_threshold_pct", "maxLoad"),
+        ("relative_loading_change_pct", "diffLoadBase"),
+    ):
+        if name in parsed:
+            updates[attribute] = parsed[name]
+
+    if not updates:
+        return _to_json({
+            "success": False,
+            "message": "At least one screening setting must be provided",
+        })
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        if app.GetActiveStudyCase() is None:
+            return {
+                "success": False,
+                "message": "No PowerFactory study case is active",
+            }
+        command = _existing_contingency_command(app)
+        if command is None:
+            return {"success": False, "message": "ComSimoutage is unavailable"}
+
+        previous = {
+            attribute: command.GetAttribute(attribute)
+            for attribute in updates
+        }
+        before = _contingency_screening_settings(command)
+        try:
+            for attribute, expected in updates.items():
+                command.SetAttribute(attribute, expected)
+                actual = command.GetAttribute(attribute)
+                matches = (
+                    int(actual) == expected
+                    if isinstance(expected, int)
+                    else math.isclose(float(actual), expected, abs_tol=1e-6)
+                )
+                if not matches:
+                    raise RuntimeError(
+                        f"PowerFactory did not retain {attribute}={expected}"
+                    )
+        except Exception as exc:
+            rollback_errors = []
+            for attribute, value in previous.items():
+                try:
+                    command.SetAttribute(attribute, value)
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"{attribute}: {rollback_exc}")
+            message = f"Could not configure contingency screening: {exc}"
+            if rollback_errors:
+                message += "; rollback failed for " + ", ".join(rollback_errors)
+            return {"success": False, "message": message}
+
+        after = _contingency_screening_settings(command)
+        return {
+            "success": True,
+            "message": (
+                "Contingency screening configuration updated"
+                if before != after
+                else "Contingency screening configuration already matched"
+            ),
+            "command": _object_summary(command),
+            "changed": before != after,
+            "before": before,
+            "settings": after,
         }
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
@@ -974,12 +1396,23 @@ def get_contingency_results(
     calculation_method: str = "ac",
     max_rows: int = 100,
     max_columns: int = 100,
+    variables: list[str] | None = None,
+    max_read_seconds: float = 5.0,
 ) -> str:
     """Read a bounded rectangular slice of a contingency result file.
 
     ``calculation_method`` selects the configured AC or DC ``ElmRes`` object.
     The result is deliberately bounded because contingency files are sparse
     and can contain hundreds of columns even for a single fault case.
+    ``variables`` filters exact identifiers (e.g. ["c:loading"]); None reads
+    all identifiers. Column indexes remain original file indexes. Sparse holes
+    become null without per-cell API calls. ``max_read_seconds`` (0 < value <=
+    30) is a cooperative budget, not an interrupt of a blocked native call.
+    Filtered metadata is resolved from ``IntMon`` selections and ``FindColumn``
+    rather than scanning every result column. No command is created. A
+    transient ``IntVec`` is deleted after bulk reads; sparse iterators are the
+    fallback. Object metadata may be null for non-element columns. Reading does
+    not run or refresh the analysis.
     """
     method = calculation_method.strip().lower()
     if method not in {"ac", "dc"}:
@@ -1007,6 +1440,22 @@ def get_contingency_results(
             "message": "Requested result slice exceeds 20,000 cells",
         })
 
+    try:
+        if variables is None:
+            variable_filter = None
+        else:
+            variable_names, variable_error = _contingency_variable_names(variables)
+            if variable_error:
+                raise ValueError(variable_error)
+            if not variable_names:
+                raise ValueError("variables must contain at least one variable name")
+            variable_filter = set(variable_names)
+        read_seconds = float(max_read_seconds)
+        if not math.isfinite(read_seconds) or not 0 < read_seconds <= 30:
+            raise ValueError("max_read_seconds must be finite, positive, and at most 30")
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
+
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -1016,7 +1465,7 @@ def get_contingency_results(
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {
                 "success": False,
@@ -1039,43 +1488,69 @@ def get_contingency_results(
             }
 
         try:
+            deadline = time.monotonic() + read_seconds
             total_rows = result_file.GetNumberOfRows()
             total_columns = result_file.GetNumberOfColumns()
             returned_rows = min(total_rows, row_limit)
-            returned_columns = min(total_columns, column_limit)
-
-            columns = []
-            for column in range(returned_columns):
-                item = {
-                    "index": column,
-                    "variable": result_file.GetVariable(column),
-                }
-                result_object = result_file.GetObject(column)
-                if result_object is not None:
-                    item["object"] = _object_summary(result_object)
-                columns.append(item)
+            metadata_errors = []
+            if variable_filter is not None:
+                (
+                    columns,
+                    matching_columns,
+                    matching_columns_complete,
+                    metadata_errors,
+                ) = _filtered_result_columns(
+                    app,
+                    result_file,
+                    total_columns,
+                    variable_filter,
+                    column_limit,
+                    deadline,
+                )
+            else:
+                columns = []
+                for column in range(min(total_columns, column_limit)):
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError(
+                            "Result metadata time budget exceeded; "
+                            "request fewer columns"
+                        )
+                    variable = result_file.GetVariable(column)
+                    item = {
+                        "index": column,
+                        "variable": variable,
+                        "object": None,
+                    }
+                    result_object = result_file.GetObject(column)
+                    if result_object is not None:
+                        item["object"] = _object_summary(result_object)
+                    columns.append(item)
+                matching_columns = total_columns
+                matching_columns_complete = True
+            returned_columns = len(columns)
             object_column = next(
                 (
-                    column["index"]
-                    for column in columns
+                    position
+                    for position, column in enumerate(columns)
                     if column["variable"] == "b:i_obj"
                 ),
                 None,
             )
 
             rows = []
-            for row in range(returned_rows):
+            cell_rows = _result_cells(app, result_file, returned_rows,
+                                      [column["index"] for column in columns], deadline)
+            for row, cells in enumerate(cell_rows):
                 values = []
                 errors = []
-                for column in range(returned_columns):
-                    error_code, value = _decode_cell(
-                        result_file.GetValue(row, column)
-                    )
+                for column in columns:
+                    index = column["index"]
+                    error_code, value = cells.get(index, (0, None))
 
                     values.append(value if error_code == 0 else None)
                     if error_code != 0:
                         errors.append({
-                            "column": column,
+                            "column": index,
                             "code": error_code,
                         })
 
@@ -1100,14 +1575,17 @@ def get_contingency_results(
                 "result_file": _object_summary(result_file),
                 "total_rows": total_rows,
                 "total_columns": total_columns,
+                "matching_columns": matching_columns,
+                "matching_columns_complete": matching_columns_complete,
                 "returned_rows": returned_rows,
                 "returned_columns": returned_columns,
                 "truncated": (
                     returned_rows < total_rows
-                    or returned_columns < total_columns
+                    or returned_columns < matching_columns
                 ),
                 "columns": columns,
                 "rows": rows,
+                **({"metadata_errors": metadata_errors} if metadata_errors else {}),
             }
         finally:
             result_file.Release()
@@ -1129,83 +1607,33 @@ def add_contingency_result_variables(
     ``added`` by this call and those ``already_recorded``; ``added_variables``
     and ``already_recorded_variables`` total them. Rerun the analysis only
     when ``added_variables`` is non-zero -- a repeat call adds nothing.
+    Class-level selections count as recorded for objects of that class.
+    Unreadable or unidentified targetless selections are reported once;
+    additions with uncertain recording state are skipped and reported failed.
 
     Every recorded ``m:u`` / ``c:loading`` column is scanned by
     ``get_contingency_summary``, which refuses files above 20,000 cells
     (rows x columns), so recording those for many objects can disable it.
     """
-    method = str(calculation_method or "").strip().lower()
-    if method not in {"ac", "dc"}:
-        return _to_json({
-            "success": False,
-            "message": "calculation_method must be 'ac' or 'dc'",
-        })
-
-    query = str(object_query or "").strip()
-    variable_names = list(dict.fromkeys(
-        variable.strip()
-        for variable in (variables or [])
-        if isinstance(variable, str) and variable.strip()
-    ))
-    if not query or not variable_names:
-        return _to_json({
-            "success": False,
-            "message": "object_query and at least one variable are required",
-        })
-
     try:
-        object_limit = max(1, min(int(max_objects), 1000))
-    except (TypeError, ValueError):
-        return _to_json({
-            "success": False,
-            "message": "max_objects must be an integer",
-        })
+        method, query, variable_names, object_limit = _contingency_recording_request(
+            object_query, variables, calculation_method, max_objects,
+        )
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
 
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
-        if app.GetActiveStudyCase() is None:
-            return {
-                "success": False,
-                "message": "No PowerFactory study case is active",
-            }
-
-        command = app.GetFromStudyCase("ComSimoutage")
-        if command is None:
-            return {"success": False, "message": "ComSimoutage is unavailable"}
-
-        reference_name = "p_rescnt" if method == "ac" else "p_rescntDC"
-        result_file = command.GetAttribute(reference_name)
-        if result_file is None:
-            return {
-                "success": False,
-                "message": f"{method.upper()} contingency result file is not configured",
-            }
-
-        objects = app.GetCalcRelevantObjects(query) or []
-        if not objects:
-            return {
-                "success": False,
-                "message": f"No objects found for query: {query}",
-            }
-
-        load_code = result_file.Load()
-        if load_code not in (0, None):
-            return {
-                "success": False,
-                "message": f"ElmRes.Load returned error code {load_code}",
-            }
-        existing = set()
         try:
-            for object_index, obj in enumerate(objects[:object_limit]):
-                for variable in variable_names:
-                    if result_file.FindColumn(obj, variable) >= 0:
-                        existing.add((object_index, variable))
-        finally:
-            result_file.Release()
-
+            result_file, result_summary, objects = _contingency_recording_context(
+                app, method, query,
+            )
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        indexed, classes, errors = _contingency_monitor_index(result_file)
+        uncertain = {error["object_full_name"] for error in errors}
         configured = []
-        errors = []
         for object_index, obj in enumerate(objects[:object_limit]):
             # Identify the object before writing to it. Anything raised here
             # or below stays scoped to this object, so the record of columns
@@ -1221,9 +1649,17 @@ def add_contingency_result_variables(
                 continue
             added = []
             already_recorded = []
+            failed = []
+            recorded = set().union(*(
+                names for _monitor, names in indexed.get(summary["full_name"], [])
+            ))
+            recorded.update(classes.get(summary["class_name"], set()))
             for variable in variable_names:
-                if (object_index, variable) in existing:
+                if variable in recorded:
                     already_recorded.append(variable)
+                    continue
+                if None in uncertain or summary["full_name"] in uncertain:
+                    failed.append(variable)
                     continue
                 try:
                     code = result_file.AddVariable(obj, variable)
@@ -1234,6 +1670,7 @@ def add_contingency_result_variables(
                         "variable": variable,
                         "message": str(exc),
                     })
+                    failed.append(variable)
                     continue
                 if code not in (0, None):
                     errors.append({
@@ -1242,27 +1679,28 @@ def add_contingency_result_variables(
                         "variable": variable,
                         "code": code,
                     })
+                    failed.append(variable)
                     continue
                 added.append(variable)
-            if added or already_recorded:
-                configured.append({
-                    "object": summary,
-                    "variables": [
-                        variable for variable in variable_names
-                        if variable in added or variable in already_recorded
-                    ],
-                    "added": added,
-                    "already_recorded": already_recorded,
-                })
+            configured.append({
+                "object": summary,
+                "variables": [
+                    variable for variable in variable_names
+                    if variable in added or variable in already_recorded
+                ],
+                "added": added,
+                "already_recorded": already_recorded,
+                "failed": failed,
+            })
 
         response = {
             "success": not errors,
             "calculation_method": method,
-            "result_file": _object_summary(result_file),
+            "result_file": result_summary,
             "query": query,
             "variables": variable_names,
             "total_objects": len(objects),
-            "configured_objects": len(configured),
+            "configured_objects": sum(bool(item["variables"]) for item in configured),
             "configured_variables": sum(
                 len(item["variables"]) for item in configured
             ),
@@ -1270,6 +1708,7 @@ def add_contingency_result_variables(
             "already_recorded_variables": sum(
                 len(item["already_recorded"]) for item in configured
             ),
+            "failed_variables": sum(len(item["failed"]) for item in configured),
             "truncated": len(objects) > object_limit,
             "results": configured,
         }
@@ -1278,13 +1717,171 @@ def add_contingency_result_variables(
                 "Result recording selection updated; rerun contingency analysis "
                 "to populate the added variables"
             )
-        else:
+        elif not errors:
             response["message"] = (
                 "All requested variables were already recorded; no change"
             )
+        else:
+            response["message"] = "No result variables were added"
         if errors:
             response["message"] = (
                 "Some result variables could not be configured; "
+                + response["message"][0].lower()
+                + response["message"][1:]
+            )
+            response["errors"] = errors
+        return response
+
+    return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+
+@mcp.tool()
+def remove_contingency_result_variables(
+    object_query: str,
+    variables: list[str],
+    calculation_method: str = "ac",
+    max_objects: int = 100,
+) -> str:
+    """Remove variables from the configured AC or DC result selection.
+
+    The matching ``IntMon`` selections are updated without executing the
+    contingency analysis. Rerun it only when ``removed_variables`` is non-zero
+    so the result file is rebuilt without those columns.
+    ``failed_variables`` is separate from ``already_absent_variables``. If one
+    monitor succeeds and another fails, that variable appears in both
+    ``removed`` and ``failed`` to retain the partial change. ``configured_objects``
+    counts objects with readable matching selections; ``objects_without_selection``
+    counts objects with none. Variables recorded by a matching class selection
+    cannot be removed for one object: they are reported failed and neither the
+    class nor object selections for that variable are changed. Unreadable or
+    unidentified selections are reported once; uncertain absence is never claimed.
+    """
+    try:
+        method, query, variable_names, object_limit = _contingency_recording_request(
+            object_query, variables, calculation_method, max_objects,
+        )
+    except (TypeError, ValueError) as exc:
+        return _to_json({"success": False, "message": str(exc)})
+
+    _, DIgSILENTAgent = _load_modules()
+
+    def _impl(app):
+        try:
+            result_file, result_summary, objects = _contingency_recording_context(
+                app, method, query,
+            )
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
+        indexed, classes, errors = _contingency_monitor_index(result_file)
+        uncertain = {error["object_full_name"] for error in errors}
+        configured = []
+        for object_index, obj in enumerate(objects[:object_limit]):
+            try:
+                summary = _object_summary(obj)
+            except Exception as exc:
+                errors.append({
+                    "object_index": object_index,
+                    "message": f"Could not identify object: {exc}",
+                })
+                continue
+
+            matching_monitors = indexed.get(summary["full_name"], [])
+            class_variables = classes.get(summary["class_name"], set())
+            selection_unknown = None in uncertain or summary["full_name"] in uncertain
+            removed = []
+            already_absent = []
+            failed = []
+            for variable in variable_names:
+                if variable in class_variables:
+                    failed.append(variable)
+                    errors.append({
+                        "object_index": object_index,
+                        "object": summary,
+                        "variable": variable,
+                        "message": (
+                            f"Variable is recorded by class-level {summary['class_name']} "
+                            "selection; object-specific removal cannot exclude this "
+                            "object. Class and object selections were left unchanged."
+                        ),
+                    })
+                    continue
+                removed_here = False
+                failed_here = selection_unknown
+                for monitor, _names in matching_monitors:
+                    try:
+                        code = monitor.RemoveVar(variable)
+                    except Exception as exc:
+                        errors.append({
+                            "object_index": object_index,
+                            "object": summary,
+                            "variable": variable,
+                            "message": str(exc),
+                        })
+                        failed_here = True
+                        continue
+                    if code in (0, None):
+                        removed_here = True
+                    elif code != 1:
+                        errors.append({
+                            "object_index": object_index,
+                            "object": summary,
+                            "variable": variable,
+                            "code": code,
+                        })
+                        failed_here = True
+                if removed_here:
+                    removed.append(variable)
+                if failed_here:
+                    failed.append(variable)
+                elif not removed_here:
+                    already_absent.append(variable)
+
+            configured.append({
+                "object": summary,
+                "variables": variable_names,
+                "removed": removed,
+                "already_absent": already_absent,
+                "failed": failed,
+                "has_selection": bool(matching_monitors or class_variables),
+                "selection_unknown": selection_unknown,
+            })
+
+        response = {
+            "success": not errors,
+            "calculation_method": method,
+            "result_file": result_summary,
+            "query": query,
+            "variables": variable_names,
+            "total_objects": len(objects),
+            "configured_objects": sum(item["has_selection"] for item in configured),
+            "objects_without_selection": sum(
+                not item["has_selection"] and not item["selection_unknown"]
+                for item in configured
+            ),
+            "removed_variables": sum(
+                len(item["removed"]) for item in configured
+            ),
+            "already_absent_variables": sum(
+                len(item["already_absent"]) for item in configured
+            ),
+            "failed_variables": sum(len(item["failed"]) for item in configured),
+            "truncated": len(objects) > object_limit,
+            "results": configured,
+        }
+        if response["removed_variables"]:
+            response["message"] = (
+                "Result recording selection updated; rerun contingency analysis "
+                "to rebuild the result file"
+            )
+        elif not errors:
+            response["message"] = (
+                "All requested variables were already absent; no change"
+            )
+        else:
+            response["message"] = "No result variables were removed"
+        if errors:
+            response["message"] = (
+                "Some result variables could not be removed; "
                 + response["message"][0].lower()
                 + response["message"][1:]
             )
@@ -1347,7 +1944,7 @@ def get_contingency_summary(
                 "message": "No PowerFactory study case is active",
             }
 
-        command = app.GetFromStudyCase("ComSimoutage")
+        command = _existing_contingency_command(app)
         if command is None:
             return {"success": False, "message": "ComSimoutage is unavailable"}
 

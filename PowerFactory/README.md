@@ -54,10 +54,12 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `list_objects` | Lists calculation-relevant objects using a raw PowerFactory query. |
 | `list_components` | Lists objects using friendly equipment categories. |
 | `list_study_cases` | Lists study cases and identifies the active case. |
-| `list_contingencies` | Lists configured fault-library cases, outage/switch events, and their target elements without modifying the project. |
+| `list_contingencies` | Lists configured fault-library cases and their `EvtOutage`, `EvtSwitch`, and `EvtShc` events without modifying the project. |
 | `create_contingency` | Creates or reuses an idempotent switch-based contingency definition. |
 | `get_contingency_configuration` | Reads the active Contingency Analysis command settings without running a calculation. |
+| `configure_contingency_screening` | Persists selected DC/AC-linearised screening criteria without running a calculation. |
 | `add_contingency_result_variables` | Adds variables to the configured AC or DC contingency result recording selection without running a calculation. |
+| `remove_contingency_result_variables` | Removes variables from matching AC or DC result recording selections without running a calculation. |
 | `import_project` | Imports a `.pfd` project file and activates it. |
 | `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
 | `modify_parameter` | Sets one attribute on all PowerFactory objects matching a query string. Auto-casts string values to the correct type. |
@@ -66,7 +68,7 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `run_loadflow` | Runs a standalone load flow calculation (ComLdf). |
 | `run_short_circuit` | Runs a standalone short-circuit calculation (ComShc). |
 | `run_contingency_analysis` | Runs ComSimoutage using its configured method or an explicit AC, DC, AC-linearised, or linearised-screening mode. |
-| `get_contingency_results` | Reads a bounded slice of the configured AC or DC contingency result file. |
+| `get_contingency_results` | Reads a bounded, optionally variable-filtered slice of the configured AC or DC contingency result file using bulk or sparse access. |
 | `get_contingency_summary` | Interprets existing contingency results as affected elements, convergence, overloads, and voltage violations. |
 | `run_simulation` | Executes the full pipeline defined in `simulation_config.json`. |
 | `run_custom_case` | Runs one fault simulation with parameters supplied at call time (no config file edit required). |
@@ -75,6 +77,47 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 The contingency tools can create switch-based definitions and inspect or run
 the active `ComSimoutage` command. An explicit calculation mode applies only to
 that run; the study case's previous mode is restored afterward.
+
+Read-only contingency tools search the active study case for an existing
+`ComSimoutage`; they do not call `GetFromStudyCase`, which can create a missing
+command. `get_contingency_results` accepts exact variable identifiers such as
+`["c:loading"]`, returns each column's original index and object name/class when
+PowerFactory provides one, and automatically includes `b:i_obj` for row-to-case
+mapping. It uses `ElmRes.GetColumnValues` with a temporary, deleted `IntVec`,
+falling back to PowerFactory's sparse iterator. Filtered reads resolve columns
+from `IntMon` selections and `FindColumn`, avoiding a full `ElmRes` metadata
+scan. `max_read_seconds` supplies a cooperative read budget; narrow `variables`,
+`max_rows`, or `max_columns` for large files.
+
+`configure_contingency_screening` intentionally persists selected screening
+settings. It can choose DC or AC-linearised screening; enable the simple and
+combined loading criteria; set their loading and relative-change thresholds;
+ignore components already overloaded in the base case; and restrict screening
+to recorded elements. It returns the previous and resulting settings without
+executing the analysis.
+
+Result recording is read from `IntMon` selections, never from stale result
+columns. Both recording tools report each unreadable monitor once and keep
+the record of successful changes to other objects. Class selections identified
+by `IntMon.className` count as recorded for objects of that exact class.
+Object-specific removal of a class-recorded variable is reported as failed,
+without changing either its class or object selections. Other variables can
+still be removed. Unidentified targetless selections remain errors; additions
+and absence claims are skipped when their state is unknown.
+
+Removal reports `failed_variables` separately from `already_absent_variables`.
+A variable can appear in both `removed` and `failed` when different monitors
+produce a partial change; rerun the analysis whenever `removed_variables` is
+non-zero. `configured_objects` counts objects with readable matching selections,
+and `objects_without_selection` counts objects with no known selection.
+The tool schemas require strings; blank or whitespace-only variables are also
+rejected. Missing screening flags are returned as `null`, rather than disabled.
+
+PowerFactory 2026's User Manual, section 19.3.1.1, explicitly supports class-name
+variable selections for contingency analysis. These tools report them rather
+than attempting to remove a class-wide variable for an individual object.
+Its Python Reference, section 5.6.26, documents `IntMon.RemoveVar` return codes:
+`0` means removed, `1` means not found; other codes or exceptions are failures.
 
 ### Simulation Engine (`Agent_DIgSILENT.py`)
 
