@@ -749,47 +749,86 @@ def _dyntools():
 
 
 _DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS = 10_000
+_DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS = 100_000
+
+
+def _channel_extrema(values: List[Any], time: List[Any]) -> Dict[str, Any]:
+    """Return numeric min/max values and their corresponding positions."""
+    numeric = [
+        (index, value)
+        for index, value in enumerate(values)
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    if not numeric:
+        return {}
+    min_index, min_value = min(numeric, key=lambda item: item[1])
+    max_index, max_value = max(numeric, key=lambda item: item[1])
+    return {
+        "min": min_value,
+        "min_index": min_index,
+        "min_time": time[min_index],
+        "max": max_value,
+        "max_index": max_index,
+        "max_time": time[max_index],
+    }
 
 
 def _sample_dynamic_data(
-    data: Dict[Any, Any], max_points: int
-) -> tuple[Dict[str, List[Any]], int, bool]:
-    """Return a deterministic, endpoint-preserving sample of dynamic data.
+    data: Dict[Any, Any], max_points: int, max_cells: int
+) -> tuple[Dict[str, List[Any]], int, int, bool, Dict[str, Any]]:
+    """Validate and safely sample dynamic output within point and cell budgets."""
+    if "time" not in data or not data["time"]:
+        raise ValueError("Dynamic output is missing a non-empty time vector")
 
-    The PSS/E time vector defines the number of samples. When the cap is
-    exceeded, evenly spaced indices are selected with both endpoints retained.
-    Every returned time-series channel must have the same length as the time
-    vector so sampling cannot silently misalign channels.
-    """
-    time = list(data.get("time", []))
+    time = data["time"]
+    if not isinstance(time, (list, tuple)):
+        raise ValueError("Dynamic output time vector must be a sequence")
+
     total_points = len(time)
-
-    if total_points == 0 or total_points <= max_points:
-        return (
-            {str(key): list(value) for key, value in data.items()},
-            total_points,
-            False,
-        )
-
-    if max_points < 2:
-        raise ValueError("max_points must be at least 2")
-
-    indices = [
-        (i * (total_points - 1)) // (max_points - 1)
-        for i in range(max_points)
-    ]
-
-    sampled = {}
-    for key, value in data.items():
-        values = list(value)
-        if len(values) != total_points:
+    series = {key: value for key, value in data.items() if key != "time"}
+    for key, value in series.items():
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"Dynamic output channel {key!r} must be a sequence")
+        if len(value) != total_points:
             raise ValueError(
-                f"Dynamic output channel {key!r} has {len(values)} points; "
+                f"Dynamic output channel {key!r} has {len(value)} points; "
                 f"expected {total_points} to match the time vector"
             )
-        sampled[str(key)] = [values[index] for index in indices]
 
-    return sampled, total_points, True
+    if not series:
+        raise ValueError("Dynamic output contains no time-series channels")
+
+    returned_series_count = len(series) + 1
+    effective_points = min(max_points, max_cells // returned_series_count)
+    if effective_points < 2 and total_points > effective_points:
+        raise ValueError(
+            f"max_cells={max_cells} is too small for "
+            f"{returned_series_count} returned series; at least 2 points are required"
+        )
+
+    downsampled = total_points > effective_points
+    if not downsampled:
+        result = {"time": time}
+        result.update({str(key): value for key, value in series.items()})
+        return result, total_points, effective_points, False, {}
+
+    indices = [
+        (i * (total_points - 1)) // (effective_points - 1)
+        for i in range(effective_points)
+    ]
+    sampled = {"time": [time[index] for index in indices]}
+    sampled.update(
+        {
+            str(key): [values[index] for index in indices]
+            for key, values in series.items()
+        }
+    )
+    time_list = list(time)
+    extrema = {
+        str(key): _channel_extrema(list(values), time_list)
+        for key, values in series.items()
+    }
+    return sampled, total_points, effective_points, True, extrema
 
 
 
@@ -848,6 +887,7 @@ def read_dynamic_output(
     channels: Optional[List[int]] = None,
     outvrsn: int = 0,
     max_points: Optional[int] = None,
+    max_cells: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Read time-series data from a PSS/E dynamic simulation output file.
@@ -857,13 +897,16 @@ def read_dynamic_output(
         channels: Optional list of channel numbers to return. If omitted,
             all channels are returned.
         outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
-        max_points: Maximum number of time points in the response. If omitted,
-            the default cap of 10,000 points is used. When the source contains
-            more points, deterministic endpoint-preserving sampling is applied.
+        max_points: Maximum number of time points in the response. Defaults to
+            10,000.
+        max_cells: Maximum number of returned time-series cells. Defaults to
+            100,000. The effective point count is the lower of max_points and
+            max_cells divided by the number of returned series.
 
     Returns:
         Dict containing the output title, selected channels, time-series data,
-        the original point count, and whether sampling was applied.
+        the original point count, effective point cap, cell cap, and transient
+        extrema when sampling is applied.
     """
     try:
         outfile = checked_path(outfile, purpose="dynamic output")
@@ -909,6 +952,18 @@ def read_dynamic_output(
             "message": "max_points must be an integer of at least 2",
         }
 
+    if max_cells is None:
+        max_cells = _DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS
+    elif (
+        not isinstance(max_cells, int)
+        or isinstance(max_cells, bool)
+        or max_cells < 2
+    ):
+        return {
+            "status": "error",
+            "message": "max_cells must be an integer of at least 2",
+        }
+
     try:
         chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
         title, channel_names, data = chnf.get_data()
@@ -937,19 +992,18 @@ def read_dynamic_output(
         }
 
         selected_data = {
-            str(channel): list(data[channel])
-            for channel in selected
-            if channel in data
+            key: data[key]
+            for key in selected
+            if key in data
         }
 
-        sampled_data, total_points, downsampled = _sample_dynamic_data(
-            {
-                key: data[key]
-                for key in selected
-                if key in data
-            },
-            max_points,
-        )
+        (
+            sampled_data,
+            total_points,
+            effective_points,
+            downsampled,
+            extrema,
+        ) = _sample_dynamic_data(selected_data, max_points, max_cells)
 
         return {
             "status": "success",
@@ -957,10 +1011,14 @@ def read_dynamic_output(
             "title": title,
             "channels": selected_names,
             "data": sampled_data,
-            "num_points": len(sampled_data.get("time", [])),
+            "num_points": len(sampled_data["time"]),
             "total_points": total_points,
             "downsampled": downsampled,
             "max_points": max_points,
+            "max_cells": max_cells,
+            "effective_points": effective_points,
+            "returned_cells": len(sampled_data) * len(sampled_data["time"]),
+            **({"extrema": extrema} if downsampled else {}),
         }
 
     except Exception as exc:
