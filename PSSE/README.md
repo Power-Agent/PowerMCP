@@ -49,3 +49,4 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 ## Resources
 
 - [PSS/E Documentation](https://www.siemens-energy.com/)
+
