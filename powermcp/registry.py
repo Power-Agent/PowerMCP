@@ -219,6 +219,16 @@ TOOLS: dict[str, "Tool"] = {
             ),
         ),
         Tool(
+            "narp", "NARP", "open-source", windows_only=False, extra="narp",
+            server_dir="NARP", run_kind="script", entry_rel="narp_mcp.py",
+            probe=None,
+            notes=(
+                "Thin connector for the external MIT-licensed Breakthrough Energy "
+                "reliability-assessment package. Install it separately from its "
+                "upstream repository; no NARP implementation is vendored."
+            ),
+        ),
+        Tool(
             "plexosdb", "PLEXOSDB", "closed-source", windows_only=False, extra="plexosdb",
             server_dir="PLEXOSDB", run_kind="script", entry_rel="plexosdb_mcp/main.py",
             # NOT run_kind="module": our own package dir is deliberately named
