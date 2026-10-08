@@ -752,7 +752,7 @@ _DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS = 10_000
 _DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS = 100_000
 
 
-def _channel_extrema(values: List[Any], time: List[Any]) -> Dict[str, Any]:
+def _channel_extrema(values: Any, time: Any) -> Dict[str, Any]:
     """Return numeric min/max values and their corresponding positions."""
     numeric = [
         (index, value)
@@ -774,7 +774,10 @@ def _channel_extrema(values: List[Any], time: List[Any]) -> Dict[str, Any]:
 
 
 def _sample_dynamic_data(
-    data: Dict[Any, Any], max_points: int, max_cells: int
+    data: Dict[Any, Any],
+    max_points: int,
+    max_cells: int,
+    selected: Optional[List[Any]] = None,
 ) -> tuple[Dict[str, List[Any]], int, int, bool, Dict[str, Any]]:
     """Validate and safely sample dynamic output within point and cell budgets."""
     if "time" not in data or not data["time"]:
@@ -785,7 +788,14 @@ def _sample_dynamic_data(
         raise ValueError("Dynamic output time vector must be a sequence")
 
     total_points = len(time)
-    series = {key: value for key, value in data.items() if key != "time"}
+    if selected is None:
+        series = {key: value for key, value in data.items() if key != "time"}
+    else:
+        series = {
+            key: data[key]
+            for key in selected
+            if key != "time" and key in data
+        }
     for key, value in series.items():
         if not isinstance(value, (list, tuple)):
             raise ValueError(f"Dynamic output channel {key!r} must be a sequence")
@@ -823,9 +833,8 @@ def _sample_dynamic_data(
             for key, values in series.items()
         }
     )
-    time_list = list(time)
     extrema = {
-        str(key): _channel_extrema(list(values), time_list)
+        str(key): _channel_extrema(values, time)
         for key, values in series.items()
     }
     return sampled, total_points, effective_points, True, extrema
@@ -991,19 +1000,15 @@ def read_dynamic_output(
             if channel in channel_names
         }
 
-        selected_data = {
-            key: data[key]
-            for key in selected
-            if key in data
-        }
-
         (
             sampled_data,
             total_points,
             effective_points,
             downsampled,
             extrema,
-        ) = _sample_dynamic_data(selected_data, max_points, max_cells)
+        ) = _sample_dynamic_data(
+            data, max_points, max_cells, selected=selected
+        )
 
         return {
             "status": "success",
