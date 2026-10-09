@@ -64,7 +64,7 @@ class ComparisonReport:
 
     @property
     def passed(self) -> bool:
-        return not (
+        return self.compared > 0 and not (
             self.differences
             or self.missing_from_left
             or self.missing_from_right
@@ -105,7 +105,8 @@ def compare_snapshots(
 
     Per-metric tolerances use exact metric keys. For each common metric, a match
     requires `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`. Missing metrics
-    are reported separately and never silently ignored.
+    are reported separately and never silently ignored. A comparison with no
+    common metrics cannot pass because it provides no numerical validation.
     """
     _validate_snapshot(left, "left")
     _validate_snapshot(right, "right")
