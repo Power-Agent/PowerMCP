@@ -40,7 +40,7 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - **lookup_psspy_command(function_name)**: Look up the API reference for a psspy function without executing it.
 - **search_psspy_commands(query, category)**: Search the psspy API index for functions matching a query.
 - **list_dynamic_output_channels(outfile, outvrsn)**: List the channels recorded in a dynamic simulation output file (`.out`/`.outx`).
-- **read_dynamic_output(outfile, channels, outvrsn)**: Read the time series of selected channels (all when omitted) from a dynamic simulation output file.
+- **read_dynamic_output(outfile, channels, outvrsn, max_points, max_cells)**: Read selected time series (all channels when omitted). Responses default to a 10,000-point cap and a 100,000-cell budget; the effective point cap is the lower of these limits. Sampling is deterministic and endpoint-preserving. When downsampled, full-resolution per-channel extrema are also returned.
 
 ## Prompt Example
 
@@ -49,3 +49,4 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 ## Resources
 
 - [PSS/E Documentation](https://www.siemens-energy.com/)
+
