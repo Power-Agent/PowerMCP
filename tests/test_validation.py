@@ -38,6 +38,13 @@ def test_identical_normalized_results_pass():
     assert report.missing_from_right == ()
 
 
+def test_empty_snapshots_do_not_pass_without_compared_metrics():
+    report = compare_snapshots(snapshot(values={}), snapshot("andes", values={}))
+
+    assert not report.passed
+    assert report.compared == 0
+
+
 def test_absolute_and_relative_tolerance_are_combined():
     left = snapshot(values={"bus:B1:vm_pu": 1.0})
     right = snapshot("andes", values={"bus:B1:vm_pu": 1.000009})
