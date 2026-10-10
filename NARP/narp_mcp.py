@@ -116,32 +116,87 @@ def parse_output(output_file: str) -> dict[str, Any]:
         sections[number] = text[match.end():end]
 
     block12 = sections.get(12, "")
-    for line in block12.splitlines():
-        s = line.strip()
-        m = re.match(r"^(\d+)\s+(\S+)\s+(.*)$", s)
-        if not m:
-            continue
-        values = re.findall(r"[-+]?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?", m.group(3))
-        if len(values) < 4:
-            continue
-        nums = [float(v) for v in values[:5]]
-        result["table_12"].append({
-            "area": int(m.group(1)),
-            "remark": m.group(2),
+    pool_marker = re.search(r"(?im)^\\s*POOL\\s+STATISTICS\\s*$", block12)
+    if pool_marker:
+        area_block = block12[:pool_marker.start()]
+        pool_block = block12[pool_marker.end():]
+    else:
+        area_block, pool_block = block12, ""
+
+    number_pattern = re.compile(r"[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?")
+
+    def metrics(values: list[str]) -> dict[str, float | None]:
+        nums = [float(value) for value in values[:5]]
+        if len(nums) < 4:
+            return {}
+        return {
             "HLOLE": nums[0],
             "XLOL_hourly": nums[1],
             "EUE": nums[2],
             "LOLE": nums[3],
             "XLOL_peak": nums[4] if len(nums) > 4 else None,
+        }
+
+    for line in area_block.splitlines():
+        tokens = line.split()
+        if len(tokens) < 6 or not tokens[0].isdigit():
+            continue
+        # Actual NARP reports put the forecast code (usually AV) before the
+        # five metrics and the GC/TC/GT remark after them.
+        actual_row = (
+            len(tokens) >= 8
+            and all(number_pattern.fullmatch(value) for value in tokens[2:7])
+            and tokens[-1].isalpha()
+        )
+        if actual_row:
+            area = int(tokens[0])
+            forecast = tokens[1]
+            values = tokens[2:7]
+            remark = tokens[-1]
+        else:
+            # Retain compatibility with compact/legacy rows where the second
+            # column itself contains the remark.
+            area = int(tokens[0])
+            forecast = None
+            remark = tokens[1]
+            values = tokens[2:]
+            if not all(number_pattern.fullmatch(value) for value in values):
+                continue
+        parsed = metrics(values)
+        if not parsed:
+            continue
+        result["table_12"].append({
+            "area": area,
+            "forecast": forecast,
+            "remark": remark,
+            **parsed,
         })
+
+    # POOL STATISTICS uses unnumbered AV rows and the same metric columns.
+    for line in pool_block.splitlines():
+        tokens = line.split()
+        if (
+            len(tokens) < 7
+            or tokens[0].upper() != "AV"
+            or not tokens[-1].isalpha()
+            or not all(number_pattern.fullmatch(value) for value in tokens[1:-1])
+        ):
+            continue
+        parsed = metrics(tokens[1:-1])
+        if parsed:
+            result["pool"].append({
+                "label": "AV",
+                "remark": tokens[-1],
+                **parsed,
+            })
 
     block13 = sections.get(13, "")
     for line in block13.splitlines():
         s = line.strip()
-        m = re.match(r"^(A\d+|AV)\s+(.*)$", s, flags=re.I)
+        m = re.match(r"^(A\\d+|AV|ERCOT)\\s+(.*)$", s, flags=re.I)
         if not m:
             continue
-        values = re.findall(r"[-+]?\d+(?:\.\d+)?(?:[Ee][-+]?\d+)?", m.group(2))
+        values = re.findall(r"[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?", m.group(2))
         if len(values) < 4:
             continue
         nums = [float(v) for v in values]
@@ -155,10 +210,7 @@ def parse_output(output_file: str) -> dict[str, Any]:
         for name, index in fields:
             if index < len(nums):
                 entry[name] = nums[index]
-        if entry["label"] == "AV":
-            result["pool"].append(entry)
-        else:
-            result["summary"][entry["label"]] = entry
+        result["summary"][entry["label"]] = entry
 
     result["areas"] = result["table_12"]
     return result
