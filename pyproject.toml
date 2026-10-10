@@ -77,6 +77,9 @@ hope       = ["PyYAML>=6.0"]
 # already arrive with the core install via pandapower, so the extra exists to
 # make the dependency explicit rather than to add anything new.
 genx       = ["matplotlib>=3.7", "pandas>=2.0,<3"]
+# NARP is not redistributed by PowerMCP; install the MIT-licensed upstream
+# reliabilityassessment package separately from its source repository.
+narp       = []
 # powerio moved to core `dependencies`; the extra is gone (a bare
 # `pip install powermcp` now always provides the conversion server).
 # --- closed-source / vendor tool engines ---
@@ -105,7 +108,7 @@ powerfactory = ["numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powe
 # powermcp[plexosdb]` until that's resolved upstream.
 plexosdb   = ["r2x-plexos>=0.3.0", "r2x-plexos-to-sienna>=0.1.0", "r2x-sienna>=0.4.0"]
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
+opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]", "powermcp[narp]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]", "powermcp[plexosdb]"]
 
@@ -147,6 +150,7 @@ packages = ["powermcp"]
 "PowerFactory/simulation_config.example.json" = "powermcp/_servers/PowerFactory/simulation_config.example.json"
 "LTSpice"      = "powermcp/_servers/LTSpice"
 "PLEXOSDB"     = "powermcp/_servers/PLEXOSDB"
+"NARP"         = "powermcp/_servers/NARP"
 
 # The sdist must contain the server dirs at the repo root so that the
 # build-wheel-from-sdist step (used by `python -m build`) can force-include them.
@@ -155,7 +159,7 @@ include = [
     "powermcp",
     "pandapower", "PyPSA", "ANDES", "Egret", "surge", "OpenDSS", "HOPE",
     "PSCAD", "PSSE", "PSLF", "PowerWorld", "PowerFactory", "LTSpice", "PLEXOSDB",
-    "GenX",
+    "GenX", "NARP",
     "README.md", "LICENSE", "pyproject.toml",
 ]
 exclude = [
