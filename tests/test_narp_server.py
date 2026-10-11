@@ -68,7 +68,7 @@ TABLE 13
     assert result["summary"]["A1"]["EUE_pct_sd"] == 2.5
     assert result["summary"]["A1"]["LOLE"] == 6.0
     assert result["summary"]["A1"]["LOLE_pct_sd"] == 3.5
-    assert result["summary"]["CUSTOM_AREA"]["LOLE"] == 4.0
+    assert result["summary"]["CUSTOM_AREA"]["LOLE"] == 9.0
     assert result["summary"]["ERCOT"]["LOLE_pct_sd"] == 6.0
 
 
