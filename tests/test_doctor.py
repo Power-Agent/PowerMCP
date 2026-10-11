@@ -27,6 +27,14 @@ def test_missing_extra_reports_install_hint(monkeypatch):
     assert "pip install powermcp[andes]" in msg
 
 
+def test_narp_missing_engine_reports_upstream_git_install_hint(monkeypatch):
+    monkeypatch.setattr(doctor, "probe_installed", lambda _probe: False)
+    style, msg = doctor._dep_status(get_tool("narp"))
+    assert style == "red"
+    assert "reliabilityassessment @ git+https://github.com/Breakthrough-Energy/reliability-assessment.git" in msg
+    assert "powermcp[narp]" not in msg
+
+
 def test_path_loaded_engines_not_import_probed(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     for name in ("psse", "pslf", "powerfactory"):
