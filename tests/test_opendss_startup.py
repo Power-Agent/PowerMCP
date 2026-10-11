@@ -26,11 +26,12 @@ def _load_server(monkeypatch, *, dss_factory):
     monkeypatch.setitem(sys.modules, "py_dss_interface", types.SimpleNamespace(DSS=dss_factory))
 
     for name in (
-        "core.engine", "core.server", "opendss_tools.configuration",
-        "opendss_tools.interactive_view", "opendss_tools.model",
-        "opendss_tools.results", "opendss_tools.simulation", "utils.responses",
+        "core.engine", "core.server", "core",
+        "opendss_tools.configuration", "opendss_tools.interactive_view",
+        "opendss_tools.model", "opendss_tools.results", "opendss_tools.simulation",
+        "opendss_tools", "utils.responses", "utils",
     ):
-        sys.modules.pop(name, None)
+        monkeypatch.delitem(sys.modules, name, raising=False)
 
     return importlib.import_module("core.server")
 
@@ -84,3 +85,35 @@ def test_toolkit_wiring_failure_does_not_cache_partial_engine(monkeypatch):
         engine.ensure_engine()
 
     assert engine.dss is None
+
+def test_engine_is_initialized_once_and_reused(monkeypatch):
+    calls = []
+    updates = []
+
+    class FakeDSS:
+        pass
+
+    def fake_dss():
+        calls.append("construct")
+        return FakeDSS()
+
+    server = _load_server(monkeypatch, dss_factory=fake_dss)
+    engine = importlib.import_module("core.engine")
+    engine.dss_tools.update_dss = lambda instance: updates.append(instance)
+
+    first = engine.ensure_engine()
+    second = engine.ensure_engine()
+
+    assert first is second
+    assert len(calls) == 1
+    assert updates == [first]
+
+
+def test_engine_failure_message_requires_restart(monkeypatch):
+    def fake_dss():
+        raise RuntimeError("transient native error")
+
+    _load_server(monkeypatch, dss_factory=fake_dss)
+    engine = importlib.import_module("core.engine")
+    with pytest.raises(engine.EngineUnavailable, match="restart the MCP server"):
+        engine.ensure_engine()
