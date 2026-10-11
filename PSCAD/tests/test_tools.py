@@ -148,8 +148,10 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         ctx = MagicMock()
         ctx.report_progress = AsyncMock()
         real_sleep = asyncio.sleep
+        requested_delays = []
 
-        async def elapse_time(_delay):
+        async def elapse_time(delay):
+            requested_delays.append(delay)
             await real_sleep(0.01)
 
         with patch(
@@ -160,6 +162,8 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
                 "test", ctx, timeout_seconds=0.001
             )
 
+        self.assertTrue(requested_delays)
+        self.assertLessEqual(requested_delays[0], 0.001)
         self.assertEqual(result["status"], "timeout")
         self.assertEqual(result["last_state"], "running")
         mock_project.start.assert_called_once()
