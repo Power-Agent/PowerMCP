@@ -43,3 +43,19 @@ jobs:
           PSCAD/tests
           PLEXOSDB/tests
           surge/test_integration.py -q
+
+  cross-engine-adapter-integration:
+    name: cross-engine adapter integration (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install package and solver adapters
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest pandapower pypsa
+      - name: Run cross-engine adapter integration test
+        run: python -m pytest tests/test_validation_adapters.py -q
