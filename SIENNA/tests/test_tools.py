@@ -13,7 +13,10 @@ without a multi-hundred-MB Julia toolchain present.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
+import tempfile
 import sys
 import types
 import unittest
@@ -126,12 +129,13 @@ class TestLoadSystem(unittest.TestCase):
         self.fake_modules, self.source_system, _ = _install_fake_r2x_modules()
         self.patcher = _patch_sys_modules(self.fake_modules)
         self.patcher.start()
-        self.tmp = Path(__file__).resolve().parent / "_tmp_psy.json"
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
+        self.tmp = self.tmp_dir / "psy.json"
         self.tmp.write_text("{}")
 
     def tearDown(self):
         self.patcher.stop()
-        self.tmp.unlink(missing_ok=True)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_load_system_ok(self):
         from sienna_mcp.tools.system_tools import load_system
@@ -167,8 +171,9 @@ class TestLoadSystem(unittest.TestCase):
 
 class TestLoadNativeSystem(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(__file__).resolve().parent / "_tmp_native_psy.json"
-        self.tmp.write_text(json.dumps({"data": [{"type": "ACBus", "uuid": "1"}], "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
+        self.tmp = self.tmp_dir / "native_psy.json"
+        self.tmp.write_text(json.dumps({"components": {"ACBus": {"1": {"name": "bus-1"}}, "PowerLoad": {"2": {"name": "load-1"}}}, "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
     def tearDown(self):
         self.tmp.unlink(missing_ok=True)
     def test_load_native_powersystems_json(self):
@@ -176,7 +181,7 @@ class TestLoadNativeSystem(unittest.TestCase):
         result = load_system(str(self.tmp))
         self.assertTrue(result["ok"])
         self.assertEqual(result["format"], "powersystems-jl-native")
-        self.assertEqual(result["component_count"], 1)
+        self.assertEqual(result["component_count"], 2)
         self.assertEqual(result["loadable_by"], "run_sienna_solve")
 
 
@@ -185,15 +190,14 @@ class TestTranslateToPlexos(unittest.TestCase):
         self.fake_modules, self.source_system, self.translated_system = _install_fake_r2x_modules()
         self.patcher = _patch_sys_modules(self.fake_modules)
         self.patcher.start()
-        self.tmp_dir = Path(__file__).resolve().parent
-        self.psy = self.tmp_dir / "_tmp_psy_translate.json"
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
+        self.psy = self.tmp_dir / "psy_translate.json"
         self.psy.write_text("{}")
-        self.out = self.tmp_dir / "_tmp_translated.json"
+        self.out = self.tmp_dir / "translated.json"
 
     def tearDown(self):
         self.patcher.stop()
-        self.psy.unlink(missing_ok=True)
-        self.out.unlink(missing_ok=True)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_translate_calls_r2x_directly_and_returns_counts(self):
         from sienna_mcp.tools.translate_tools import translate_to_plexos
@@ -238,12 +242,11 @@ class TestCompareSolutions(unittest.TestCase):
         self.fake_modules, _, _ = _install_fake_r2x_modules()
         self.patcher = _patch_sys_modules(self.fake_modules)
         self.patcher.start()
-        self.tmp_dir = Path(__file__).resolve().parent
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
 
     def tearDown(self):
         self.patcher.stop()
-        for name in ("_sienna_results.json", "_plexos_results.json"):
-            (self.tmp_dir / name).unlink(missing_ok=True)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     def test_compare_results_json_numeric_diff(self):
         sienna_path = self.tmp_dir / "_sienna_results.json"
@@ -293,12 +296,12 @@ class TestRunSiennaSolve(unittest.TestCase):
     docstring for the real-Julia verification performed outside this suite."""
 
     def setUp(self):
-        self.tmp_dir = Path(__file__).resolve().parent
-        self.psy = self.tmp_dir / "_tmp_psy_solve.json"
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
+        self.psy = self.tmp_dir / "psy_solve.json"
         self.psy.write_text("{}")
 
     def tearDown(self):
-        self.psy.unlink(missing_ok=True)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
     @patch("sienna_mcp.tools.solve_tools.validate_julia_command")
     @patch("sienna_mcp.tools.solve_tools.run_julia_script")
@@ -344,13 +347,15 @@ class TestRunSiennaSolve(unittest.TestCase):
     @patch("sienna_mcp.tools.solve_tools.run_julia_script")
     def test_run_sienna_solve_timeout(self, mock_run_script, mock_validate):
         mock_validate.return_value = ("/usr/local/bin/julia", None)
-        mock_run_script.side_effect = subprocess.TimeoutExpired(cmd=["julia"], timeout=5, output="", stderr="")
+        mock_run_script.side_effect = subprocess.TimeoutExpired(cmd=["julia"], timeout=5, output=b"one\\ntwo\\n", stderr=b"error\\n")
 
         from sienna_mcp.tools.solve_tools import run_sienna_solve
 
         result = run_sienna_solve(str(self.psy), timeout_seconds=5)
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_type"], "solve_timeout")
+        self.assertEqual(result["stdout_tail"], "one\\ntwo")
+        self.assertEqual(result["stderr_tail"], "error")
 
 
 class TestRegisterTools(unittest.TestCase):
@@ -375,3 +380,41 @@ class TestRegisterTools(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSandboxAndStaleResults(unittest.TestCase):
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-sandbox-test-"))
+        self.allowed = self.tmp_dir / "allowed"
+        self.allowed.mkdir()
+        self.outside = self.tmp_dir / "outside.json"
+        self.outside.write_text("{}")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_load_system_rejects_input_outside_allowed_roots(self):
+        from unittest.mock import patch
+        from sienna_mcp.tools.system_tools import load_system
+        with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": str(self.allowed)}):
+            result = load_system(str(self.outside))
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "path_not_allowed")
+
+    @patch("sienna_mcp.tools.solve_tools.validate_julia_command")
+    @patch("sienna_mcp.tools.solve_tools.run_julia_script")
+    def test_nonzero_exit_never_returns_stale_result(self, mock_run_script, mock_validate):
+        from unittest.mock import patch
+        output = self.allowed / "result.json"
+        output.write_text(json.dumps({"ok": True, "objective_value": 123.0}))
+        mock_validate.return_value = ("/usr/bin/julia", None)
+        mock_run_script.return_value = subprocess.CompletedProcess(args=[], returncode=1, stdout="missing package", stderr="PowerSystems not found")
+        with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": str(self.allowed)}):
+            from sienna_mcp.tools.solve_tools import run_sienna_solve
+            psy = self.allowed / "input.json"
+            psy.write_text("{}")
+            result = run_sienna_solve(str(psy), output_path=str(output))
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "solve_failed")
+        self.assertNotIn("objective_value", result)
+        self.assertFalse(output.exists())
