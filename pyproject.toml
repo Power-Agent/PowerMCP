@@ -72,7 +72,11 @@ opendss    = ["py_dss_toolkit"]
 ltspice    = ["PyLTSpice", "matplotlib"]
 surge      = ["surge-py>=0.1.5; python_version >= '3.12' and python_version < '3.15'"]
 hope       = ["PyYAML>=6.0"]
-sienna     = ["r2x>=2.1,<3"]
+sienna     = [
+    "r2x-sienna>=0.4.0; python_version >= '3.11' and python_version < '3.14'",
+    "r2x-plexos>=0.3.0; python_version >= '3.11' and python_version < '3.14'",
+    "r2x-sienna-to-plexos>=0.1.0; python_version >= '3.11' and python_version < '3.14'",
+]
 # GenX itself is Julia (GenX.jl) and is not pip-installable; the extra covers
 # only the Python-side analysis this connector does. matplotlib and pandas
 # already arrive with the core install via pandapower, so the extra exists to
