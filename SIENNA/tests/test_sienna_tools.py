@@ -173,7 +173,8 @@ class TestLoadNativeSystem(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
         self.tmp = self.tmp_dir / "native_psy.json"
-        self.tmp.write_text(json.dumps({"data": {"components": [{"__metadata__": {"type": "ACBus", "uuid": "1"}, "name": "bus-1"}, {"__metadata__": {"type": "PowerLoad", "uuid": "2"}, "name": "load-1"}], "time_series": {}, "metadata": {"version": "test"}}, "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
+        # Shape excerpted from a real PowerSystems.jl serialized system: csiro-energy-systems/collab-sienna-julia/MY-Training/PSI-Cambodia-example-2025-06-30/sys-cambodia.json (source SHA 6fc611932fb2d0dca2e9b0d3980ee2e89bfa655e).
+        self.tmp.write_text(json.dumps({"data": {"components": [{"__metadata__":{"module":"PowerSystems","type":"Arc"},"from":{"value":"cd803479-8708-40a7-91bc-479d5b6cfb0d"},"internal":{"ext":None,"units_info":None,"uuid":{"value":"8a77f4ae-8097-4f85-99c2-51fb2a00465f"}},"to":{"value":"59ac8d83-4f5d-40f7-9a45-503089fb8b30"}},{"__metadata__":{"module":"PowerSystems","type":"Arc"},"from":{"value":"59ac8d83-4f5d-40f7-9a45-503089fb8b30"},"internal":{"ext":None,"units_info":None,"uuid":{"value":"0487c198-bd9b-4378-a959-50218df680f9"}},"to":{"value":"6324f03b-0df5-4a43-a5f1-8d3b4fc25199"}}], "time_series_storage_file": "system.h5", "masked_components": [], "time_series_params": {}, "version_info": {}}, "data_format_version": "2.0.0", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
