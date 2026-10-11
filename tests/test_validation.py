@@ -123,9 +123,9 @@ def test_incompatible_studies_are_rejected(left_overrides, right_overrides, mess
         compare_snapshots(snapshot(**left_overrides), snapshot("andes", **right_overrides))
 
 
-def test_same_engine_is_rejected():
-    with pytest.raises(ValueError, match="different engines"):
-        compare_snapshots(snapshot(), snapshot("pandapower"))
+def test_same_engine_comparison_is_allowed_for_version_regressions():
+    report = compare_snapshots(snapshot(), snapshot("pandapower"))
+    assert report.passed
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf"), True, "1.0"])
