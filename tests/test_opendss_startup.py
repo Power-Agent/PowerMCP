@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import importlib
 import sys
+import time
 import types
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -117,3 +119,28 @@ def test_engine_failure_message_requires_restart(monkeypatch):
     engine = importlib.import_module("core.engine")
     with pytest.raises(engine.EngineUnavailable, match="restart the MCP server"):
         engine.ensure_engine()
+
+
+def test_concurrent_engine_requests_construct_and_wire_once(monkeypatch):
+    calls = []
+    updates = []
+
+    class FakeDSS:
+        pass
+
+    def fake_dss():
+        time.sleep(0.02)  # release the GIL so concurrent callers overlap at startup
+        instance = FakeDSS()
+        calls.append(instance)
+        return instance
+
+    _load_server(monkeypatch, dss_factory=fake_dss)
+    engine = importlib.import_module("core.engine")
+    engine.dss_tools.update_dss = lambda instance: updates.append(instance)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        instances = list(pool.map(lambda _index: engine.ensure_engine(), range(16)))
+
+    assert len(calls) == 1
+    assert len(updates) == 1
+    assert all(instance is calls[0] for instance in instances)
