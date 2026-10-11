@@ -2650,7 +2650,10 @@ class DIgSILENTAgent:
         required_confirmation = (
             f"CREATE {transformer_name} WITH {type_name} {voltage_class} "
             f"{rated_power:g}MVA {vector_group}{clock_number} "
-            f"{nominal_frequency:g}Hz seed={seed}"
+            f"{nominal_frequency:g}Hz seed={seed} "
+            f"grid={grid_name or '<active>'} "
+            f"buses={high_voltage_bus_name}->{low_voltage_bus_name} "
+            f"out_of_service={int(bool(out_of_service))}"
         )
 
         try:
@@ -3069,7 +3072,9 @@ class DIgSILENTAgent:
         required_confirmation = (
             f"CREATE {line_name} WITH {type_name} {voltage_class}kV "
             f"{profile} {line_length:g}km {rated_current:g}kA "
-            f"{nominal_frequency:g}Hz"
+            f"{nominal_frequency:g}Hz grid={grid_name or '<active>'} "
+            f"buses={bus1_name}->{bus2_name} "
+            f"out_of_service={int(bool(out_of_service))}"
         )
 
         try:
@@ -3385,7 +3390,8 @@ class DIgSILENTAgent:
 
         required_confirmation = (
             f"CREATE {external_grid_name} AT {bus_name} "
-            f"{voltage:g}kV seed={seed}"
+            f"{voltage:g}kV seed={seed} grid={grid_name or '<active>'} "
+            f"out_of_service={int(bool(out_of_service))}"
         )
         creating = False
         try:
@@ -3539,7 +3545,8 @@ class DIgSILENTAgent:
 
         required_confirmation = (
             f"CREATE {load_name} AT {bus_name} "
-            f"{voltage:g}kV seed={seed}"
+            f"{voltage:g}kV seed={seed} grid={grid_name or '<active>'} "
+            f"out_of_service={int(bool(out_of_service))}"
         )
         creating = False
         try:
@@ -3743,7 +3750,10 @@ class DIgSILENTAgent:
         rated_voltage = float(source_parameters["rated_voltage_kv"])
         required_confirmation = (
             f"CREATE {machine_name} WITH {type_name} {machine_type} "
-            f"{rated_power:g}MVA {rated_voltage:g}kV seed={seed}"
+            f"{rated_power:g}MVA {rated_voltage:g}kV seed={seed} "
+            f"grid={grid_name or '<active>'} bus={bus_name} "
+            f"p={active_power:g}MW q={reactive_power:g}Mvar "
+            f"out_of_service={int(bool(out_of_service))}"
         )
         try:
             app = cls._get_application(open_digsilent)
