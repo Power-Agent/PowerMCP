@@ -73,6 +73,7 @@ class ComparisonReport:
             or self.missing_from_right
             or self.convergence_mismatch
             or not self.both_converged
+            or self.unused_tolerances
         )
 
 
