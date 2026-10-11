@@ -127,7 +127,8 @@ class EvEMTBenchSynchronousMachineCreatorTest(unittest.TestCase):
         self.assertEqual(
             first["confirmation_required"],
             "CREATE Research Generator WITH Research Generator Type "
-            "round_rotor 100MVA 10.5kV seed=42",
+            "round_rotor 100MVA 10.5kV seed=42 grid=<active> "
+            "bus=Generator Bus p=60MW q=5Mvar out_of_service=0",
         )
         values = first["item"]["parameters"]
         self.assertEqual(values["rated_voltage_kv"], 10.5)
@@ -264,6 +265,34 @@ class EvEMTBenchSynchronousMachineCreatorTest(unittest.TestCase):
         self.assertEqual(self.machine_types(equipment), [])
         self.assertEqual(grid["ElmSym"], [])
         self.assertEqual(bus["StaCubic"], [])
+
+    def test_confirmation_is_bound_to_machine_bus_operating_point_and_state(self):
+        equipment, grid, bus, app = self.network()
+        alternate_bus = grid.CreateObject("ElmTerm", "Alternate Generator Bus")
+        alternate_bus.SetAttribute("uknom", 10.5)
+        preview = self.call(app)
+
+        changed_requests = (
+            {"machine_name": "Renamed Generator"},
+            {"bus_name": "Alternate Generator Bus"},
+            {"seed": 43},
+            {"active_power_mw": 61.0},
+            {"reactive_power_mvar": 6.0},
+            {"out_of_service": True},
+        )
+        for changes in changed_requests:
+            with self.subTest(changes=changes):
+                result = self.call(
+                    app,
+                    confirmation=preview["confirmation_required"],
+                    **changes,
+                )
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(self.machine_types(equipment), [])
+                self.assertEqual(grid["ElmSym"], [])
+                self.assertEqual(bus["StaCubic"], [])
+                self.assertEqual(alternate_bus["StaCubic"], [])
 
 
 if __name__ == "__main__":
