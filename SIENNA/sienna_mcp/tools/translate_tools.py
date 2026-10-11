@@ -21,6 +21,8 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer as FastMCP
 
+from powermcp.sandbox import PathNotAllowed, checked_path, ensure_checked_directory
+
 from .system_tools import R2X_NOT_INSTALLED_MESSAGE, _component_counts
 
 
@@ -56,7 +58,10 @@ def translate_to_plexos(
             "message": R2X_NOT_INSTALLED_MESSAGE,
         }
 
-    path = Path(psy_json_path).expanduser()
+    try:
+        path = Path(checked_path(psy_json_path, purpose="SIENNA translation input"))
+    except PathNotAllowed as exc:
+        return {"ok": False, "error_type": "path_not_allowed", "message": str(exc)}
     if not path.is_file():
         return {
             "ok": False,
@@ -94,7 +99,12 @@ def translate_to_plexos(
         "translated_total_components": sum(component_counts.values()),
     }
 
-    out = Path(output_path).expanduser() if output_path else None
+    out = None
+    if output_path:
+        try:
+            out = Path(checked_path(output_path, purpose="SIENNA translation output", for_write=True))
+        except PathNotAllowed as exc:
+            return {"ok": False, "error_type": "path_not_allowed", "message": str(exc)}
     if out is not None:
         try:
             translated.to_json(out)
@@ -111,6 +121,7 @@ def translate_to_plexos(
         else:
             export_dir = out.parent if out.suffix else out
             try:
+                export_dir = Path(ensure_checked_directory(str(export_dir), purpose="SIENNA PLEXOS export directory"))
                 plexos_cfg = PLEXOSConfig(
                     output_path=str(export_dir),
                     model_name=model_name,
