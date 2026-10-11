@@ -64,7 +64,8 @@ class EvEMTBenchExternalGridTest(unittest.TestCase):
         self.assertEqual(bus["StaCubic"], [])
         self.assertEqual(
             first["confirmation_required"],
-            "CREATE Research External Grid AT Source Bus 110kV seed=42",
+            "CREATE Research External Grid AT Source Bus 110kV seed=42 "
+            "grid=<active> out_of_service=0",
         )
         parameters = first["item"]["parameters"]
         self.assertGreaterEqual(parameters["short_circuit_power_mva"], 800.0)
@@ -131,6 +132,35 @@ class EvEMTBenchExternalGridTest(unittest.TestCase):
         self.assertTrue(result["rolled_back"])
         self.assertEqual(grid["ElmXnet"], [])
         self.assertEqual(bus["StaCubic"], [])
+
+    def test_confirmation_is_bound_to_name_bus_voltage_seed_and_state(self):
+        grid, bus, app = self.network()
+        alternate_bus = grid.CreateObject("ElmTerm", "Other 110 Bus")
+        alternate_bus.SetAttribute("uknom", 110.0)
+        high_bus = grid.CreateObject("ElmTerm", "345 Bus")
+        high_bus.SetAttribute("uknom", 345.0)
+        preview = self.call(app)
+
+        changed_requests = (
+            {"external_grid_name": "Renamed Source"},
+            {"bus_name": "Other 110 Bus"},
+            {"voltage_kv": 345.0, "bus_name": "345 Bus"},
+            {"seed": 43},
+            {"out_of_service": True},
+        )
+        for changes in changed_requests:
+            with self.subTest(changes=changes):
+                result = self.call(
+                    app,
+                    confirmation=preview["confirmation_required"],
+                    **changes,
+                )
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(grid["ElmXnet"], [])
+                self.assertEqual(bus["StaCubic"], [])
+                self.assertEqual(alternate_bus["StaCubic"], [])
+                self.assertEqual(high_bus["StaCubic"], [])
 
 
 if __name__ == "__main__":
