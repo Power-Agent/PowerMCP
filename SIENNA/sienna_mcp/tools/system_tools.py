@@ -54,12 +54,21 @@ def load_system(psy_json_path: str) -> dict[str, Any]:
         return {"ok": False, "error_type": "invalid_json", "message": f"Could not parse JSON from {path}: {exc}", "path": str(path)}
     if not isinstance(raw, dict):
         return {"ok": False, "error_type": "invalid_system", "message": "PSY JSON top level must be an object.", "path": str(path)}
-    if "data" in raw and "components" not in raw:
-        data = raw.get("data")
+    if "data_format_version" in raw and ("components" in raw or "data" in raw):
+        # PowerSystems.jl serializes component collections under a mapping keyed
+        # by component type, then by component UUID. Do not assume the synthetic
+        # list-shaped "data" fixture used by earlier tests.
+        collections = raw.get("components", raw.get("data"))
+        component_count = (
+            sum(len(items) for items in collections.values() if isinstance(items, dict))
+            if isinstance(collections, dict)
+            else len(collections) if isinstance(collections, list)
+            else None
+        )
         return {
             "ok": True, "path": str(path), "format": "powersystems-jl-native",
             "data_format_version": raw.get("data_format_version"), "frequency": raw.get("frequency"),
-            "component_count": len(data) if isinstance(data, list) else None,
+            "component_count": component_count,
             "top_level_keys": sorted(raw.keys()), "loadable_by": "run_sienna_solve",
         }
     try:
