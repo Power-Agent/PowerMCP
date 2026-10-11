@@ -401,6 +401,32 @@ class TestSandboxAndStaleResults(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_type"], "path_not_allowed")
 
+    def test_compare_rejects_input_outside_allowed_roots(self):
+        from unittest.mock import patch
+        fake_modules, _, _ = _install_fake_r2x_modules()
+        patcher = _patch_sys_modules(fake_modules)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        from sienna_mcp.tools.compare_tools import compare_solutions
+        with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": str(self.allowed)}):
+            result = compare_solutions(str(self.outside), str(self.outside))
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "path_not_allowed")
+
+    def test_translation_rejects_output_outside_allowed_roots(self):
+        from unittest.mock import patch
+        fake_modules, _, _ = _install_fake_r2x_modules()
+        patcher = _patch_sys_modules(fake_modules)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        from sienna_mcp.tools.translate_tools import translate_to_plexos
+        source = self.allowed / "source.json"
+        source.write_text("{}")
+        with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": str(self.allowed)}):
+            result = translate_to_plexos(str(source), output_path=str(self.outside))
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "path_not_allowed")
+
     @patch("sienna_mcp.tools.solve_tools.validate_julia_command")
     @patch("sienna_mcp.tools.solve_tools.run_julia_script")
     def test_nonzero_exit_never_returns_stale_result(self, mock_run_script, mock_validate):
