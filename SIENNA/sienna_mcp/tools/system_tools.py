@@ -55,10 +55,10 @@ def load_system(psy_json_path: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {"ok": False, "error_type": "invalid_system", "message": "PSY JSON top level must be an object.", "path": str(path)}
     if "data_format_version" in raw and ("components" in raw or "data" in raw):
-        # PowerSystems.jl stores component collections under data.components
-        # (component type -> UUID -> component). Some R2X exports put the same
-        # collection at top-level components. Do not count metadata/time-series
-        # dictionaries as components.
+        # Native PowerSystems.jl exports store component records under
+        # data.components (a list in the verified export fixture); some R2X
+        # exports use a type-keyed mapping at top level. Count records, not
+        # metadata/time-series dictionaries.
         data = raw.get("data")
         collections = raw.get("components")
         if collections is None and isinstance(data, dict):
