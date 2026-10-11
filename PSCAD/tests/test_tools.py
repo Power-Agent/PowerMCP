@@ -147,12 +147,18 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         self.mock_pscad.project.return_value = mock_project
         ctx = MagicMock()
         ctx.report_progress = AsyncMock()
+        real_sleep = asyncio.sleep
 
-        with (
-            patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=[0.0, 0.0, 2.0, 2.0]),
-            patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock),
+        async def elapse_time(_delay):
+            await real_sleep(0.01)
+
+        with patch(
+            "pscad_mcp.tools.project_tools.asyncio.sleep",
+            new=elapse_time,
         ):
-            result = await run_project_to_completion("test", ctx, timeout_seconds=1.0)
+            result = await run_project_to_completion(
+                "test", ctx, timeout_seconds=0.001
+            )
 
         self.assertEqual(result["status"], "timeout")
         self.assertEqual(result["last_state"], "running")
