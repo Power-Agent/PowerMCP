@@ -48,4 +48,32 @@ for filename, expected_tables in CATALOGS.items():
     if not isinstance(catalog.get("classes"), dict) or not catalog["classes"]:
         raise SystemExit(f"{filename}: missing component classes")
 
-print(f"Wheel catalog smoke test passed: {len(CATALOGS)} catalogs loaded from {catalog_root}")
+# Import the packaged implementation from its installed-wheel path and exercise
+# each read-only catalog API. These methods must not require a live PowerFactory
+# application or a licensed vendor installation.
+agent_path = package_root / "_servers" / "PowerFactory" / "Agent_DIgSILENT.py"
+agent_spec = importlib.util.spec_from_file_location("Agent_DIgSILENT", agent_path)
+if agent_spec is None or agent_spec.loader is None:
+    raise SystemExit(f"cannot import packaged PowerFactory agent: {agent_path}")
+agent_module = importlib.util.module_from_spec(agent_spec)
+agent_spec.loader.exec_module(agent_module)
+agent = agent_module.DIgSILENTAgent
+listing_calls = (
+    ("transformers", agent.list_evemtbench_components),
+    ("overhead lines", agent.list_evemtbench_line_profiles),
+    ("underground cables", agent.list_evemtbench_cable_profiles),
+    ("external grids", agent.list_evemtbench_external_grid_profiles),
+    ("loads", agent.list_evemtbench_load_profiles),
+    ("synchronous machines", agent.list_evemtbench_synchronous_machine_profiles),
+)
+for label, listing in listing_calls:
+    result = listing()
+    if not result.get("success"):
+        raise SystemExit(f"installed-wheel {label} listing failed: {result.get('message')}")
+    if result.get("returned_count", 0) < 1:
+        raise SystemExit(f"installed-wheel {label} listing returned no catalog entries")
+
+print(
+    f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "
+    f"and {len(listing_calls)} read-only listing APIs succeeded from {catalog_root}"
+)
