@@ -27,7 +27,6 @@ def compile_opendss_file(dss_file: str, force_recompile: bool = False) -> Dict[s
     Returns dss_file, circuit_readiness, circuit_loaded, and whether the compile was skipped.
     """
     try:
-        engine.ensure_engine()
         dss_file = checked_path(dss_file, purpose="dss_file")
         # A DSS model may Redirect/Compile sibling files.  Preflight the whole
         # project tree when containment is enabled; preserve the historical
