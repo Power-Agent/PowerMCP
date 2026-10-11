@@ -173,7 +173,7 @@ class TestLoadNativeSystem(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = Path(tempfile.mkdtemp(prefix="sienna-test-"))
         self.tmp = self.tmp_dir / "native_psy.json"
-        self.tmp.write_text(json.dumps({"data": {"components": {"ACBus": {"1": {"name": "bus-1"}}, "PowerLoad": {"2": {"name": "load-1"}}}, "time_series": {}, "metadata": {"version": "test"}}, "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
+        self.tmp.write_text(json.dumps({"data": {"components": [{"__metadata__": {"type": "ACBus", "uuid": "1"}, "name": "bus-1"}, {"__metadata__": {"type": "PowerLoad", "uuid": "2"}, "name": "load-1"}], "time_series": {}, "metadata": {"version": "test"}}, "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
     def tearDown(self):
         shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
