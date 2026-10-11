@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 from NARP import narp_mcp
@@ -111,8 +109,8 @@ def test_jobs_index_is_loaded_on_read_paths(tmp_path, monkeypatch):
         "error": None,
     }
     index.write_text(json.dumps({"job_existing": job}), encoding="utf-8")
+    monkeypatch.setattr(narp_mcp, "_job_root", lambda: tmp_path)
     manager = _JobManager()
-    manager._index_path = index
 
     assert manager.get_job("job_existing")["job"]["status"] == "completed"
     assert manager.list_jobs()["jobs"][0]["id"] == "job_existing"
