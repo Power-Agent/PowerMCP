@@ -1,10 +1,16 @@
 import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import os
 from pathlib import Path
 import tempfile
-from pscad_mcp.tools.project_tools import register_project_tools, run_project, load_projects, find_components
+from pscad_mcp.tools.project_tools import (
+    register_project_tools,
+    run_project,
+    run_project_to_completion,
+    load_projects,
+    find_components,
+)
 from pscad_mcp.tools.app_tools import register_app_tools, get_pscad_status, read_documentation
 from pscad_mcp.tools.data_tools import _resolve_psout
 from pscad_mcp.core.connection_manager import pscad_manager
@@ -81,6 +87,83 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         result = await run_project(project_name="test")
         self.assertFalse(result["started"])
         self.assertIn("not licensed", result["error"])
+
+    async def test_run_to_completion_reports_progress_and_waits_for_idle(self):
+        mock_project = MagicMock()
+        mock_project.run_status.side_effect = [
+            ("Build", None),
+            ("Run", 10),
+            ("Run", 100),
+            (None, None),
+        ]
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "completed")
+        mock_project.start.assert_called_once()
+        self.assertGreaterEqual(ctx.report_progress.await_count, 4)
+        reported = [call.args[0] for call in ctx.report_progress.await_args_list]
+        self.assertEqual(reported, sorted(set(reported)))
+
+    async def test_run_to_completion_reports_build_failure_not_success(self):
+        mock_project = MagicMock()
+        mock_project.run_status.side_effect = [("Build", None), (None, None)]
+        build_error = MagicMock()
+        build_error.status = "Error"
+        build_error.text = "compiler failed"
+        build_error.name = "EMTDC"
+        mock_project.messages.return_value = [build_error]
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "build_failed")
+        self.assertIn("compiler failed", result["errors"][0]["text"])
+        self.assertNotEqual(result["status"], "completed")
+
+    async def test_run_to_completion_does_not_treat_idle_as_success(self):
+        mock_project = MagicMock()
+        mock_project.run_status.return_value = (None, None)
+        mock_project.messages.return_value = []
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "not_completed")
+        self.assertNotEqual(result["status"], "completed")
+
+    async def test_run_to_completion_timeout_does_not_cancel_pscad(self):
+        mock_project = MagicMock()
+        mock_project.run_status.return_value = ("Run", 12)
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with (
+            patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=[0.0, 0.0, 2.0]),
+            patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await run_project_to_completion("test", ctx, timeout_seconds=1.0)
+
+        self.assertEqual(result["status"], "timeout")
+        self.assertEqual(result["last_state"], "running")
+        mock_project.start.assert_called_once()
+
+    async def test_run_to_completion_rejects_invalid_timeout(self):
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with self.assertRaises(ValueError):
+            await run_project_to_completion("test", ctx, timeout_seconds=0)
 
     async def test_find_no_components(self):
         """Edge case: Searching for components that don't exist."""
