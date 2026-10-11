@@ -221,11 +221,12 @@ TOOLS: dict[str, "Tool"] = {
         Tool(
             "narp", "NARP", "open-source", windows_only=False, extra="narp",
             server_dir="NARP", run_kind="script", entry_rel="narp_mcp.py",
-            probe=None,
+            probe="reliabilityassessment",
             notes=(
                 "Thin connector for the external MIT-licensed Breakthrough Energy "
-                "reliability-assessment package. Install it separately from its "
-                "upstream repository; no NARP implementation is vendored."
+                "reliability-assessment package. Install it separately with "
+                'pip install "reliabilityassessment @ git+https://github.com/Breakthrough-Energy/reliability-assessment.git"; '
+                "the narp extra is intentionally empty because the upstream dependency is Git-hosted."
             ),
         ),
         Tool(
