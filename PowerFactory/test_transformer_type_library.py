@@ -359,7 +359,8 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertEqual(
             first["confirmation_required"],
             "CREATE Research Transformer WITH Research Transformer Type "
-            "110/20 20MVA YNd11 60Hz seed=42",
+            "110/20 20MVA YNd11 60Hz seed=42 grid=<active> "
+            "buses=HV Bus->LV Bus out_of_service=0",
         )
         attributes = first["item"]["powerfactory_attributes"]
         self.assertEqual(
@@ -551,6 +552,32 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertIn("0 to 11", bad_clock["message"])
         self.assertFalse(bad_frequency["success"])
         self.assertIn("must be 50 or 60", bad_frequency["message"])
+
+    def test_confirmation_is_bound_to_bus_seed_and_service_state(self):
+        folder, grid, high_bus, low_bus, app = self.network()
+        alternate_bus = grid.CreateObject("ElmTerm", "Alternate HV Bus")
+        alternate_bus.SetAttribute("uknom", 110.0)
+        preview = self.call(app)
+
+        changed_requests = (
+            {"high_voltage_bus_name": "Alternate HV Bus"},
+            {"seed": 43},
+            {"out_of_service": True},
+            {"transformer_name": "Renamed Transformer"},
+        )
+        for changes in changed_requests:
+            with self.subTest(changes=changes):
+                result = self.call(
+                    app,
+                    confirmation=preview["confirmation_required"],
+                    **changes,
+                )
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(self.transformer_types(folder), [])
+                self.assertEqual(grid["ElmTr2"], [])
+                self.assertEqual(high_bus["StaCubic"], [])
+                self.assertEqual(low_bus["StaCubic"], [])
 
 
 if __name__ == "__main__":
