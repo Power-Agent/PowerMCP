@@ -168,7 +168,7 @@ class EvEMTBenchSynchronousMachineCreatorTest(unittest.TestCase):
 
     def test_confirmation_creates_type_and_connected_machine(self):
         equipment, grid, bus, app = self.network()
-        preview = self.call(app)
+        preview = self.call(app, out_of_service=True)
 
         result = self.call(
             app,
