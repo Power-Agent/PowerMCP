@@ -55,16 +55,26 @@ def load_system(psy_json_path: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
         return {"ok": False, "error_type": "invalid_system", "message": "PSY JSON top level must be an object.", "path": str(path)}
     if "data_format_version" in raw and ("components" in raw or "data" in raw):
-        # PowerSystems.jl serializes component collections under a mapping keyed
-        # by component type, then by component UUID. Do not assume the synthetic
-        # list-shaped "data" fixture used by earlier tests.
-        collections = raw.get("components", raw.get("data"))
-        component_count = (
-            sum(len(items) for items in collections.values() if isinstance(items, dict))
-            if isinstance(collections, dict)
-            else len(collections) if isinstance(collections, list)
-            else None
-        )
+        # PowerSystems.jl stores component collections under data.components
+        # (component type -> UUID -> component). Some R2X exports put the same
+        # collection at top-level components. Do not count metadata/time-series
+        # dictionaries as components.
+        data = raw.get("data")
+        collections = raw.get("components")
+        if collections is None and isinstance(data, dict):
+            collections = data.get("components")
+            if collections is None:
+                reserved = {"metadata", "internal", "time_series", "supplemental_attributes"}
+                collections = {key: value for key, value in data.items() if key not in reserved}
+        if isinstance(collections, dict):
+            component_count = sum(
+                len(items) for items in collections.values()
+                if isinstance(items, (dict, list))
+            )
+        elif isinstance(collections, list):
+            component_count = len(collections)
+        else:
+            component_count = None
         return {
             "ok": True, "path": str(path), "format": "powersystems-jl-native",
             "data_format_version": raw.get("data_format_version"), "frequency": raw.get("frequency"),
