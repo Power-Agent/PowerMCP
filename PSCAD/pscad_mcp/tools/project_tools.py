@@ -1,6 +1,9 @@
-from typing import List, Dict, Any, Optional
+import asyncio
+import math
 import os
-from mcp.server.mcpserver import MCPServer as FastMCP
+import time
+from typing import List, Dict, Any, Optional
+from mcp.server.mcpserver import Context, MCPServer as FastMCP
 from pscad_mcp.core.connection_manager import pscad_manager
 from pscad_mcp.core.executor import robust_executor
 from pscad_mcp.utils.sandbox import checked_path
@@ -44,6 +47,124 @@ async def run_project(project_name: str) -> Dict[str, Any]:
         "project": project_name,
         "note": "Build+run started. Poll get_run_status until state is 'idle_or_finished'.",
     }
+
+async def run_project_to_completion(
+    project_name: str,
+    ctx: Context,
+    timeout_seconds: float = 1800.0,
+) -> Dict[str, Any]:
+    """Start a PSCAD build-and-run and wait until it reaches a terminal state.
+
+    Unlike Project.run(), Project.start() is non-blocking, allowing the
+    single PSCAD worker to service status requests between polls. Progress is
+    reported as an increasing poll count (without an invented percentage for
+    the build stage). A run is only reported as completed after PSCAD has
+    actually been observed in the running state and then returns to idle.
+    """
+    if not isinstance(timeout_seconds, (int, float)) or not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be a finite number greater than zero.")
+
+    pscad = pscad_manager.pscad
+    if not await robust_executor.run_safe(pscad.licensed):
+        return {"status": "not_started", "project": project_name, "message": "PSCAD is not licensed."}
+
+    project = await robust_executor.run_safe(pscad.project, project_name)
+    await robust_executor.run_safe(project.start)
+
+    started_at = time.monotonic()
+    progress_count = 0
+
+    async def report(message: str) -> None:
+        nonlocal progress_count
+        progress_count += 1
+        await ctx.report_progress(progress_count, message=message)
+
+    await report(f"Started build-and-run for '{project_name}'; waiting for PSCAD status.")
+
+    # Back off during long builds/runs without monopolizing the single PSCAD
+    # automation worker. This preserves the schedule used by the original #25.
+    poll_delays = (1, 2, 3, 5, 8, 10)
+    poll_index = 0
+    saw_building = False
+    saw_running = False
+    last_state = "unknown"
+
+    while True:
+        elapsed = time.monotonic() - started_at
+        if elapsed >= timeout_seconds:
+            await report(
+                f"Timed out after {elapsed:.1f}s while PSCAD state was '{last_state}'. "
+                "The simulation may still be running; inspect get_run_status before retrying."
+            )
+            return {
+                "status": "timeout",
+                "project": project_name,
+                "elapsed_seconds": round(elapsed, 2),
+                "last_state": last_state,
+                "message": "Wait timed out; the PSCAD process was not cancelled.",
+            }
+
+        status = await get_run_status(project_name)
+        last_state = status["state"]
+        if last_state == "building":
+            saw_building = True
+            await report(f"PSCAD is building '{project_name}'.")
+        elif last_state == "running":
+            saw_running = True
+            run_progress = status.get("progress")
+            progress_text = (
+                f" Simulation progress: {run_progress}%."
+                if isinstance(run_progress, (int, float))
+                else ""
+            )
+            await report(f"PSCAD is running '{project_name}'.{progress_text}")
+        else:
+            await report(f"PSCAD returned to idle for '{project_name}'.")
+
+            if saw_running:
+                return {
+                    "status": "completed",
+                    "project": project_name,
+                    "elapsed_seconds": round(time.monotonic() - started_at, 2),
+                    "message": "PSCAD was observed running and has now returned to idle.",
+                }
+
+            # Idle without ever observing a run is not success: compilation can
+            # fail and return directly to idle. Inspect diagnostics, but never
+            # infer completion from an idle status alone.
+            try:
+                messages = await get_build_messages(project_name)
+            except Exception as exc:
+                return {
+                    "status": "failed",
+                    "project": project_name,
+                    "saw_building": saw_building,
+                    "message": (
+                        "PSCAD returned to idle before a simulation was observed; "
+                        f"build diagnostics could not be read: {exc}"
+                    ),
+                }
+
+            errors = messages.get("errors", [])
+            return {
+                "status": "build_failed" if errors else "not_completed",
+                "project": project_name,
+                "saw_building": saw_building,
+                "errors": errors,
+                "warnings": messages.get("warnings", []),
+                "message": (
+                    "PSCAD returned to idle before a simulation was observed. "
+                    "Build errors were found; see errors."
+                    if errors
+                    else
+                    "PSCAD returned to idle before a simulation was observed. "
+                    "No build errors were reported, so completion cannot be confirmed."
+                ),
+            }
+
+        await asyncio.sleep(poll_delays[min(poll_index, len(poll_delays) - 1)])
+        poll_index += 1
+
 
 async def build_project(project_name: str, clean: bool = True) -> Dict[str, Any]:
     """Build (compile) a project without running it, and report any messages.
@@ -179,6 +300,7 @@ def register_project_tools(mcp: FastMCP):
     mcp.tool()(load_projects)
     mcp.tool()(list_projects)
     mcp.tool()(run_project)
+    mcp.tool()(run_project_to_completion)
     mcp.tool()(build_project)
     mcp.tool()(get_run_status)
     mcp.tool()(get_build_messages)
