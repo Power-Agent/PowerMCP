@@ -77,7 +77,7 @@ class EvEMTBenchCableTest(unittest.TestCase):
             result["confirmation_required"],
             "CREATE Research Cable WITH Research Cable Type 20kV p50 "
             "2km 0.4kA 50Hz grid=<active> "
-            "buses=Bus A->Bus B out_of_service=0",
+            "buses=Cable Bus A->Cable Bus B out_of_service=0",
         )
         attributes = result["item"]["powerfactory_attributes"]
         self.assertEqual(attributes["rline"], 0.2125)
