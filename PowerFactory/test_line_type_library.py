@@ -79,7 +79,8 @@ class EvEMTBenchLineTest(unittest.TestCase):
         self.assertEqual(
             result["confirmation_required"],
             "CREATE Research Line WITH Research Line Type 110kV p50 "
-            "10km 1kA 50Hz",
+            "10km 1kA 50Hz grid=<active> "
+            "buses=Bus A->Bus B out_of_service=0",
         )
         attributes = result["item"]["powerfactory_attributes"]
         self.assertEqual(attributes["rline"], 0.06)
@@ -173,6 +174,33 @@ class EvEMTBenchLineTest(unittest.TestCase):
         self.assertEqual(grid["ElmLne"], [])
         self.assertEqual(first_bus["StaCubic"], [])
         self.assertEqual(second_bus["StaCubic"], [])
+
+    def test_confirmation_is_bound_to_profile_buses_and_line_options(self):
+        folder, grid, first_bus, second_bus, app = self.network()
+        alternate_bus = grid.CreateObject("ElmTerm", "Bus C")
+        alternate_bus.SetAttribute("uknom", 110.0)
+        preview = self.call(app)
+
+        changed_requests = (
+            {"profile": "p95"},
+            {"bus2_name": "Bus C"},
+            {"line_name": "Renamed Line"},
+            {"length_km": 11.0},
+            {"out_of_service": True},
+        )
+        for changes in changed_requests:
+            with self.subTest(changes=changes):
+                result = self.call(
+                    app,
+                    confirmation=preview["confirmation_required"],
+                    **changes,
+                )
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(self.line_types(folder), [])
+                self.assertEqual(grid["ElmLne"], [])
+                self.assertEqual(first_bus["StaCubic"], [])
+                self.assertEqual(second_bus["StaCubic"], [])
 
 
 if __name__ == "__main__":
