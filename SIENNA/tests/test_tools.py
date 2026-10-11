@@ -347,14 +347,14 @@ class TestRunSiennaSolve(unittest.TestCase):
     @patch("sienna_mcp.tools.solve_tools.run_julia_script")
     def test_run_sienna_solve_timeout(self, mock_run_script, mock_validate):
         mock_validate.return_value = ("/usr/local/bin/julia", None)
-        mock_run_script.side_effect = subprocess.TimeoutExpired(cmd=["julia"], timeout=5, output=b"one\\ntwo\\n", stderr=b"error\\n")
+        mock_run_script.side_effect = subprocess.TimeoutExpired(cmd=["julia"], timeout=5, output=b"one\ntwo\n", stderr=b"error\n")
 
         from sienna_mcp.tools.solve_tools import run_sienna_solve
 
         result = run_sienna_solve(str(self.psy), timeout_seconds=5)
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_type"], "solve_timeout")
-        self.assertEqual(result["stdout_tail"], "one\\ntwo")
+        self.assertEqual(result["stdout_tail"], "one\ntwo")
         self.assertEqual(result["stderr_tail"], "error")
 
 
