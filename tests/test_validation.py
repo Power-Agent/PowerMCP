@@ -150,3 +150,47 @@ def test_invalid_tolerance_mapping_is_rejected():
             snapshot("andes"),
             tolerances={"bus:BUS-1:vm_pu": 0.1},
         )
+
+
+def test_two_non_converged_runs_cannot_pass():
+    values = {"bus:BUS-1:vm_pu": 1.0, "bus:BUS-1:va_deg": 0.0}
+    report = compare_snapshots(
+        snapshot(values=values, converged=False),
+        snapshot("pypsa", values=values, converged=False),
+    )
+    assert not report.passed
+    assert not report.both_converged
+    assert not report.convergence_mismatch
+
+
+def test_numpy_numeric_scalars_are_accepted_when_numpy_is_available():
+    np = pytest.importorskip("numpy")
+    left = snapshot(base_mva=np.int64(100), values={"bus:B1:vm_pu": np.float32(1.0)})
+    right = snapshot("pypsa", base_mva=np.float64(100), values={"bus:B1:vm_pu": np.float64(1.0)})
+    assert compare_snapshots(left, right).passed
+
+
+def test_voltage_angles_use_shortest_wrapped_difference():
+    report = compare_snapshots(
+        snapshot(values={"bus:B1:va_deg": 179.99}),
+        snapshot("pypsa", values={"bus:B1:va_deg": -179.99}),
+        default_tolerance=MetricTolerance(atol=0.03, rtol=0.0),
+    )
+    assert report.passed
+    assert report.differences == ()
+
+
+def test_quantity_level_tolerance_fallback_and_unused_keys_are_reported():
+    report = compare_snapshots(
+        snapshot(values={"bus:B1:vm_pu": 1.0}),
+        snapshot("pypsa", values={"bus:B1:vm_pu": 1.001}),
+        default_tolerance=MetricTolerance(atol=0.0, rtol=0.0),
+        tolerances={"vm_pu": MetricTolerance(atol=0.002, rtol=0.0), "unused": MetricTolerance()},
+    )
+    assert report.passed
+    assert report.unused_tolerances == ("unused",)
+
+
+def test_same_engine_label_can_be_used_for_version_regression_comparison():
+    report = compare_snapshots(snapshot("pandapower 2"), snapshot("pandapower 3"))
+    assert report.passed
