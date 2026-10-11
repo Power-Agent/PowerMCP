@@ -19,6 +19,11 @@ def _element_id(name: Any, fallback: Any) -> str:
     return text if text else str(fallback)
 
 
+def _table_element_id(table: Any, index: Any) -> str:
+    name = table.at[index, "name"] if "name" in table.columns else None
+    return _element_id(name, index)
+
+
 def snapshot_from_pandapower(
     net: Any,
     *,
@@ -78,7 +83,7 @@ def snapshot_from_pypsa(
     vm = network.buses_t.v_mag_pu.loc[snapshot]
     va = network.buses_t.v_ang.loc[snapshot]
     for bus_id in network.buses.index:
-        name = _element_id(network.buses.at[bus_id, "name"], bus_id)
+        name = _table_element_id(network.buses, bus_id)
         values[f"bus:{name}:vm_pu"] = float(vm[bus_id])
         angle = float(va[bus_id])
         if angle_unit == "rad":
@@ -89,7 +94,7 @@ def snapshot_from_pypsa(
         p0 = network.lines_t.p0.loc[snapshot]
         p1 = network.lines_t.p1.loc[snapshot]
         for line_id in network.lines.index:
-            name = _element_id(network.lines.at[line_id, "name"], line_id)
+            name = _table_element_id(network.lines, line_id)
             values[f"branch:{name}:p_from_mw"] = float(p0[line_id])
             values[f"branch:{name}:p_to_mw"] = float(p1[line_id])
 
