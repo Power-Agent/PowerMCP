@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from numbers import Real
 from typing import Mapping
 
 
@@ -37,9 +38,9 @@ class MetricTolerance:
 
     def __post_init__(self) -> None:
         for name, value in (("atol", self.atol), ("rtol", self.rtol)):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if isinstance(value, bool) or not isinstance(value, Real):
                 raise TypeError(f"{name} must be a finite non-negative number")
-            if not math.isfinite(value) or value < 0:
+            if not math.isfinite(float(value)) or value < 0:
                 raise ValueError(f"{name} must be a finite non-negative number")
 
 
@@ -61,6 +62,8 @@ class ComparisonReport:
     missing_from_left: tuple[str, ...]
     missing_from_right: tuple[str, ...]
     convergence_mismatch: bool
+    both_converged: bool
+    unused_tolerances: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
@@ -69,6 +72,7 @@ class ComparisonReport:
             or self.missing_from_left
             or self.missing_from_right
             or self.convergence_mismatch
+            or not self.both_converged
         )
 
 
@@ -77,9 +81,9 @@ def _validate_snapshot(snapshot: ResultSnapshot, side: str) -> None:
         value = getattr(snapshot, name)
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"{side}.{name} must be a non-empty string")
-    if isinstance(snapshot.base_mva, bool) or not isinstance(snapshot.base_mva, (int, float)):
+    if isinstance(snapshot.base_mva, bool) or not isinstance(snapshot.base_mva, Real):
         raise TypeError(f"{side}.base_mva must be a finite positive number")
-    if not math.isfinite(snapshot.base_mva) or snapshot.base_mva <= 0:
+    if not math.isfinite(float(snapshot.base_mva)) or snapshot.base_mva <= 0:
         raise ValueError(f"{side}.base_mva must be a finite positive number")
     if not isinstance(snapshot.converged, bool):
         raise TypeError(f"{side}.converged must be a bool")
@@ -88,9 +92,9 @@ def _validate_snapshot(snapshot: ResultSnapshot, side: str) -> None:
     for key, value in snapshot.values.items():
         if not isinstance(key, str) or not key.strip():
             raise ValueError(f"{side}.values contains an empty or non-string metric key")
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            raise TypeError(f"{side}.values[{key!r}] must be numeric, not bool")
-        if not math.isfinite(value):
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{side}.values[{key!r}] must be a real numeric value (bool is not allowed)")
+        if not math.isfinite(float(value)):
             raise ValueError(f"{side}.values[{key!r}] must be finite")
 
 
@@ -103,15 +107,15 @@ def compare_snapshots(
 ) -> ComparisonReport:
     """Compare two normalized results for the same case and study definition.
 
-    Per-metric tolerances use exact metric keys. For each common metric, a match
-    requires `abs(a-b) <= atol + rtol * max(abs(a), abs(b))`. Missing metrics
-    are reported separately and never silently ignored. A comparison with no
-    common metrics cannot pass because it provides no numerical validation.
+    Tolerances match exact metric keys first, then the quantity suffix after the
+    final colon (for example, ``vm_pu``). For each common metric, a match
+    requires ``error <= atol + rtol * max(abs(a), abs(b))``. Voltage-angle metrics
+    in degrees use the shortest wrapped angular difference. Missing metrics,
+    unused tolerance keys, and non-converged runs cannot produce a passing report.
+    A comparison with no common metrics cannot pass.
     """
     _validate_snapshot(left, "left")
     _validate_snapshot(right, "right")
-    if left.engine == right.engine:
-        raise ValueError("snapshots must come from different engines")
     if left.case_id != right.case_id:
         raise ValueError("cannot compare different case_id values")
     if left.study_type != right.study_type:
@@ -132,10 +136,22 @@ def compare_snapshots(
     left_keys, right_keys = set(left.values), set(right.values)
     common = sorted(left_keys & right_keys)
     differences: list[MetricDifference] = []
+    tolerance_map = tolerances or {}
+    used_tolerances: set[str] = set()
     for metric in common:
         a, b = float(left.values[metric]), float(right.values[metric])
-        tolerance = (tolerances or {}).get(metric, default_tolerance)
+        suffix = metric.rsplit(":", 1)[-1]
+        if metric in tolerance_map:
+            tolerance = tolerance_map[metric]
+            used_tolerances.add(metric)
+        elif suffix in tolerance_map:
+            tolerance = tolerance_map[suffix]
+            used_tolerances.add(suffix)
+        else:
+            tolerance = default_tolerance
         absolute_error = abs(a - b)
+        if suffix.lower() in {"va_deg", "va_degree", "angle_deg"}:
+            absolute_error = abs((a - b + 180.0) % 360.0 - 180.0)
         allowed_error = tolerance.atol + tolerance.rtol * max(abs(a), abs(b))
         if absolute_error > allowed_error:
             differences.append(
@@ -150,4 +166,6 @@ def compare_snapshots(
         missing_from_left=tuple(sorted(right_keys - left_keys)),
         missing_from_right=tuple(sorted(left_keys - right_keys)),
         convergence_mismatch=left.converged != right.converged,
+        both_converged=left.converged and right.converged,
+        unused_tolerances=tuple(sorted(set(tolerance_map) - used_tolerances)),
     )
