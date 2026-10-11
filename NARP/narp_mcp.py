@@ -31,7 +31,7 @@ _repo_added = _repo_root not in sys.path
 if _repo_added:
     sys.path.insert(0, _repo_root)
 try:
-    from powermcp.sandbox import PathNotAllowed, checked_path, checked_read_tree, ensure_checked_directory
+    from powermcp.sandbox import PathNotAllowed, checked_read_tree, ensure_checked_directory
     from powermcp.paths import runs_dir
 finally:
     if _repo_added:
@@ -201,11 +201,13 @@ def parse_output(output_file: str) -> dict[str, Any]:
         label = tokens[0].strip()
         # NARP's labels are generated from NAMA and are not limited to A1..A5,
         # AV, or ERCOT. Parse numeric columns positionally after that label.
-        values = [token for token in tokens[1:] if number_pattern_13.fullmatch(token)]
+        values = tokens[1:]
+        if not all(number_pattern_13.fullmatch(token) for token in values):
+            continue
         if len(values) not in {5, 9}:
             continue
         nums = [float(value) for value in values]
-        entry: dict[str, Any] = {"label": label.upper()}
+        entry: dict[str, Any] = {"label": label}
         if len(nums) == 5:  # JSTEP == 24 / INDX == 1 in upstream report.py
             fields = (
                 ("peak", 0), ("installed", 1), ("PCT_RES", 2),
@@ -565,6 +567,8 @@ def _terminate_children() -> None:
                 proc.wait(timeout=2)
             except (OSError, subprocess.TimeoutExpired):
                 pass
+        except OSError:
+            pass
 
 
 atexit.register(_terminate_children)
