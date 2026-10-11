@@ -80,7 +80,7 @@ class EvEMTBenchLoadTest(unittest.TestCase):
 
     def test_confirmation_creates_connected_load(self):
         grid, bus, app = self.network(voltage=110.0)
-        preview = self.call(app, voltage_kv=110.0)
+        preview = self.call(app, voltage_kv=110.0, out_of_service=True)
 
         result = self.call(
             app,
