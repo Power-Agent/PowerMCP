@@ -72,7 +72,8 @@ jobs:
       - name: Install wheel in an isolated environment
         run: |
           python -m venv "$RUNNER_TEMP/powermcp-wheel-venv"
-          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" -m pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
+          WHEEL=$(echo "$GITHUB_WORKSPACE"/dist/*.whl)
+          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" -m pip install "${WHEEL}[powerfactory]"
 
       - name: Load all catalogs outside the checkout
         run: |
