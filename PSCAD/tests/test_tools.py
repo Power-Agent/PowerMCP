@@ -149,7 +149,7 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         ctx.report_progress = AsyncMock()
 
         with (
-            patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=[0.0, 0.0, 2.0]),
+            patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=[0.0, 0.0, 2.0, 2.0]),
             patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock),
         ):
             result = await run_project_to_completion("test", ctx, timeout_seconds=1.0)
