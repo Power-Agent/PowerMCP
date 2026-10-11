@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from functools import wraps
 from typing import Any, Callable
 
@@ -13,6 +14,7 @@ from opendss_tools.interactive_view import register_interactive_view_tools
 from opendss_tools.model import register_model_tools
 from opendss_tools.results import register_results_tools
 from opendss_tools.simulation import register_simulation_tools
+from utils.responses import _err
 
 
 def _engine_aware_mcp(mcp: FastMCP) -> FastMCP:
@@ -24,18 +26,29 @@ def _engine_aware_mcp(mcp: FastMCP) -> FastMCP:
         decorator = original_tool(*args, **kwargs)
 
         def register(fn: Callable[..., Any]):
-            @wraps(fn)
-            def guarded(*fn_args: Any, **fn_kwargs: Any):
-                try:
-                    ensure_engine()
-                except EngineUnavailable as exc:
-                    return {"success": False, "error": str(exc)}
-                return fn(*fn_args, **fn_kwargs)
+            if inspect.iscoroutinefunction(fn):
+                @wraps(fn)
+                async def guarded(*fn_args: Any, **fn_kwargs: Any):
+                    try:
+                        ensure_engine()
+                    except EngineUnavailable as exc:
+                        return _err(str(exc))
+                    return await fn(*fn_args, **fn_kwargs)
+            else:
+                @wraps(fn)
+                def guarded(*fn_args: Any, **fn_kwargs: Any):
+                    try:
+                        ensure_engine()
+                    except EngineUnavailable as exc:
+                        return _err(str(exc))
+                    return fn(*fn_args, **fn_kwargs)
 
             return decorator(guarded)
 
         return register
 
+    # This guard covers tools registered via mcp.tool(). Tools registered via
+    # mcp.add_tool() bypass lazy initialization and must be wrapped explicitly.
     mcp.tool = tool  # type: ignore[method-assign]
     return mcp
 
