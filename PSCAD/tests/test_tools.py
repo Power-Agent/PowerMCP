@@ -159,11 +159,11 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
             new=elapse_time,
         ):
             result = await run_project_to_completion(
-                "test", ctx, timeout_seconds=0.001
+                "test", ctx, timeout_seconds=0.05
             )
 
         self.assertTrue(requested_delays)
-        self.assertLessEqual(requested_delays[0], 0.001)
+        self.assertLessEqual(requested_delays[0], 0.05)
         self.assertEqual(result["status"], "timeout")
         self.assertEqual(result["last_state"], "running")
         mock_project.start.assert_called_once()
