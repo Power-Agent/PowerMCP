@@ -108,7 +108,7 @@ def run_sienna_solve(
                 return ""
             if isinstance(value, bytes):
                 value = value.decode("utf-8", errors="replace")
-            return "\\n".join(value.splitlines()[-20:])
+            return "\n".join(value.splitlines()[-20:])
 
         if cleanup_output:
             out_path.unlink(missing_ok=True)
