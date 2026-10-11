@@ -8,9 +8,12 @@ MCP server from completing initialize/list_tools.
 
 from __future__ import annotations
 
+from threading import Lock
+
 from py_dss_toolkit import dss_tools
 
 dss = None
+_engine_lock = Lock()
 _engine_error: str | None = None
 
 
@@ -27,18 +30,28 @@ def ensure_engine():
     if _engine_error is not None:
         raise EngineUnavailable(_engine_error)
 
-    try:
-        from py_dss_interface import DSS
+    # MCP 2.x may invoke synchronous tools concurrently on worker threads.
+    # Re-check both cached states under the lock to ensure only one DSS instance
+    # is created and wired into dss_tools.
+    with _engine_lock:
+        if dss is not None:
+            return dss
+        if _engine_error is not None:
+            raise EngineUnavailable(_engine_error)
 
-        candidate = DSS()
-        dss_tools.update_dss(candidate)
-        dss = candidate
-        return dss
-    except Exception as exc:
-        dss = None
-        _engine_error = (
-            "OpenDSS engine initialization failed: "
-            f"{type(exc).__name__}: {exc}. "
-            "Check the py-dss-interface/OpenDSS installation and platform support."
-        )
-        raise EngineUnavailable(_engine_error) from exc
+        try:
+            from py_dss_interface import DSS
+
+            candidate = DSS()
+            dss_tools.update_dss(candidate)
+            dss = candidate
+            return dss
+        except Exception as exc:
+            dss = None
+            _engine_error = (
+                "OpenDSS engine initialization failed: "
+                f"{type(exc).__name__}: {exc}. "
+                "Check the py-dss-interface/OpenDSS installation and platform support. "
+                "Initialization errors are cached; restart the MCP server after fixing the installation."
+            )
+            raise EngineUnavailable(_engine_error) from exc
