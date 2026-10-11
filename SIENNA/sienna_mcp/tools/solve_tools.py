@@ -23,6 +23,8 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer as FastMCP
 
+from powermcp.sandbox import PathNotAllowed, checked_path
+
 from .._julia import run_julia_script, validate_julia_command
 
 SCRIPT_PATH = Path(__file__).resolve().parent.parent / "scripts" / "solve_system.jl"
@@ -55,7 +57,10 @@ def run_sienna_solve(
             "message": f"Julia driver script not found: {SCRIPT_PATH}",
         }
 
-    psy_path = Path(psy_json_path).expanduser()
+    try:
+        psy_path = Path(checked_path(psy_json_path, purpose="SIENNA solve input"))
+    except PathNotAllowed as exc:
+        return {"ok": False, "error_type": "path_not_allowed", "message": str(exc)}
     if not psy_path.is_file():
         return {
             "ok": False,
@@ -68,7 +73,14 @@ def run_sienna_solve(
     if julia_error is not None:
         return julia_error
 
-    out_path = Path(output_path).expanduser() if output_path else None
+    try:
+        out_path = (
+            Path(checked_path(output_path, purpose="SIENNA solve output", for_write=True))
+            if output_path
+            else None
+        )
+    except PathNotAllowed as exc:
+        return {"ok": False, "error_type": "path_not_allowed", "message": str(exc)}
     cleanup_output = False
     if out_path is None:
         fd, tmp_name = tempfile.mkstemp(suffix=".json", prefix="sienna_solve_")
@@ -79,6 +91,8 @@ def run_sienna_solve(
         out_path = Path(tmp_name)
         cleanup_output = True
 
+    # Never allow a previous result to be mistaken for this run's output.
+    out_path.unlink(missing_ok=True)
     script_args = [str(psy_path), str(out_path), solver, str(horizon_hours)]
 
     try:
@@ -89,12 +103,21 @@ def run_sienna_solve(
             timeout_seconds=timeout_seconds,
         )
     except subprocess.TimeoutExpired as err:
+        def _tail(value: str | bytes | None) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, bytes):
+                value = value.decode("utf-8", errors="replace")
+            return "\\n".join(value.splitlines()[-20:])
+
+        if cleanup_output:
+            out_path.unlink(missing_ok=True)
         return {
             "ok": False,
             "error_type": "solve_timeout",
             "message": f"run_sienna_solve timed out after {timeout_seconds}s",
-            "stdout": (err.stdout or ""),
-            "stderr": (err.stderr or ""),
+            "stdout_tail": _tail(err.stdout),
+            "stderr_tail": _tail(err.stderr),
             "command": [julia_bin, "--startup-file=no", str(SCRIPT_PATH), *script_args],
         }
 
@@ -106,7 +129,14 @@ def run_sienna_solve(
         "psy_json_path": str(psy_path),
     }
 
-    if out_path.is_file():
+    if completed.returncode != 0:
+        result["ok"] = False
+        result["error_type"] = "solve_failed"
+        result["message"] = (
+            f"Julia exited with status {completed.returncode}; result output is not trusted. "
+            "See stdout_tail/stderr_tail."
+        )
+    elif out_path.is_file():
         try:
             solve_payload = json.loads(out_path.read_text())
             result.update(solve_payload)
