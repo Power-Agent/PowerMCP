@@ -178,7 +178,12 @@ async def run_project_to_completion(
                 "message": message,
             }
 
-        await asyncio.sleep(poll_delays[min(poll_index, len(poll_delays) - 1)])
+        remaining_seconds = timeout_seconds - (time.monotonic() - started_at)
+        if remaining_seconds <= 0:
+            continue
+        await asyncio.sleep(
+            min(poll_delays[min(poll_index, len(poll_delays) - 1)], remaining_seconds)
+        )
         poll_index += 1
 
 
