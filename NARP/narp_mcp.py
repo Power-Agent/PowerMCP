@@ -9,6 +9,8 @@ MCP stdio process stays responsive and a running job can be terminated.
 """
 from __future__ import annotations
 
+import atexit
+import importlib.util
 import json
 import logging
 import os
@@ -84,7 +86,7 @@ def validate_input_dir(input_dir: str) -> dict[str, Any]:
             missing.append(name)
         elif name != "LEEI" and not p.is_file():
             missing.append(name)
-        elif name == "LEEI" and not (p.is_file() or p.is_dir()):
+        elif name == "LEEI" and not p.is_file():
             missing.append(name)
 
     return {
@@ -116,14 +118,14 @@ def parse_output(output_file: str) -> dict[str, Any]:
         sections[number] = text[match.end():end]
 
     block12 = sections.get(12, "")
-    pool_marker = re.search(r"(?im)^\\s*POOL\\s+STATISTICS\\s*$", block12)
+    pool_marker = re.search(r"(?im)^\s*POOL\s+STATISTICS\s*$", block12)
     if pool_marker:
         area_block = block12[:pool_marker.start()]
         pool_block = block12[pool_marker.end():]
     else:
         area_block, pool_block = block12, ""
 
-    number_pattern = re.compile(r"[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?")
+    number_pattern = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?")
 
     def metrics(values: list[str]) -> dict[str, float | None]:
         nums = [float(value) for value in values[:5]]
@@ -191,25 +193,33 @@ def parse_output(output_file: str) -> dict[str, Any]:
             })
 
     block13 = sections.get(13, "")
+    number_pattern_13 = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][-+]?\d+)?")
     for line in block13.splitlines():
-        s = line.strip()
-        m = re.match(r"^(A\\d+|AV|ERCOT)\\s+(.*)$", s, flags=re.I)
-        if not m:
+        tokens = line.split()
+        if len(tokens) < 2:
             continue
-        values = re.findall(r"[-+]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[Ee][-+]?\\d+)?", m.group(2))
-        if len(values) < 4:
+        label = tokens[0].strip()
+        # NARP's labels are generated from NAMA and are not limited to A1..A5,
+        # AV, or ERCOT. Parse numeric columns positionally after that label.
+        values = [token for token in tokens[1:] if number_pattern_13.fullmatch(token)]
+        if len(values) not in {5, 9}:
             continue
-        nums = [float(v) for v in values]
-        entry: dict[str, Any] = {"label": m.group(1).upper()}
-        fields = (
-            ("peak", 0), ("installed", 1), ("PCT_RES", 2),
-            ("HLOLE", 3), ("HLOLE_pct_sd", 4),
-            ("EUE", 5), ("EUE_pct_sd", 6),
-            ("LOLE", 7), ("LOLE_pct_sd", 8),
-        )
+        nums = [float(value) for value in values]
+        entry: dict[str, Any] = {"label": label.upper()}
+        if len(nums) == 5:  # JSTEP == 24 / INDX == 1 in upstream report.py
+            fields = (
+                ("peak", 0), ("installed", 1), ("PCT_RES", 2),
+                ("LOLE", 3), ("LOLE_pct_sd", 4),
+            )
+        else:
+            fields = (
+                ("peak", 0), ("installed", 1), ("PCT_RES", 2),
+                ("HLOLE", 3), ("HLOLE_pct_sd", 4),
+                ("EUE", 5), ("EUE_pct_sd", 6),
+                ("LOLE", 7), ("LOLE_pct_sd", 8),
+            )
         for name, index in fields:
-            if index < len(nums):
-                entry[name] = nums[index]
+            entry[name] = nums[index]
         result["summary"][entry["label"]] = entry
 
     result["areas"] = result["table_12"]
@@ -265,7 +275,11 @@ class _JobManager:
 
     def _run(self, job_id: str) -> None:
         with self._lock:
-            job = self._jobs[job_id]
+            job = self._jobs.get(job_id)
+            if job is None or job.get("status") == "cancelled":
+                return
+            if job.get("status") != "pending":
+                return
             work_dir = Path(job["job_dir"])
             input_dir = work_dir / "input"
             log_path = work_dir / "run.log"
@@ -288,7 +302,17 @@ class _JobManager:
                 )
             with self._lock:
                 self._procs[job_id] = proc
-            returncode = proc.wait()
+                cancelled = self._jobs.get(job_id, {}).get("status") == "cancelled"
+            if cancelled:
+                try:
+                    proc.terminate()
+                except OSError:
+                    pass
+            try:
+                returncode = proc.wait(timeout=5 if cancelled else None)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                returncode = proc.wait()
         except Exception as exc:
             self._update(job_id, status="failed", error=str(exc), finished_at=_now())
             return
@@ -329,6 +353,8 @@ class _JobManager:
                 )
 
     def create_job(self, input_dir: str, params: dict[str, Any]) -> dict[str, Any]:
+        if params:
+            return {"success": False, "error": "NARP params are not supported; pass an empty object."}
         validation = validate_input_dir(input_dir)
         if not validation["valid"]:
             return {"success": False, **validation}
@@ -337,7 +363,10 @@ class _JobManager:
         job_id = _safe_job_id()
         job_dir = _job_root() / job_id
         job_dir.mkdir(parents=True, exist_ok=False)
-        shutil.copytree(src, job_dir / "input")
+        staged_input = job_dir / "input"
+        staged_input.mkdir()
+        for name in REQUIRED_FILES:
+            shutil.copy2(src / name, staged_input / name)
         job = {
             "id": job_id,
             "status": "pending",
@@ -381,6 +410,7 @@ class _JobManager:
 
     def get_job(self, job_id: str) -> dict[str, Any]:
         with self._lock:
+            self._ensure_storage()
             job = self._jobs.get(job_id)
             if job is None:
                 return {"success": False, "error": f"Job not found: {job_id}"}
@@ -408,11 +438,13 @@ class _JobManager:
 
     def list_jobs(self, limit: int = 100) -> dict[str, Any]:
         with self._lock:
+            self._ensure_storage()
             jobs = sorted(self._jobs.values(), key=lambda item: item.get("created_at", 0), reverse=True)
         return {"success": True, "jobs": [dict(j) for j in jobs[:max(0, int(limit))]]}
 
     def cancel(self, job_id: str) -> dict[str, Any]:
         with self._lock:
+            self._ensure_storage()
             job = self._jobs.get(job_id)
             if job is None:
                 return {"success": False, "error": f"Job not found: {job_id}"}
@@ -440,8 +472,15 @@ _jobs = _JobManager()
 
 @mcp.tool()
 def ping() -> dict[str, Any]:
-    """Return connector availability without importing NARP."""
-    return {"success": True, "engine": "NARP", "status": "ready", "upstream": "external"}
+    """Check whether the external NARP package is discoverable without importing it."""
+    installed = importlib.util.find_spec("reliabilityassessment") is not None
+    return {
+        "success": installed,
+        "engine": "NARP",
+        "status": "ready" if installed else "missing_dependency",
+        "upstream": "external",
+        **({} if installed else {"install_hint": 'pip install "reliabilityassessment @ git+https://github.com/Breakthrough-Energy/reliability-assessment.git"'}),
+    }
 
 
 @mcp.tool()
@@ -458,7 +497,7 @@ def submit_simulation(input_dir: str, params: dict[str, Any] | None = None) -> d
 
 @mcp.tool()
 def run_simulation_sync(input_dir: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Run NARP synchronously by importing and calling narpMain(TEST_DIR)."""
+    """Run NARP synchronously in a child process and return its job state."""
     return _jobs.run_sync(input_dir, dict(params or {}))
 
 
@@ -505,6 +544,30 @@ def list_jobs(limit: int = 100) -> dict[str, Any]:
 def cancel_job(job_id: str) -> dict[str, Any]:
     """Terminate the child process for a running NARP job."""
     return _jobs.cancel(job_id)
+
+
+def _terminate_children() -> None:
+    """Avoid leaving NARP child processes running when the MCP server exits."""
+    with _jobs._lock:
+        processes = list(_jobs._procs.values())
+    for proc in processes:
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+            except OSError:
+                continue
+    for proc in processes:
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+                proc.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+
+
+atexit.register(_terminate_children)
 
 
 if __name__ == "__main__":
