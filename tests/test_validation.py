@@ -180,15 +180,24 @@ def test_voltage_angles_use_shortest_wrapped_difference():
     assert report.differences == ()
 
 
-def test_quantity_level_tolerance_fallback_and_unused_keys_are_reported():
+def test_quantity_level_tolerance_fallback_is_applied():
     report = compare_snapshots(
         snapshot(values={"bus:B1:vm_pu": 1.0}),
         snapshot("pypsa", values={"bus:B1:vm_pu": 1.001}),
         default_tolerance=MetricTolerance(atol=0.0, rtol=0.0),
-        tolerances={"vm_pu": MetricTolerance(atol=0.002, rtol=0.0), "unused": MetricTolerance()},
+        tolerances={"vm_pu": MetricTolerance(atol=0.002, rtol=0.0)},
     )
     assert report.passed
-    assert report.unused_tolerances == ("unused",)
+
+
+def test_unused_tolerance_keys_are_reported_and_cannot_pass():
+    report = compare_snapshots(
+        snapshot(values={"bus:B1:vm_pu": 1.0}),
+        snapshot("pypsa", values={"bus:B1:vm_pu": 1.0}),
+        tolerances={"typo_quantity": MetricTolerance()},
+    )
+    assert not report.passed
+    assert report.unused_tolerances == ("typo_quantity",)
 
 
 def test_same_engine_label_can_be_used_for_version_regression_comparison():
