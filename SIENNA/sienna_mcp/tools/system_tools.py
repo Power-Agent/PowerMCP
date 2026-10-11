@@ -11,7 +11,7 @@ that PowerSystems.jl's own ``to_json``/``from_json`` produce, so this accepts:
 
 The ``r2x`` import is deferred to call time (not module import time) so that
 importing ``sienna_mcp.main`` never requires ``r2x`` to be installed -- see
-``tests/test_vendor_import.py`` (``test_sienna_main_import_and_server_creation_are_r2x_free``).
+the SIENNA import regression test.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer as FastMCP
+
+from powermcp.sandbox import PathNotAllowed, checked_path
 
 R2X_NOT_INSTALLED_MESSAGE = (
     "r2x is not installed. Install the 'sienna' extra "
@@ -39,7 +41,10 @@ def load_system(psy_json_path: str) -> dict[str, Any]:
     """Load a Sienna system from native PowerSystems.jl JSON or r2x System JSON.
     Native JSON is the artifact consumed by run_sienna_solve; r2x JSON is used by r2x translation tools.
     """
-    path = Path(psy_json_path).expanduser()
+    try:
+        path = Path(checked_path(psy_json_path, purpose="SIENNA system input"))
+    except PathNotAllowed as exc:
+        return {"ok": False, "error_type": "path_not_allowed", "message": str(exc)}
     if not path.is_file():
         return {"ok": False, "error_type": "file_not_found", "message": f"PSY JSON file not found: {path}", "path": str(path)}
     try:
