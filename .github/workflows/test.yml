@@ -52,7 +52,7 @@ jobs:
           HOPE/tests
           PSCAD/tests
           PLEXOSDB/tests
-          surge/test_integration.py -q
+          surge/test_integration.py -q -rs
 
   powerfactory-wheel-catalogs:
     name: PowerFactory catalog wheel smoke test
