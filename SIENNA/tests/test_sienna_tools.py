@@ -175,7 +175,8 @@ class TestLoadNativeSystem(unittest.TestCase):
         self.tmp = self.tmp_dir / "native_psy.json"
         self.tmp.write_text(json.dumps({"data": {"components": {"ACBus": {"1": {"name": "bus-1"}}, "PowerLoad": {"2": {"name": "load-1"}}}, "time_series": {}, "metadata": {"version": "test"}}, "data_format_version": "5.12", "frequency": 60.0, "units_settings": {}, "runchecks": True}))
     def tearDown(self):
-        self.tmp.unlink(missing_ok=True)
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
     def test_load_native_powersystems_json(self):
         from sienna_mcp.tools.system_tools import load_system
         result = load_system(str(self.tmp))
