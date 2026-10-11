@@ -36,40 +36,76 @@ def test_leei_must_be_a_file(tmp_path):
     assert "LEEI" in result["missing"]
 
 
-def test_parser_matches_narp_table12_pool_and_table13_layouts(tmp_path):
+def test_parser_matches_upstream_narp_output_excerpt(tmp_path):
+    # Excerpted from Breakthrough-Energy/reliability-assessment's MIT-licensed
+    # reliabilityassessment/integration_test/output_python.txt.
     path = tmp_path / "output.txt"
     path.write_text(
         """
 TABLE 12
-  1  AV       1.00   2.00   3.00   4.00   5.00  GC
-  2  AV       6.00   7.00   8.00   9.00  10.00  TC
-  3  AV      11.00  12.00  13.00  14.00  15.00  GT
-POOL STATISTICS
-  AV          16.00  17.00  18.00  19.00  20.00  GC
-  AV          21.00  22.00  23.00  24.00  25.00  TC
-  AV          26.00  27.00  28.00  29.00  30.00  GT
-TABLE 13
-  A1          100  120  20  1.5  4.0  5.0  2.5  6.0  3.5
-  CUSTOM_AREA 200  250  25  2.0  7.0  8.0  4.0  9.0  5.0
-  ERCOT       300  400  10  3.0  9.0 10.0  5.0 12.0  6.0
+
+             FINAL RESULTS AFTER 3549 REPLICATIONS
+
+  AREA FORECAST    HOURLY STATISTICS            PEAK STATISTICS           REMARKS
+  NO   NO        HLOLE    XLOL       EUE       LOLE      XLOL
+                (HRS/YR)  (MW)      (MWH)     (DAYS/YR)  (MW)
+   1  AV        0.09    130.54        11        0.03    134.15            GC
+   1  AV        0.34    109.04        37        0.07    120.08            TC
+   1  AV        0.43    113.42        49        0.10    124.41            GT
+
+   2  AV        0.08    100.55         8        0.02    115.48            GC
+   2  AV        0.00      0.00         0        0.00      0.00            TC
+   2  AV        0.08    100.55         8        0.02    115.48            GT
+
+   3  AV        0.08    121.87        10        0.03    118.08            GC
+   3  AV        0.41    110.53        45        0.08    113.27            TC
+   3  AV        0.49    112.42        55        0.11    114.46            GT
+
+   4  AV        0.10    127.34        12        0.03    125.80            GC
+   4  AV        0.35    107.82        38        0.07    128.25            TC
+   4  AV        0.44    112.04        50        0.10    127.52            GT
+
+   5  AV        0.09    123.54        11        0.03    113.22            GC
+   5  AV        0.31    101.56        32        0.06    121.36            TC
+   5  AV        0.40    106.57        43        0.09    118.72            GT
+
+           POOL STATISTICS
+
+      AV       0.001    252.00         0       0.000    195.00            GC
+      AV       0.000      1.00         0       0.000      0.00            TC
+      AV       0.001    168.33         0       0.000    195.00            GT
+
+TABLE   13
+
+          AREA       PEAK        INSTALLED   AREA           HLOLE                   EUE                LOLE
+                                                       ----------------        ----------------     ----------------
+                                 CAPACITY    PCT RES   MAGN      PCT SD        MAGN      PCT SD     MAGN      PCT SD
+          A1          3000         3405      13.5       0.430      2.499          49          4     0.102     5.229
+          A2          3000         3405      13.5       0.078      5.891           8          9     0.023    10.915
+          A3          3000         3405      13.5       0.491      2.406          55          3     0.113     4.981
+          A4          3000         3405      13.5       0.444      2.537          50          4     0.101     5.270
+          A5          3000         3405      13.5       0.402      2.584          43          4     0.093     5.449
+
+          ERCOT      15000        17025      13.5       0.001    3858.468           0       3723     0.000   3889.730
+
+TABLE 14
 """,
         encoding="utf-8",
     )
     result = parse_output(str(path))
 
-    assert len(result["table_12"]) == 3
-    assert [row["remark"] for row in result["table_12"]] == ["GC", "TC", "GT"]
+    assert len(result["table_12"]) == 15
+    assert [row["remark"] for row in result["table_12"][:3]] == ["GC", "TC", "GT"]
     assert len(result["pool"]) == 3
-    assert result["pool"][0]["label"] == "AV"
-    assert result["pool"][2]["LOLE"] == 29.0
-    assert result["summary"]["A1"]["HLOLE"] == 1.5
-    assert result["summary"]["A1"]["HLOLE_pct_sd"] == 4.0
-    assert result["summary"]["A1"]["EUE"] == 5.0
-    assert result["summary"]["A1"]["EUE_pct_sd"] == 2.5
-    assert result["summary"]["A1"]["LOLE"] == 6.0
-    assert result["summary"]["A1"]["LOLE_pct_sd"] == 3.5
-    assert result["summary"]["CUSTOM_AREA"]["LOLE"] == 9.0
-    assert result["summary"]["ERCOT"]["LOLE_pct_sd"] == 6.0
+    assert [row["remark"] for row in result["pool"]] == ["GC", "TC", "GT"]
+    assert result["pool"][0]["HLOLE"] == 0.001
+    assert result["summary"]["A1"]["HLOLE"] == 0.430
+    assert result["summary"]["A1"]["HLOLE_pct_sd"] == 2.499
+    assert result["summary"]["A1"]["EUE"] == 49.0
+    assert result["summary"]["A1"]["EUE_pct_sd"] == 4.0
+    assert result["summary"]["A1"]["LOLE"] == 0.102
+    assert result["summary"]["A1"]["LOLE_pct_sd"] == 5.229
+    assert set(result["summary"]) == {"A1", "A2", "A3", "A4", "A5", "ERCOT"}
 
 
 def test_table13_24_step_layout_maps_five_columns_to_lole(tmp_path):
