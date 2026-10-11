@@ -1,0 +1,150 @@
+Evidence ID: FT-23
+Title: EvEMTBench round-rotor synchronous-machine creation
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0097
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. The PowerFactory account identifier is replaced
+with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Grid: MCP Round Rotor Grid 20261011
+- Bus: MCP Round Rotor Bus 10.5 20261011, 10.5 kV
+- Requested machine state: out of service
+
+Automated regression validation:
+- 127 PowerFactory unit tests passed
+- The structured-result regression test requires PowerFactory object
+  serialization to remain on the object's owning PowerFactory thread
+- git diff --check completed without whitespace errors
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Read-only creation preview:
+create_evemtbench_synchronous_machine was called with:
+- machine_type: round_rotor
+- rated_power_mva: 100
+- machine_name: MCP Round Rotor Gen 100 R6
+- type_name: MCP Round Rotor Type 100 R6
+- bus_name: MCP Round Rotor Bus 10.5 20261011
+- grid_name: MCP Round Rotor Grid 20261011
+- seed: 42
+- active_power_mw: 60
+- reactive_power_mvar: 5
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, type_created=false, and
+machine_created=false. It identified catalog
+evemtbench-synchronous-machines-table-13-v1 and attributed the sampled values
+to Table 13. The exact returned confirmation phrase was:
+CREATE MCP Round Rotor Gen 100 R6 WITH MCP Round Rotor Type 100 R6 round_rotor 100MVA 10.5kV seed=42
+
+Time-constant mapping:
+The paper's sampled short-circuit time constants were 0.818575, 0.389068,
+0.039497, and 0.023624 seconds for td', tq', td'', and tq''. PowerFactory's
+writable open-circuit attributes were calculated from the sampled reactances:
+- tds0: 9.449931833771375 s
+- tqs0: 4.712385330291173 s
+- tdss0: 0.05095381066281589 s
+- tqss0: 0.028039054702174493 s
+
+The preview separately reported the four paper values as derived PowerFactory
+attributes tds, tqs, tdss, and tqss.
+
+Confirmed creation and structured response:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, type_created=true, and
+machine_created=true. It reported creation of:
+- \<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type
+  Library.IntPrjfolder\Generator Types.IntPrjfolder\MCP Round Rotor Type 100
+  R6.TypSym
+- \<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network
+  Data.IntPrjfolder\MCP Round Rotor Grid 20261011.ElmNet\MCP Round Rotor Gen
+  100 R6.ElmSym
+
+The complete response was saved by the MCP client because it exceeded the
+inline output limit. A subsequent read of that saved response recovered the
+following exact result fields. The type retained the sampled rating,
+reactances, resistance, saturation, sequence, capability, and time-constant
+attributes. Selected values were:
+- iturbo: 1
+- sgn: 100.0 MVA
+- ugn: 10.5 kV
+- cosn: 0.8382620215415955
+- rstr: 0.0033179998863488436 p.u.
+- xl: 0.113511 p.u.
+- xd/xq: 2.5783538818359375 / 2.4949960708618164 p.u.
+- xds/xqs: 0.22334299981594086 / 0.20599399507045746 p.u.
+- xdss/xqss: 0.1731249988079071 / 0.17355799674987793 p.u.
+- tds0/tqs0: 9.449932098388672 / 4.712385177612305 s
+- tdss0/tqss0: 0.050953809171915054 / 0.028039054945111275 s
+
+The retained derived attributes matched the paper's sampled short-circuit
+constants within normal PowerFactory single-precision readback:
+- tds: 0.8185750246047974 s
+- tqs: 0.38906797766685486 s
+- tdss: 0.03949699550867081 s
+- tqss: 0.023624001070857048 s
+
+The response returned these retained element attributes:
+- typ_id: \<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type
+  Library.IntPrjfolder\Generator Types.IntPrjfolder\MCP Round Rotor Type 100
+  R6.TypSym
+- pgini: 60.0 MW
+- qgini: 5.0 MVAr
+- outserv: 1
+
+The typ_id value was a plain full-name string. It was not a live DataObject,
+PowerFactory display markup, or another non-JSON value. This validates that
+structured result sanitization ran on the dedicated PowerFactory thread before
+the response crossed the MCP boundary. Earlier confirmed calls created their
+objects but failed while returning a live PowerFactory type reference.
+
+Independent type readback:
+get_parameters returned exactly one object for
+MCP Round Rotor Type 100 R6.TypSym. It retained the open-circuit and derived
+short-circuit time constants listed above, along with iturbo=1, sgn=100.0,
+and ugn=10.5.
+
+Independent element readback:
+get_parameters returned exactly one object for
+MCP Round Rotor Gen 100 R6.ElmSym. It retained the created TypSym reference,
+the StaCubic reference below MCP Round Rotor Bus 10.5 20261011, pgini=60.0,
+qgini=5.0, and outserv=1. PowerFactory rendered object-valued attributes in
+this separate inspection response with <l3> display markup; that does not
+alter the plain full-name string in the confirmed creation response.
+
+The final ping returned pong, confirming that the MCP server remained healthy
+after creation and serialization.
+
+Incidental request:
+Before the requested PowerFactory sequence, the MCP client attempted one
+PowerMCP-PSCAD quit_pscad call. PSCAD was not connected, so no PSCAD operation
+ran and the call did not alter the PowerFactory validation sequence.
+
+Conclusion and limits:
+This run validates deterministic Table 13 round-rotor sampling, the preview
+and exact-confirmation boundary, correct conversion to PowerFactory's writable
+open-circuit time constants, retained derived short-circuit constants,
+creation of a project TypSym and connected ElmSym, retained type assignment,
+terminal connection, operating point, safe out-of-service state, and
+thread-safe JSON serialization of the live type reference on PowerFactory
+2026 SP1.
+
+The salient-pole profile remains catalog-only because the paper omits q-axis
+transient data needed for this creator. No in-service energization, load flow,
+short-circuit calculation, dynamic simulation, graphical-layout update,
+PowerFactory 2026 SP4 validation, or independent revision verification was
+performed.

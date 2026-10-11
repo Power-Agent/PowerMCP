@@ -1,0 +1,118 @@
+Evidence ID: FT-18
+Title: Greenfield grid bootstrap activation and idempotent reuse
+Date: 10 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0083
+
+Provenance:
+The contributor supplied automated-test output and individual MCP client
+responses from the PowerFactory development PC. This is not a continuous
+terminal capture. The tested working tree had not yet been committed, and no
+independent byte-for-byte revision comparison was performed. The PowerFactory
+account identifier is replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Existing inactive grid: MCP Bootstrap Grid, 50 Hz
+- Existing buses: MCP Bootstrap HV 110 and MCP Bootstrap MV 20
+- Both buses configured out of service for validation
+
+Automated validation before the live test:
+- 98 tests passed
+- 31 subtests passed
+- elapsed time: 1.25 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+The response confirms that the existing case was activated. No study case was
+created or copied.
+
+Read-only bootstrap preview:
+create_grid_with_buses was called with:
+- grid_name: MCP Bootstrap Grid
+- nominal_frequency_hz: 50
+- MCP Bootstrap HV 110: 110 kV, out_of_service=true
+- MCP Bootstrap MV 20: 20 kV, out_of_service=true
+- confirmation: empty
+
+The preview returned:
+- success: true
+- applied: false
+- grid_created: false
+- grid_activated: false
+- grid_will_be_created: false
+- grid_will_be_activated: true
+- buses_created: 0
+- buses_to_create: empty
+- reused_buses: both requested buses
+
+The exact returned confirmation phrase was:
+CREATE GRID MCP Bootstrap Grid 50Hz WITH 2 BUSES plan=765f01c77e76
+
+Confirmed activation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, grid_created=false,
+grid_activated=true, buses_created=0, and the message:
+Activated existing grid 'MCP Bootstrap Grid'
+
+The returned grid was:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network Data.IntPrjfolder\MCP Bootstrap Grid.ElmNet
+
+Calculation-relevance verification:
+list_objects(object_query="MCP Bootstrap Grid.ElmNet", max_results=10)
+returned success=true, total_count=1, and returned_count=1. The single object
+was MCP Bootstrap Grid.ElmNet at the expected project path. This closes the
+earlier validation failure in which the created but inactive grid was absent
+from calculation-relevant lookup.
+
+Grid readback:
+get_parameters returned one MCP Bootstrap Grid.ElmNet with:
+- loc_name: MCP Bootstrap Grid
+- frnom: 50.0 Hz
+
+Bus readback:
+get_parameters returned one MCP Bootstrap HV 110.ElmTerm with:
+- loc_name: MCP Bootstrap HV 110
+- uknom: 110.0 kV
+- outserv: 1
+
+get_parameters returned one MCP Bootstrap MV 20.ElmTerm with:
+- loc_name: MCP Bootstrap MV 20
+- uknom: 20.0 kV
+- outserv: 1
+
+Idempotency verification:
+The empty-confirmation preview was repeated after activation. It returned:
+- success: true
+- applied: false
+- grid_created: false
+- grid_activated: false
+- grid_will_be_created: false
+- grid_will_be_activated: false
+- buses_created: 0
+- buses_to_create: empty
+- reused_buses: both requested buses
+
+The repeated preview did not create or modify any object.
+
+Unrelated client event:
+Before the requested sequence, the MCP client attempted one unintended
+PowerMCP-PSCAD quit_pscad call. The client reported that the tool execution
+failed. It was not part of this PowerFactory validation and produced no
+successful PSCAD result.
+
+Conclusion and limits:
+This run validates reuse and activation of a project-tree ElmNet, immediate
+calculation-relevant discovery, retained grid frequency and bus attributes,
+and idempotent repeat behavior on PowerFactory 2026 SP1. The grid and buses had
+been created during the preceding bootstrap run; this record validates the
+activation correction rather than repeating first-time creation. No load flow,
+short-circuit calculation, dynamic simulation, diagram creation, equipment
+connection, in-service energization, PowerFactory 2026 SP4 validation, or
+independent revision verification was performed.

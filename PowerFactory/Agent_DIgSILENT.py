@@ -14,7 +14,10 @@ import sys
 import os
 import json
 import csv
+import hashlib
+import inspect
 import math
+import random
 import re
 import time
 from dataclasses import dataclass, field
@@ -216,6 +219,36 @@ class DIgSILENTAgent:
     _create_case_request_cache: dict[str, tuple[bool, str, float]] = {}
     _create_case_request_ttl_sec: int = 3600
     _max_loc_name_length: int = 40
+    _evemtbench_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_transformers.json",
+    )
+    _evemtbench_line_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_overhead_lines.json",
+    )
+    _evemtbench_cable_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_underground_cables.json",
+    )
+    _evemtbench_external_grid_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_external_grids.json",
+    )
+    _evemtbench_load_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_loads.json",
+    )
+    _evemtbench_synchronous_machine_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_synchronous_machines.json",
+    )
     _component_specs = {
         "bus": {
             "class_name": "ElmTerm",
@@ -882,6 +915,111 @@ class DIgSILENTAgent:
     # ──────────────────────────────────────────────────────────────
 
     @classmethod
+    def export_active_grid_pdf(
+        cls,
+        file_path: str,
+        diagram_name: str = "",
+        open_digsilent: bool = True,
+    ) -> tuple[bool, str]:
+        """Export one single-line diagram from the active project as PDF."""
+        try:
+            file_path = checked_path(
+                file_path,
+                purpose="file_path",
+                for_write=True,
+            )
+            if not file_path.lower().endswith(".pdf"):
+                raise RuntimeError("file_path must end with .pdf")
+            if os.path.exists(file_path):
+                raise RuntimeError(f"Output file already exists: {file_path}")
+
+            parent = os.path.dirname(file_path) or os.curdir
+            if not os.path.isdir(parent):
+                raise RuntimeError(f"Output directory not found: {parent}")
+
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            graphics_board = app.GetGraphicsBoard()
+            if graphics_board is None:
+                raise RuntimeError("PowerFactory Graphics Board is unavailable")
+
+            pages = list(graphics_board.GetContents("*.SetDeskpage") or [])
+            named_pages = []
+            for page in pages:
+                try:
+                    name = str(page.GetAttribute("loc_name"))
+                except Exception:
+                    name = str(getattr(page, "loc_name", ""))
+                named_pages.append((name, page))
+
+            requested_name = str(diagram_name or "").strip()
+            if requested_name:
+                matches = [
+                    page
+                    for name, page in named_pages
+                    if name == requested_name
+                ]
+                if not matches:
+                    available = ", ".join(
+                        sorted(name for name, _ in named_pages if name)
+                    ) or "none"
+                    raise RuntimeError(
+                        f"Diagram not found: {requested_name}. "
+                        f"Available diagrams: {available}"
+                    )
+                if len(matches) > 1:
+                    raise RuntimeError(
+                        f"Multiple diagrams matched: {requested_name}"
+                    )
+                selected_page = matches[0]
+                selected_name = requested_name
+            else:
+                if not named_pages:
+                    raise RuntimeError(
+                        "No single-line diagram is available in the Graphics Board"
+                    )
+                if len(named_pages) > 1:
+                    available = ", ".join(
+                        sorted(name for name, _ in named_pages if name)
+                    )
+                    raise RuntimeError(
+                        "Multiple single-line diagrams are available; provide "
+                        f"diagram_name. Available diagrams: {available}"
+                    )
+                selected_name, selected_page = named_pages[0]
+
+            graphics_board.Show(selected_page)
+
+            export_command = app.GetFromStudyCase("ComWr")
+            if export_command is None:
+                raise RuntimeError("ComWr export command is unavailable")
+            export_command.SetAttribute("iopt_rd", "pdf")
+            export_command.SetAttribute("iopt_savas", 0)
+            export_command.SetAttribute("f", file_path)
+
+            export_code = export_command.Execute()
+            if export_code not in (None, 0):
+                raise RuntimeError(
+                    f"ComWr.Execute() returned error code {export_code}"
+                )
+            if not os.path.isfile(file_path):
+                raise RuntimeError(
+                    "ComWr reported success but did not create the PDF file"
+                )
+
+            log.ok(f"Grid diagram exported to PDF → {file_path}")
+            return True, (
+                f"Grid diagram '{selected_name}' exported to {file_path}"
+            )
+        except Exception as exc:
+            log.error(f"Grid PDF export failed: {exc}")
+            return False, str(exc)
+
+    @classmethod
     def import_project(cls, file_path: str, open_digsilent: bool = True) -> tuple[bool, str]:
         """
         Import a .pfd project file into PowerFactory and activate it.
@@ -1034,6 +1172,3211 @@ class DIgSILENTAgent:
             == requested.casefold()
         ]
 
+    @classmethod
+    def _load_evemtbench_database(cls):
+        """Load and validate the versioned transformer source database."""
+        with open(cls._evemtbench_database_file, "r", encoding="utf-8") as stream:
+            database = json.load(stream)
+
+        if database.get("schema_version") != 1:
+            raise RuntimeError("Unsupported EvEMTBench database schema")
+        classes = database.get("classes")
+        vector_groups = database.get("vector_groups")
+        if not isinstance(classes, dict) or not classes:
+            raise RuntimeError("EvEMTBench database has no transformer classes")
+        if not isinstance(vector_groups, dict) or not vector_groups:
+            raise RuntimeError("EvEMTBench database has no vector groups")
+        frequencies = database.get("sampling", {}).get(
+            "nominal_frequencies_hz"
+        )
+        if frequencies != [50.0, 60.0]:
+            raise RuntimeError("EvEMTBench database has invalid frequencies")
+
+        def validate_spec(spec, label):
+            if not isinstance(spec, dict):
+                raise RuntimeError(f"Invalid numeric specification: {label}")
+            if set(spec) == {"value"}:
+                values = (spec["value"],)
+            elif set(spec) == {"min", "max"}:
+                values = (spec["min"], spec["max"])
+                if float(values[0]) > float(values[1]):
+                    raise RuntimeError(f"Invalid interval ordering: {label}")
+            else:
+                raise RuntimeError(f"Invalid numeric specification: {label}")
+            if any(
+                isinstance(value, bool) or not math.isfinite(float(value))
+                for value in values
+            ):
+                raise RuntimeError(f"Non-finite database value: {label}")
+
+        parameter_names = (
+            "short_circuit_voltage_pct",
+            "winding_losses_kw",
+            "no_load_losses_kw",
+            "no_load_current_pct",
+        )
+        for class_name, transformer_class in classes.items():
+            for voltage_name in ("high_voltage_kv", "low_voltage_kv"):
+                voltage = transformer_class.get(voltage_name)
+                if (
+                    isinstance(voltage, bool)
+                    or not math.isfinite(float(voltage))
+                    or float(voltage) <= 0
+                ):
+                    raise RuntimeError(
+                        f"Invalid {voltage_name} for transformer class {class_name}"
+                    )
+            ratings = transformer_class.get("ratings")
+            if not isinstance(ratings, list) or not ratings:
+                raise RuntimeError(
+                    f"No ratings for transformer class {class_name}"
+                )
+            seen_ratings = set()
+            for index, rating in enumerate(ratings):
+                rated_power = float(rating.get("rated_power_mva"))
+                if not math.isfinite(rated_power) or rated_power <= 0:
+                    raise RuntimeError(
+                        f"Invalid rating for transformer class {class_name}"
+                    )
+                if rated_power in seen_ratings:
+                    raise RuntimeError(
+                        f"Duplicate rating for transformer class {class_name}: "
+                        f"{rated_power:g}"
+                    )
+                seen_ratings.add(rated_power)
+                for parameter_name in parameter_names:
+                    validate_spec(
+                        rating.get(parameter_name),
+                        f"{class_name}.ratings[{index}].{parameter_name}",
+                    )
+                groups = rating.get("vector_groups")
+                if not isinstance(groups, list) or not groups:
+                    raise RuntimeError(
+                        f"No vector group for {class_name} rating {rated_power:g}"
+                    )
+                unknown = sorted(set(groups) - set(vector_groups))
+                if unknown:
+                    raise RuntimeError(
+                        f"Unknown vector group(s): {', '.join(unknown)}"
+                    )
+        return database
+
+    @classmethod
+    def _load_evemtbench_sequence_database(cls, path: str, label: str):
+        """Load and validate a versioned line/cable sequence database."""
+        with open(path, "r", encoding="utf-8") as stream:
+            database = json.load(stream)
+
+        if database.get("schema_version") != 1:
+            raise RuntimeError(
+                f"Unsupported EvEMTBench {label} database schema"
+            )
+        if database.get("nominal_frequencies_hz") != [50.0, 60.0]:
+            raise RuntimeError(
+                f"EvEMTBench {label} database has invalid frequencies"
+            )
+        profiles = database.get("profiles")
+        if profiles != ["p05", "p50", "p95"]:
+            raise RuntimeError(
+                f"EvEMTBench {label} database has invalid profiles"
+            )
+        classes = database.get("classes")
+        if not isinstance(classes, dict) or not classes:
+            raise RuntimeError(
+                f"EvEMTBench {label} database has no voltage classes"
+            )
+
+        parameter_names = (
+            "r1_ohm_per_km",
+            "x1_ohm_per_km",
+            "c1_nf_per_km",
+            "r0_ohm_per_km",
+            "x0_ohm_per_km",
+            "c0_nf_per_km",
+        )
+        for class_name, line_class in classes.items():
+            voltage = float(line_class.get("nominal_voltage_kv"))
+            if not math.isfinite(voltage) or voltage <= 0:
+                raise RuntimeError(
+                    f"Invalid nominal voltage for line class {class_name}"
+                )
+            length = line_class.get("length_km")
+            if (
+                not isinstance(length, dict)
+                or set(length) != {"min", "max"}
+                or float(length["min"]) <= 0
+                or float(length["min"]) > float(length["max"])
+            ):
+                raise RuntimeError(
+                    f"Invalid length range for line class {class_name}"
+                )
+            electrical = line_class.get("electrical_profiles")
+            if not isinstance(electrical, dict) or list(electrical) != profiles:
+                raise RuntimeError(
+                    f"Invalid electrical profiles for line class {class_name}"
+                )
+            for profile_name, profile in electrical.items():
+                if set(profile) != set(parameter_names):
+                    raise RuntimeError(
+                        f"Invalid {profile_name} fields for line class "
+                        f"{class_name}"
+                    )
+                if any(
+                    not math.isfinite(float(profile[name]))
+                    or float(profile[name]) < 0
+                    for name in parameter_names
+                ):
+                    raise RuntimeError(
+                        f"Invalid {profile_name} values for line class "
+                        f"{class_name}"
+                    )
+        return database
+
+    @classmethod
+    def _load_evemtbench_line_database(cls):
+        """Load and validate the versioned overhead-line source database."""
+        return cls._load_evemtbench_sequence_database(
+            cls._evemtbench_line_database_file,
+            "line",
+        )
+
+    @classmethod
+    def _load_evemtbench_cable_database(cls):
+        """Load and validate the versioned underground-cable database."""
+        return cls._load_evemtbench_sequence_database(
+            cls._evemtbench_cable_database_file,
+            "cable",
+        )
+
+    @classmethod
+    def _load_evemtbench_external_grid_database(cls):
+        """Load and validate the versioned external-grid source database."""
+        with open(
+            cls._evemtbench_external_grid_database_file,
+            "r",
+            encoding="utf-8",
+        ) as stream:
+            database = json.load(stream)
+
+        if database.get("schema_version") != 1:
+            raise RuntimeError(
+                "Unsupported EvEMTBench external-grid database schema"
+            )
+        classes = database.get("classes")
+        if not isinstance(classes, dict) or not classes:
+            raise RuntimeError(
+                "EvEMTBench external-grid database has no voltage classes"
+            )
+        parameters = (
+            "short_circuit_power_mva",
+            "positive_sequence_r_x",
+            "x0_x1",
+            "zero_sequence_r_x",
+            "voltage_setpoint_pu",
+            "initial_phase_angle_deg",
+        )
+        seen_voltages = set()
+        for class_name, source_class in classes.items():
+            voltages = source_class.get("nominal_voltages_kv")
+            if not isinstance(voltages, list) or not voltages:
+                raise RuntimeError(
+                    f"No nominal voltages for external-grid class {class_name}"
+                )
+            for raw_voltage in voltages:
+                voltage = float(raw_voltage)
+                if not math.isfinite(voltage) or voltage <= 0:
+                    raise RuntimeError(
+                        f"Invalid nominal voltage for external-grid class "
+                        f"{class_name}"
+                    )
+                if voltage in seen_voltages:
+                    raise RuntimeError(
+                        f"Duplicate external-grid voltage: {voltage:g}"
+                    )
+                seen_voltages.add(voltage)
+            for parameter in parameters:
+                interval = source_class.get(parameter)
+                if (
+                    not isinstance(interval, dict)
+                    or set(interval) != {"min", "max"}
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for external-grid "
+                        f"class {class_name}"
+                    )
+                lower = float(interval["min"])
+                upper = float(interval["max"])
+                if (
+                    not math.isfinite(lower)
+                    or not math.isfinite(upper)
+                    or lower > upper
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for external-grid "
+                        f"class {class_name}"
+                    )
+                if parameter != "initial_phase_angle_deg" and lower <= 0:
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for external-grid "
+                        f"class {class_name}"
+                    )
+        return database
+
+    @classmethod
+    def _load_evemtbench_load_database(cls):
+        """Load and validate the versioned Table 5 load database."""
+        with open(
+            cls._evemtbench_load_database_file,
+            "r",
+            encoding="utf-8",
+        ) as stream:
+            database = json.load(stream)
+
+        if database.get("schema_version") != 1:
+            raise RuntimeError("Unsupported EvEMTBench load database schema")
+        classes = database.get("classes")
+        if not isinstance(classes, dict) or not classes:
+            raise RuntimeError("EvEMTBench load database has no voltage classes")
+        seen_voltages = set()
+        for class_name, load_class in classes.items():
+            voltage = float(load_class.get("nominal_voltage_kv"))
+            if not math.isfinite(voltage) or voltage <= 0:
+                raise RuntimeError(
+                    f"Invalid nominal voltage for load class {class_name}"
+                )
+            if voltage in seen_voltages:
+                raise RuntimeError(f"Duplicate load voltage: {voltage:g}")
+            seen_voltages.add(voltage)
+
+            if voltage == 20.0:
+                intervals = ("apparent_power_mva",)
+            else:
+                intervals = (
+                    "active_power_mw",
+                    "reactive_power_mvar",
+                )
+            for parameter in intervals:
+                interval = load_class.get(parameter)
+                if (
+                    not isinstance(interval, dict)
+                    or set(interval) != {"min", "max"}
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for load class "
+                        f"{class_name}"
+                    )
+                lower = float(interval["min"])
+                upper = float(interval["max"])
+                if (
+                    not math.isfinite(lower)
+                    or not math.isfinite(upper)
+                    or lower < 0
+                    or lower > upper
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for load class "
+                        f"{class_name}"
+                    )
+
+        power_factor = database.get("twenty_kv_power_factor")
+        if not isinstance(power_factor, dict):
+            raise RuntimeError("EvEMTBench load database has no power factor")
+        inductive = float(power_factor.get("inductive_min"))
+        capacitive = float(power_factor.get("capacitive_min"))
+        if not 0 < inductive <= 1 or not 0 < capacitive <= 1:
+            raise RuntimeError("EvEMTBench load database has invalid power factor")
+        return database
+
+    @classmethod
+    def _load_evemtbench_synchronous_machine_database(cls):
+        """Load and validate the versioned Table 13 machine catalog."""
+        with open(
+            cls._evemtbench_synchronous_machine_database_file,
+            "r",
+            encoding="utf-8",
+        ) as stream:
+            database = json.load(stream)
+
+        if database.get("schema_version") != 1:
+            raise RuntimeError(
+                "Unsupported EvEMTBench synchronous-machine database schema"
+            )
+        classes = database.get("classes")
+        if not isinstance(classes, dict) or set(classes) != {
+            "salient_pole",
+            "round_rotor",
+        }:
+            raise RuntimeError(
+                "EvEMTBench synchronous-machine database must contain "
+                "salient_pole and round_rotor classes"
+            )
+        for class_name, profile in classes.items():
+            for parameter in (
+                "rated_apparent_power_mva",
+                "rated_power_factor",
+            ):
+                interval = profile.get(parameter)
+                if (
+                    not isinstance(interval, dict)
+                    or set(interval) != {"min", "max"}
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for synchronous-machine "
+                        f"class {class_name}"
+                    )
+                lower = float(interval["min"])
+                upper = float(interval["max"])
+                if (
+                    not math.isfinite(lower)
+                    or not math.isfinite(upper)
+                    or lower <= 0
+                    or lower > upper
+                ):
+                    raise RuntimeError(
+                        f"Invalid {parameter} interval for synchronous-machine "
+                        f"class {class_name}"
+                    )
+            if not isinstance(profile.get("parameters"), dict):
+                raise RuntimeError(
+                    f"Synchronous-machine class {class_name} has no parameters"
+                )
+        rules = database.get("rated_voltage_rule")
+        if not isinstance(rules, list) or len(rules) != 4:
+            raise RuntimeError(
+                "EvEMTBench synchronous-machine voltage rule is invalid"
+            )
+        return database
+
+    @classmethod
+    def list_evemtbench_line_profiles(
+        cls,
+        voltage_kv: Optional[float] = None,
+        profile: str = "",
+    ) -> dict[str, Any]:
+        """List executable overhead-line profiles without opening PowerFactory."""
+        try:
+            database = cls._load_evemtbench_line_database()
+            requested_profile = str(profile or "").strip().lower()
+            if requested_profile and requested_profile not in database["profiles"]:
+                return {
+                    "success": False,
+                    "message": "profile must be one of: "
+                    + ", ".join(database["profiles"]),
+                }
+
+            if voltage_kv is None:
+                selected = database["classes"]
+            else:
+                if isinstance(voltage_kv, bool):
+                    return {
+                        "success": False,
+                        "message": "voltage_kv must be a number",
+                    }
+                requested_voltage = float(voltage_kv)
+                selected = {
+                    name: value
+                    for name, value in database["classes"].items()
+                    if math.isclose(
+                        float(value["nominal_voltage_kv"]),
+                        requested_voltage,
+                    )
+                }
+                if not selected:
+                    available = ", ".join(database["classes"])
+                    return {
+                        "success": False,
+                        "message": "voltage_kv must be one of: " + available,
+                    }
+
+            results = []
+            for class_name, line_class in selected.items():
+                item = {
+                    "voltage_class": class_name,
+                    "nominal_voltage_kv": line_class["nominal_voltage_kv"],
+                    "length_km": line_class["length_km"],
+                    "electrical_profiles": line_class["electrical_profiles"],
+                }
+                if requested_profile:
+                    item["electrical_profiles"] = {
+                        requested_profile: line_class["electrical_profiles"][
+                            requested_profile
+                        ]
+                    }
+                if "rated_current_guidance_ka" in line_class:
+                    item["rated_current_guidance_ka"] = line_class[
+                        "rated_current_guidance_ka"
+                    ]
+                results.append(item)
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "overhead_line_sequence_equivalent",
+                "nominal_frequencies_hz": database[
+                    "nominal_frequencies_hz"
+                ],
+                "returned_count": len(results),
+                "results": results,
+                "powerfactory": database["powerfactory"],
+                "catalog_only": database["catalog_only"],
+            }
+        except (TypeError, ValueError):
+            return {"success": False, "message": "voltage_kv must be a number"}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def list_evemtbench_cable_profiles(
+        cls,
+        profile: str = "",
+    ) -> dict[str, Any]:
+        """List executable 20 kV cable profiles without PowerFactory."""
+        try:
+            database = cls._load_evemtbench_cable_database()
+            requested_profile = str(profile or "").strip().lower()
+            if requested_profile and requested_profile not in database["profiles"]:
+                return {
+                    "success": False,
+                    "message": "profile must be one of: "
+                    + ", ".join(database["profiles"]),
+                }
+
+            cable_class = database["classes"]["20"]
+            electrical = cable_class["electrical_profiles"]
+            if requested_profile:
+                electrical = {requested_profile: electrical[requested_profile]}
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "underground_cable_sequence_equivalent",
+                "nominal_frequencies_hz": database[
+                    "nominal_frequencies_hz"
+                ],
+                "returned_count": 1,
+                "results": [{
+                    "voltage_class": "20",
+                    "nominal_voltage_kv": cable_class["nominal_voltage_kv"],
+                    "length_km": cable_class["length_km"],
+                    "electrical_profiles": electrical,
+                }],
+                "construction": database["construction"],
+                "powerfactory": database["powerfactory"],
+                "catalog_only": database["catalog_only"],
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def _evemtbench_line_plan(
+        cls,
+        voltage_kv: float,
+        nominal_frequency_hz: float,
+        rated_current_ka: float,
+        profile: str,
+        type_name: str,
+    ):
+        database = cls._load_evemtbench_line_database()
+        class_name, line_class = next(
+            (
+                (name, value)
+                for name, value in database["classes"].items()
+                if math.isclose(
+                    float(value["nominal_voltage_kv"]),
+                    voltage_kv,
+                )
+            ),
+            (None, None),
+        )
+        if line_class is None:
+            raise RuntimeError(
+                "voltage_kv must be one of: "
+                + ", ".join(database["classes"])
+            )
+        if profile not in database["profiles"]:
+            raise RuntimeError(
+                "profile must be one of: " + ", ".join(database["profiles"])
+            )
+        values = line_class["electrical_profiles"][profile]
+        capacitance_factor = float(
+            database["powerfactory"]["capacitance_conversion_factor"]
+        )
+        attributes = {
+            "uline": voltage_kv,
+            "sline": rated_current_ka,
+            "frnom": nominal_frequency_hz,
+            "rline": float(values["r1_ohm_per_km"]),
+            "xline": float(values["x1_ohm_per_km"]),
+            "cline": float(values["c1_nf_per_km"]) * capacitance_factor,
+            "rline0": float(values["r0_ohm_per_km"]),
+            "xline0": float(values["x0_ohm_per_km"]),
+            "cline0": float(values["c0_nf_per_km"]) * capacitance_factor,
+        }
+        return class_name, line_class, {
+            "name": type_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": line_class["source_tables"],
+            "profile": profile,
+            "parameters": {
+                "nominal_voltage_kv": voltage_kv,
+                "nominal_frequency_hz": nominal_frequency_hz,
+                "rated_current_ka": rated_current_ka,
+                **values,
+            },
+            "powerfactory_attributes": attributes,
+            "capacitance_conversion": "nF/km to uF/km (multiply by 0.001)",
+            "model": database["powerfactory"]["model"],
+        }
+
+    @classmethod
+    def _evemtbench_cable_plan(
+        cls,
+        voltage_kv: float,
+        nominal_frequency_hz: float,
+        rated_current_ka: float,
+        profile: str,
+        type_name: str,
+    ):
+        database = cls._load_evemtbench_cable_database()
+        cable_class = database["classes"].get("20")
+        if cable_class is None or not math.isclose(voltage_kv, 20.0):
+            raise RuntimeError("voltage_kv must be 20 for underground cables")
+        if profile not in database["profiles"]:
+            raise RuntimeError(
+                "profile must be one of: " + ", ".join(database["profiles"])
+            )
+        values = cable_class["electrical_profiles"][profile]
+        capacitance_factor = float(
+            database["powerfactory"]["capacitance_conversion_factor"]
+        )
+        attributes = {
+            "uline": 20.0,
+            "sline": rated_current_ka,
+            "frnom": nominal_frequency_hz,
+            "rline": float(values["r1_ohm_per_km"]),
+            "xline": float(values["x1_ohm_per_km"]),
+            "cline": float(values["c1_nf_per_km"]) * capacitance_factor,
+            "rline0": float(values["r0_ohm_per_km"]),
+            "xline0": float(values["x0_ohm_per_km"]),
+            "cline0": float(values["c0_nf_per_km"]) * capacitance_factor,
+        }
+        return "20", cable_class, {
+            "name": type_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": cable_class["source_tables"],
+            "profile": profile,
+            "parameters": {
+                "nominal_voltage_kv": 20.0,
+                "nominal_frequency_hz": nominal_frequency_hz,
+                "rated_current_ka": rated_current_ka,
+                **values,
+            },
+            "powerfactory_attributes": attributes,
+            "capacitance_conversion": "nF/km to uF/km (multiply by 0.001)",
+            "model": database["powerfactory"]["model"],
+            "construction_catalog": database["construction"],
+        }
+
+    @classmethod
+    def list_evemtbench_external_grid_profiles(
+        cls,
+        voltage_kv: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """List executable Table 4 profiles without opening PowerFactory."""
+        try:
+            database = cls._load_evemtbench_external_grid_database()
+            selected = []
+            if voltage_kv is None:
+                selected = list(database["classes"].items())
+            else:
+                if isinstance(voltage_kv, bool):
+                    raise ValueError
+                requested = float(voltage_kv)
+                selected = [
+                    (name, source_class)
+                    for name, source_class in database["classes"].items()
+                    if any(
+                        math.isclose(float(value), requested)
+                        for value in source_class["nominal_voltages_kv"]
+                    )
+                ]
+                if not selected:
+                    available = sorted(
+                        float(value)
+                        for source_class in database["classes"].values()
+                        for value in source_class["nominal_voltages_kv"]
+                    )
+                    return {
+                        "success": False,
+                        "message": "voltage_kv must be one of: "
+                        + ", ".join(f"{value:g}" for value in available),
+                    }
+            results = [
+                {
+                    "voltage_class": class_name,
+                    **source_class,
+                }
+                for class_name, source_class in selected
+            ]
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "external_grid_equivalent",
+                "returned_count": len(results),
+                "results": results,
+                "powerfactory": database["powerfactory"],
+            }
+        except (TypeError, ValueError):
+            return {"success": False, "message": "voltage_kv must be a number"}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def _evemtbench_external_grid_plan(
+        cls,
+        voltage_kv: float,
+        external_grid_name: str,
+        seed: int,
+    ):
+        database = cls._load_evemtbench_external_grid_database()
+        class_name, source_class = next(
+            (
+                (name, value)
+                for name, value in database["classes"].items()
+                if any(
+                    math.isclose(float(candidate), voltage_kv)
+                    for candidate in value["nominal_voltages_kv"]
+                )
+            ),
+            (None, None),
+        )
+        if source_class is None:
+            available = sorted(
+                float(value)
+                for value in (
+                    candidate
+                    for item in database["classes"].values()
+                    for candidate in item["nominal_voltages_kv"]
+                )
+            )
+            raise RuntimeError(
+                "voltage_kv must be one of: "
+                + ", ".join(f"{value:g}" for value in available)
+            )
+        rng = random.Random(seed)
+
+        def sampled(parameter):
+            interval = source_class[parameter]
+            return round(
+                rng.uniform(float(interval["min"]), float(interval["max"])),
+                6,
+            )
+
+        parameters = {
+            "nominal_voltage_kv": voltage_kv,
+            "short_circuit_power_mva": sampled(
+                "short_circuit_power_mva"
+            ),
+            "positive_sequence_r_x": sampled("positive_sequence_r_x"),
+            "x0_x1": sampled("x0_x1"),
+            "zero_sequence_r_x": sampled("zero_sequence_r_x"),
+            "voltage_setpoint_pu": sampled("voltage_setpoint_pu"),
+            "initial_phase_angle_deg": sampled("initial_phase_angle_deg"),
+        }
+        attributes = {
+            "bustp": "SL",
+            "snss": parameters["short_circuit_power_mva"],
+            "rntxn": parameters["positive_sequence_r_x"],
+            "x0tx1": parameters["x0_x1"],
+            "r0tx0": parameters["zero_sequence_r_x"],
+            "usetp": parameters["voltage_setpoint_pu"],
+            "phiini": parameters["initial_phase_angle_deg"],
+        }
+        return class_name, {
+            "name": external_grid_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": database["source"]["tables"],
+            "voltage_class": class_name,
+            "seed": seed,
+            "parameters": parameters,
+            "powerfactory_attributes": attributes,
+            "model": database["powerfactory"]["model"],
+        }
+
+    @classmethod
+    def list_evemtbench_load_profiles(
+        cls,
+        voltage_kv: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """List executable Table 5 load-power profiles."""
+        try:
+            database = cls._load_evemtbench_load_database()
+            classes = database["classes"]
+            if voltage_kv is None:
+                selected = classes.items()
+            else:
+                if isinstance(voltage_kv, bool):
+                    raise ValueError
+                requested = float(voltage_kv)
+                selected = [
+                    (name, profile)
+                    for name, profile in classes.items()
+                    if math.isclose(
+                        float(profile["nominal_voltage_kv"]),
+                        requested,
+                    )
+                ]
+                if not selected:
+                    return {
+                        "success": False,
+                        "message": "voltage_kv must be one of: "
+                        + ", ".join(classes),
+                    }
+            results = [
+                {"voltage_class": name, **profile}
+                for name, profile in selected
+            ]
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "balanced_load",
+                "returned_count": len(results),
+                "results": results,
+                "twenty_kv_power_factor": database[
+                    "twenty_kv_power_factor"
+                ],
+                "powerfactory": database["powerfactory"],
+                "catalog_only": database["catalog_only"],
+            }
+        except (TypeError, ValueError):
+            return {"success": False, "message": "voltage_kv must be a number"}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def list_evemtbench_synchronous_machine_profiles(
+        cls,
+        machine_type: str = "",
+    ) -> dict[str, Any]:
+        """List captured Table 13 profiles without opening PowerFactory."""
+        try:
+            database = cls._load_evemtbench_synchronous_machine_database()
+            requested = str(machine_type or "").strip().lower()
+            classes = database["classes"]
+            if requested and requested not in classes:
+                return {
+                    "success": False,
+                    "message": "machine_type must be one of: "
+                    + ", ".join(classes),
+                }
+            selected = (
+                [(requested, classes[requested])]
+                if requested
+                else classes.items()
+            )
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "synchronous_machine",
+                "returned_count": len(selected),
+                "rated_voltage_rule": database["rated_voltage_rule"],
+                "results": [
+                    {"machine_type": name, **profile}
+                    for name, profile in selected
+                ],
+                "powerfactory": database["powerfactory"],
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def _evemtbench_synchronous_machine_plan(
+        cls,
+        machine_type: str,
+        rated_power_mva: float,
+        type_name: str,
+        seed: int,
+    ):
+        database = cls._load_evemtbench_synchronous_machine_database()
+        if machine_type != "round_rotor":
+            if machine_type == "salient_pole":
+                raise RuntimeError(
+                    "salient_pole is catalog-only because Table 13 does not "
+                    "provide xq transient data"
+                )
+            raise RuntimeError(
+                "machine_type must be one of: round_rotor"
+            )
+
+        profile = database["classes"][machine_type]
+        power_range = profile["rated_apparent_power_mva"]
+        if not (
+            float(power_range["min"])
+            <= rated_power_mva
+            <= float(power_range["max"])
+        ):
+            raise RuntimeError(
+                "rated_power_mva must be between "
+                f"{power_range['min']:g} and {power_range['max']:g} "
+                "for round_rotor"
+            )
+
+        rated_voltage = next(
+            float(rule["rated_voltage_kv"])
+            for rule in database["rated_voltage_rule"]
+            if rule["maximum_rated_power_mva"] is None
+            or rated_power_mva
+            <= float(rule["maximum_rated_power_mva"])
+        )
+        parameters = profile["parameters"]
+        rng = random.Random(seed)
+
+        def sampled(spec, lower=None, upper=None):
+            minimum = float(spec["min"] if lower is None else lower)
+            maximum = float(spec["max"] if upper is None else upper)
+            if minimum > maximum:
+                raise RuntimeError(
+                    "Table 13 dependency constraints produced an empty "
+                    "sampling interval"
+                )
+            return round(rng.uniform(minimum, maximum), 6)
+
+        xdss = sampled(parameters["xd_subtransient_pu"])
+        xqss_multiplier = sampled(
+            parameters[
+                "xq_subtransient_multiplier_of_xd_subtransient"
+            ]
+        )
+        xqss = round(xdss * xqss_multiplier, 6)
+        xds_spec = parameters["xd_transient_pu"]
+        xds = sampled(
+            xds_spec,
+            max(
+                float(xds_spec["min"]),
+                float(xds_spec["minimum_multiplier_of_xd_subtransient"])
+                * xdss,
+                1.01 * xqss,
+            ),
+            float(xds_spec["max"]),
+        )
+        xqs_spec = parameters[
+            "xq_transient_multiplier_of_xd_transient"
+        ]
+        xqs = sampled(
+            xqs_spec,
+            max(
+                float(xqs_spec["min"]) * xds,
+                float(xqs_spec["minimum_multiplier_of_xq_subtransient"])
+                * xqss,
+            ),
+            float(xqs_spec["max"]) * xds,
+        )
+        xd_spec = parameters["xd_synchronous_pu"]
+        xd = sampled(
+            xd_spec,
+            max(
+                float(xd_spec["min"]),
+                float(xd_spec["minimum_multiplier_of_xd_transient"])
+                * xds,
+            ),
+            float(xd_spec["max"]),
+        )
+        xq_spec = parameters[
+            "xq_synchronous_multiplier_of_xd_synchronous"
+        ]
+        xq = sampled(
+            xq_spec,
+            max(
+                float(xq_spec["min"]) * xd,
+                float(xq_spec["minimum_multiplier_of_xq_transient"])
+                * xqs,
+            ),
+            float(xq_spec["max"]) * xd,
+        )
+        sg10 = sampled(parameters["saturation_factor_1_0_pu"])
+        sg12_spec = parameters["saturation_factor_1_2_pu"]
+        sg12 = sampled(
+            sg12_spec,
+            max(float(sg12_spec["min"]), sg10),
+            float(sg12_spec["max"]),
+        )
+        xl_spec = parameters["leakage_reactance_pu"]
+        xl = sampled(
+            xl_spec,
+            float(xl_spec["min"]),
+            min(0.333, xdss, xqss),
+        )
+        x2_multiplier = sampled(
+            parameters[
+                "negative_sequence_reactance_multiplier_of_xd_subtransient"
+            ]
+        )
+        source_parameters = {
+            "rated_apparent_power_mva": rated_power_mva,
+            "rated_voltage_kv": rated_voltage,
+            "rated_power_factor": sampled(profile["rated_power_factor"]),
+            "stator_resistance_pu": sampled(
+                parameters["stator_resistance_pu"]
+            ),
+            "leakage_reactance_pu": xl,
+            "xd_synchronous_pu": xd,
+            "xq_synchronous_pu": xq,
+            "xd_transient_pu": xds,
+            "xq_transient_pu": xqs,
+            "xd_subtransient_pu": xdss,
+            "xq_subtransient_pu": xqss,
+            "td_transient_s": sampled(parameters["td_transient_s"]),
+            "tq_transient_s": sampled(parameters["tq_transient_s"]),
+            "td_subtransient_s": sampled(
+                parameters["td_subtransient_s"]
+            ),
+            "tq_subtransient_s": sampled(
+                parameters["tq_subtransient_s"]
+            ),
+            "zero_sequence_reactance_pu": sampled(
+                parameters["zero_sequence_reactance_pu"]
+            ),
+            "zero_sequence_resistance_pu": float(
+                parameters["zero_sequence_resistance_pu"]["value"]
+            ),
+            "negative_sequence_reactance_pu": round(
+                xdss * x2_multiplier,
+                6,
+            ),
+            "negative_sequence_resistance_pu": sampled(
+                parameters["negative_sequence_resistance_pu"]
+            ),
+            "acceleration_time_constant_s": sampled(
+                parameters["acceleration_time_constant_s"]
+            ),
+            "saturation_mode": int(
+                parameters["saturation_mode"]["value"]
+            ),
+            "saturation_factor_1_0_pu": sg10,
+            "saturation_factor_1_2_pu": sg12,
+            "reactive_power_max_pu": float(
+                parameters["reactive_power_max_pu"]["value"]
+            ),
+            "reactive_power_min_pu": float(
+                parameters["reactive_power_min_pu"]["value"]
+            ),
+        }
+        mapped = database["powerfactory"]["mapped_attributes"]
+        time_constant_inputs = {
+            "td_transient_s": (
+                source_parameters["td_transient_s"] * xd / xds
+            ),
+            "tq_transient_s": (
+                source_parameters["tq_transient_s"] * xq / xqs
+            ),
+            "td_subtransient_s": (
+                source_parameters["td_subtransient_s"] * xds / xdss
+            ),
+            "tq_subtransient_s": (
+                source_parameters["tq_subtransient_s"] * xqs / xqss
+            ),
+        }
+        attributes = {
+            "iturbo": database["powerfactory"]["rotor_mode"][machine_type],
+            **{
+                mapped[name]: time_constant_inputs.get(name, value)
+                for name, value in source_parameters.items()
+            },
+        }
+        return {
+            "name": type_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": database["source"]["tables"],
+            "machine_type": machine_type,
+            "seed": seed,
+            "parameters": source_parameters,
+            "powerfactory_attributes": attributes,
+            "powerfactory_derived_attributes": {
+                "tds": source_parameters["td_transient_s"],
+                "tqs": source_parameters["tq_transient_s"],
+                "tdss": source_parameters["td_subtransient_s"],
+                "tqss": source_parameters["tq_subtransient_s"],
+            },
+        }
+
+    @classmethod
+    def _evemtbench_load_plan(
+        cls,
+        voltage_kv: float,
+        load_name: str,
+        seed: int,
+    ):
+        database = cls._load_evemtbench_load_database()
+        class_name, profile = next(
+            (
+                (name, value)
+                for name, value in database["classes"].items()
+                if math.isclose(
+                    float(value["nominal_voltage_kv"]),
+                    voltage_kv,
+                )
+            ),
+            (None, None),
+        )
+        if profile is None:
+            raise RuntimeError(
+                "voltage_kv must be one of: "
+                + ", ".join(database["classes"])
+            )
+        rng = random.Random(seed)
+
+        def sampled(interval):
+            return rng.uniform(
+                float(interval["min"]),
+                float(interval["max"]),
+            )
+
+        if voltage_kv == 20.0:
+            apparent_power = sampled(profile["apparent_power_mva"])
+            power_factor = database["twenty_kv_power_factor"]
+            capacitive_angle = -math.acos(
+                float(power_factor["capacitive_min"])
+            )
+            inductive_angle = math.acos(
+                float(power_factor["inductive_min"])
+            )
+            angle = rng.uniform(capacitive_angle, inductive_angle)
+            active_power = apparent_power * math.cos(angle)
+            reactive_power = apparent_power * math.sin(angle)
+            source_parameters = {
+                "apparent_power_mva": round(apparent_power, 6),
+                "power_factor": round(math.cos(angle), 6),
+                "power_factor_mode": (
+                    "inductive" if angle >= 0 else "capacitive"
+                ),
+                "reactive_power_angle_deg": round(
+                    math.degrees(angle),
+                    6,
+                ),
+            }
+        else:
+            active_power = sampled(profile["active_power_mw"])
+            reactive_power = sampled(profile["reactive_power_mvar"])
+            source_parameters = {}
+
+        active_power = round(active_power, 6)
+        reactive_power = round(reactive_power, 6)
+        return class_name, {
+            "name": load_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": database["source"]["tables"],
+            "voltage_class": class_name,
+            "seed": seed,
+            "parameters": {
+                "nominal_voltage_kv": voltage_kv,
+                "active_power_mw": active_power,
+                "reactive_power_mvar": reactive_power,
+                **source_parameters,
+            },
+            "powerfactory_attributes": {
+                "plini": active_power,
+                "qlini": reactive_power,
+            },
+            "model": database["powerfactory"]["model"],
+            "catalog_only": database["catalog_only"],
+        }
+
+    @classmethod
+    def list_evemtbench_components(
+        cls,
+        voltage_class: str = "",
+        rated_power_mva: Optional[float] = None,
+    ) -> dict[str, Any]:
+        """List the executable transformer catalog without opening PowerFactory."""
+        try:
+            database = cls._load_evemtbench_database()
+            requested_class = str(voltage_class or "").strip()
+            classes = database["classes"]
+            if requested_class and requested_class not in classes:
+                return {
+                    "success": False,
+                    "message": "voltage_class must be one of: "
+                    + ", ".join(classes),
+                }
+
+            if rated_power_mva is not None:
+                if not requested_class:
+                    return {
+                        "success": False,
+                        "message": (
+                            "voltage_class is required when rated_power_mva "
+                            "is provided"
+                        ),
+                    }
+                if isinstance(rated_power_mva, bool):
+                    return {
+                        "success": False,
+                        "message": "rated_power_mva must be a number",
+                    }
+                requested_rating = float(rated_power_mva)
+            else:
+                requested_rating = None
+
+            selected = (
+                {requested_class: classes[requested_class]}
+                if requested_class
+                else classes
+            )
+            results = []
+            for class_name, transformer_class in selected.items():
+                ratings = transformer_class["ratings"]
+                if requested_rating is not None:
+                    ratings = [
+                        rating
+                        for rating in ratings
+                        if math.isclose(
+                            float(rating["rated_power_mva"]),
+                            requested_rating,
+                        )
+                    ]
+                    if not ratings:
+                        available = ", ".join(
+                            str(item["rated_power_mva"])
+                            for item in transformer_class["ratings"]
+                        )
+                        return {
+                            "success": False,
+                            "message": (
+                                "rated_power_mva must be one of: " + available
+                            ),
+                        }
+                results.append({
+                    "voltage_class": class_name,
+                    "high_voltage_kv": transformer_class["high_voltage_kv"],
+                    "low_voltage_kv": transformer_class["low_voltage_kv"],
+                    "ratings": ratings,
+                    "zero_sequence_rules": transformer_class[
+                        "zero_sequence_rules"
+                    ],
+                })
+            return {
+                "success": True,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "component_type": "two_winding_transformer",
+                "nominal_frequencies_hz": database["sampling"][
+                    "nominal_frequencies_hz"
+                ],
+                "returned_count": len(results),
+                "results": results,
+                "vector_groups": database["vector_groups"],
+                "saturation": database["saturation"],
+                "unmapped_source_tables": database["powerfactory"][
+                    "unmapped_source_tables"
+                ],
+                "catalog_only": database["catalog_only"],
+            }
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    @classmethod
+    def _evemtbench_transformer_plan(
+        cls,
+        voltage_class: str,
+        rated_power_mva: float,
+        nominal_frequency_hz: float,
+        vector_group: str,
+        clock_number: int,
+        type_name: str,
+        seed: int,
+    ):
+        database = cls._load_evemtbench_database()
+        source = database["classes"][voltage_class]
+        rng = random.Random(seed)
+
+        def sampled(value):
+            if "value" in value:
+                return float(value["value"])
+            return round(rng.uniform(float(value["min"]), float(value["max"])), 6)
+
+        rating = next(
+            (
+                item
+                for item in source["ratings"]
+                if math.isclose(
+                    float(item["rated_power_mva"]),
+                    rated_power_mva,
+                )
+            ),
+            None,
+        )
+        if rating is None:
+            available = ", ".join(
+                str(item["rated_power_mva"])
+                for item in source["ratings"]
+            )
+            raise RuntimeError(
+                f"rated_power_mva must be one of: {available}"
+            )
+        if vector_group not in rating["vector_groups"]:
+            raise RuntimeError(
+                "vector_group must be one of: "
+                + ", ".join(rating["vector_groups"])
+            )
+        vector = database["vector_groups"][vector_group]
+        # A blank TypTr2 needs its technology and frequency before its
+        # impedance fields become usable.
+        attributes = {
+            "nt2ph": 3,
+            "frnom": nominal_frequency_hz,
+            "itrmt": 0,
+            "itrdr": 0.5,
+            "itrdl": 0.5,
+            "it0mt": 0,
+            "tr2cn_h": vector["high_winding_connection"],
+            "tr2cn_l": vector["low_winding_connection"],
+            "nt2ag": clock_number,
+            "strn": float(rating["rated_power_mva"]),
+            "utrn_h": float(source["high_voltage_kv"]),
+            "utrn_l": float(source["low_voltage_kv"]),
+            "uktr": sampled(rating["short_circuit_voltage_pct"]),
+            "pcutr": sampled(rating["winding_losses_kw"]),
+            "pfe": sampled(rating["no_load_losses_kw"]),
+            "curmg": sampled(rating["no_load_current_pct"]),
+        }
+        return {
+            "name": type_name,
+            "catalog_id": database["catalog_id"],
+            "source_tables": database["source"]["tables"],
+            "published_vector_groups": rating["vector_groups"],
+            "selected_vector_group": vector_group,
+            "clock_number": clock_number,
+            "clock_numbers_referenced_in_text": vector[
+                "clock_numbers_referenced_in_text"
+            ],
+            "parameters": {
+                "rated_power_mva": attributes["strn"],
+                "nominal_frequency_hz": attributes["frnom"],
+                "high_voltage_kv": attributes["utrn_h"],
+                "low_voltage_kv": attributes["utrn_l"],
+                "short_circuit_voltage_pct": attributes["uktr"],
+                "winding_losses_kw": attributes["pcutr"],
+                "no_load_losses_kw": attributes["pfe"],
+                "no_load_current_pct": attributes["curmg"],
+            },
+            "powerfactory_attributes": attributes,
+            "unmapped_source_tables": database["powerfactory"][
+                "unmapped_source_tables"
+            ],
+        }
+
+    @classmethod
+    def create_evemtbench_component(
+        cls,
+        component_type: str,
+        parameters: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Route one component request to its validated EvEMTBench creator."""
+        creators = {
+            "transformer": "create_evemtbench_transformer",
+            "overhead_line": "create_evemtbench_line",
+            "underground_cable": "create_evemtbench_cable",
+            "external_grid": "create_evemtbench_external_grid",
+            "load": "create_evemtbench_load",
+            "synchronous_machine": "create_evemtbench_synchronous_machine",
+        }
+        kind = str(component_type or "").strip().lower().replace("-", "_")
+        method_name = creators.get(kind)
+        supported = ", ".join(creators)
+        if method_name is None:
+            return {
+                "success": False,
+                "applied": False,
+                "component_type": kind,
+                "message": f"component_type must be one of: {supported}",
+            }
+        if not isinstance(parameters, dict):
+            return {
+                "success": False,
+                "applied": False,
+                "component_type": kind,
+                "message": "parameters must be an object",
+            }
+
+        options = dict(parameters)
+        private = sorted(
+            str(name) for name in options if str(name).startswith("_")
+        )
+        if private:
+            return {
+                "success": False,
+                "applied": False,
+                "component_type": kind,
+                "message": (
+                    "parameters must not contain private options: "
+                    + ", ".join(private)
+                ),
+            }
+
+        creator = getattr(cls, method_name)
+        try:
+            inspect.signature(creator).bind(**options)
+        except TypeError as exc:
+            return {
+                "success": False,
+                "applied": False,
+                "component_type": kind,
+                "message": f"Invalid {kind} parameters: {exc}",
+            }
+
+        result = dict(creator(**options))
+        result["component_type"] = kind
+        return result
+
+    @classmethod
+    def create_evemtbench_transformer(
+        cls,
+        voltage_class: str,
+        rated_power_mva: float,
+        nominal_frequency_hz: float,
+        vector_group: str,
+        clock_number: int,
+        transformer_name: str,
+        type_name: str,
+        high_voltage_bus_name: str,
+        low_voltage_bus_name: str,
+        grid_name: str = "",
+        seed: int = 0,
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create a new database-backed TypTr2 and ElmTr2."""
+        voltage_class = str(voltage_class or "").strip()
+        vector_group = str(vector_group or "").strip()
+        transformer_name = str(transformer_name or "").strip()
+        type_name = str(type_name or "").strip()
+        high_bus_name = str(high_voltage_bus_name or "").strip()
+        low_bus_name = str(low_voltage_bus_name or "").strip()
+        created_type = None
+        created_type_folder = None
+        equipment_folder = None
+        type_folder = None
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "type_created": False,
+                "transformer_created": False,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        try:
+            database = cls._load_evemtbench_database()
+        except Exception as exc:
+            return failure(str(exc))
+        if voltage_class not in database["classes"]:
+            return failure(
+                "voltage_class must be one of: "
+                + ", ".join(database["classes"])
+            )
+        for field_name, value in (
+            ("transformer_name", transformer_name),
+            ("type_name", type_name),
+            ("high_voltage_bus_name", high_bus_name),
+            ("low_voltage_bus_name", low_bus_name),
+        ):
+            if not value:
+                return failure(f"{field_name} must not be empty")
+        for field_name, value in (
+            ("transformer_name", transformer_name),
+            ("type_name", type_name),
+        ):
+            if len(value) > cls._max_loc_name_length:
+                return failure(
+                    f"{field_name} must be at most "
+                    f"{cls._max_loc_name_length} characters"
+                )
+        if high_bus_name.casefold() == low_bus_name.casefold():
+            return failure("Transformer buses must be different")
+        if isinstance(rated_power_mva, bool):
+            return failure("rated_power_mva must be a number")
+        try:
+            rated_power = float(rated_power_mva)
+        except (TypeError, ValueError):
+            return failure("rated_power_mva must be a number")
+        if not math.isfinite(rated_power) or rated_power <= 0:
+            return failure("rated_power_mva must be a finite positive number")
+        if isinstance(nominal_frequency_hz, bool):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        try:
+            nominal_frequency = float(nominal_frequency_hz)
+        except (TypeError, ValueError):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        available_frequencies = database["sampling"][
+            "nominal_frequencies_hz"
+        ]
+        if nominal_frequency not in available_frequencies:
+            return failure("nominal_frequency_hz must be 50 or 60")
+        if (
+            isinstance(clock_number, bool)
+            or not isinstance(clock_number, int)
+            or not 0 <= clock_number <= 11
+        ):
+            return failure("clock_number must be an integer from 0 to 11")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            return failure("seed must be an integer")
+
+        try:
+            item = cls._evemtbench_transformer_plan(
+                voltage_class,
+                rated_power,
+                nominal_frequency,
+                vector_group,
+                clock_number,
+                type_name,
+                seed,
+            )
+        except Exception as exc:
+            return failure(str(exc))
+
+        required_confirmation = (
+            f"CREATE {transformer_name} WITH {type_name} {voltage_class} "
+            f"{rated_power:g}MVA {vector_group}{clock_number} "
+            f"{nominal_frequency:g}Hz seed={seed}"
+        )
+
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+
+            equipment_folder = app.GetProjectFolder("equip")
+            if equipment_folder is None:
+                raise RuntimeError(
+                    "Equipment Type Library is unavailable: "
+                    "GetProjectFolder('equip') returned None"
+                )
+
+            type_folders = cls._find_named_contents(
+                equipment_folder,
+                "Transformer Types",
+                "IntPrjfolder",
+            )
+            if len(type_folders) > 1:
+                raise RuntimeError(
+                    "Multiple Transformer Types folders were found"
+                )
+            type_folder = type_folders[0] if type_folders else None
+
+            if cls._find_named_contents(
+                equipment_folder,
+                type_name,
+                "TypTr2",
+            ):
+                raise RuntimeError(
+                    f"Transformer type already exists: {type_name}"
+                )
+
+            grid = cls._select_grid(app, grid_name)
+            if cls._find_named_contents(
+                grid,
+                transformer_name,
+                "ElmTr2",
+            ):
+                raise RuntimeError(
+                    f"Transformer already exists in the selected grid: "
+                    f"{transformer_name}"
+                )
+            high_bus = cls._select_bus(grid, high_bus_name)
+            low_bus = cls._select_bus(grid, low_bus_name)
+            transformer_class = database["classes"][voltage_class]
+            for label, bus, expected in (
+                (
+                    "high-voltage",
+                    high_bus,
+                    float(transformer_class["high_voltage_kv"]),
+                ),
+                (
+                    "low-voltage",
+                    low_bus,
+                    float(transformer_class["low_voltage_kv"]),
+                ),
+            ):
+                actual = float(bus.GetAttribute("uknom"))
+                if not math.isclose(actual, expected, rel_tol=1e-9, abs_tol=1e-6):
+                    raise RuntimeError(
+                        f"{label} bus nominal voltage is {actual:g} kV; "
+                        f"expected {expected:g} kV for {voltage_class}"
+                    )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "type_created": False,
+                "transformer_created": False,
+                "voltage_class": voltage_class,
+                "seed": seed,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "target": {
+                    "grid": grid.GetFullName(),
+                    "transformer_name": transformer_name,
+                    "type_name": type_name,
+                    "high_voltage_bus": high_bus.GetFullName(),
+                    "low_voltage_bus": low_bus.GetFullName(),
+                    "out_of_service": bool(out_of_service),
+                },
+                "equipment_folder": (
+                    type_folder or equipment_folder
+                ).GetFullName(),
+                "item": item,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no transformer type, grid element, cubicle, "
+                    "or switch was created. Tables 10 and 12 are present in "
+                    "the database but remain unmapped to PowerFactory."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    f"confirmation must exactly match: {required_confirmation}",
+                    item=item,
+                )
+
+            if type_folder is None:
+                type_folder = equipment_folder.CreateObject(
+                    "IntPrjfolder",
+                    "Transformer Types",
+                )
+                if type_folder is None:
+                    raise RuntimeError(
+                        "Could not create Transformer Types folder"
+                    )
+                created_type_folder = type_folder
+
+            created_type = type_folder.CreateObject("TypTr2", type_name)
+            if created_type is None:
+                raise RuntimeError(
+                    f"Could not create transformer type: {type_name}"
+                )
+            if created_type.GetClassName() != "TypTr2":
+                raise RuntimeError("PowerFactory created an unexpected type class")
+            attributes = item["powerfactory_attributes"]
+            structural_names = {
+                "nt2ph",
+                "frnom",
+                "itrmt",
+                "itrdr",
+                "itrdl",
+                "it0mt",
+                "tr2cn_h",
+                "tr2cn_l",
+                "nt2ag",
+            }
+            structural = {
+                name: value
+                for name, value in attributes.items()
+                if name in structural_names
+            }
+            electrical = {
+                name: value
+                for name, value in attributes.items()
+                if name not in structural_names
+            }
+            nameplate = {
+                name: electrical.pop(name)
+                for name in ("strn", "utrn_h", "utrn_l")
+            }
+            resistance_pu = electrical["pcutr"] / (
+                nameplate["strn"] * 1000.0
+            )
+            impedance_pu = electrical["uktr"] / 100.0
+            if resistance_pu > impedance_pu:
+                raise RuntimeError(
+                    "Transformer copper losses exceed the sampled "
+                    "short-circuit impedance"
+                )
+            performance = {
+                "r1pu": resistance_pu,
+                "x1pu": math.sqrt(
+                    max(0.0, impedance_pu**2 - resistance_pu**2)
+                ),
+                "pfe": electrical["pfe"],
+                "curmg": electrical["curmg"],
+            }
+
+            def commit_type_attributes(values, stage, direct=False):
+                if direct:
+                    for name, value in values.items():
+                        setattr(created_type, name, value)
+                        cls._verify_attributes(
+                            created_type,
+                            {name: value},
+                            "Transformer type",
+                            "immediately after direct assignment",
+                        )
+                else:
+                    cls._set_and_verify_attributes(
+                        created_type,
+                        values,
+                        "Transformer type",
+                    )
+                created_type.WriteChangesToDb()
+                cls._verify_attributes(
+                    created_type,
+                    values,
+                    "Transformer type",
+                    f"after committing {stage} attributes",
+                )
+
+            commit_type_attributes(structural, "structural")
+            commit_type_attributes(nameplate, "nameplate")
+            commit_type_attributes(performance, "performance", direct=True)
+            cls._verify_attributes(
+                created_type,
+                {
+                    name: electrical[name]
+                    for name in ("pcutr", "uktr", "pfe", "curmg")
+                },
+                "Transformer type",
+                "after deriving source performance values",
+            )
+            cls._verify_attributes(
+                created_type,
+                attributes,
+                "Transformer type",
+                "after completing transformer type initialization",
+            )
+            if str(created_type.GetAttribute("loc_name")) != type_name:
+                raise RuntimeError(
+                    f"PowerFactory did not retain type name: {type_name}"
+                )
+            item["full_name"] = created_type.GetFullName()
+
+            _, _, created_transformer, _ = cls._create_connected_element(
+                app,
+                "ElmTr2",
+                "Transformer",
+                transformer_name,
+                (high_bus_name, low_bus_name),
+                grid_name,
+                attributes={
+                    "typ_id": created_type,
+                    "outserv": int(bool(out_of_service)),
+                },
+                connection_attributes=("bushv", "buslv"),
+            )
+
+            result.update({
+                "applied": True,
+                "type_created": True,
+                "transformer_created": True,
+                "created_type": created_type.GetFullName(),
+                "created_transformer": created_transformer.GetFullName(),
+                "message": (
+                    f"Created TypTr2 '{type_name}' and connected ElmTr2 "
+                    f"'{transformer_name}'"
+                ),
+            })
+            return result
+
+        except Exception as exc:
+            rolled_back = None
+            remaining_type = False
+            remaining_folder = False
+            if created_type is not None:
+                try:
+                    created_type.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_type = bool(cls._find_named_contents(
+                        equipment_folder,
+                        type_name,
+                        "TypTr2",
+                    ))
+                    rolled_back = not remaining_type
+                except Exception:
+                    remaining_type = True
+            if created_type_folder is not None:
+                try:
+                    if not (created_type_folder.GetContents("*", 0) or []):
+                        created_type_folder.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_folder = bool(cls._find_named_contents(
+                        equipment_folder,
+                        "Transformer Types",
+                        "IntPrjfolder",
+                    ))
+                except Exception:
+                    remaining_folder = True
+            if created_type is not None or created_type_folder is not None:
+                rolled_back = not remaining_type and not remaining_folder
+            return failure(
+                str(exc),
+                rolled_back=rolled_back,
+                type_created=remaining_type,
+                remaining_type=type_name if remaining_type else None,
+                item=item,
+            )
+
+    @classmethod
+    def create_evemtbench_line(
+        cls,
+        voltage_kv: float,
+        nominal_frequency_hz: float,
+        rated_current_ka: float,
+        profile: str,
+        length_km: float,
+        line_name: str,
+        type_name: str,
+        bus1_name: str,
+        bus2_name: str,
+        grid_name: str = "",
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+        _database_loader=None,
+        _plan_builder=None,
+        _component_label: str = "overhead lines",
+        _preview_message: str = "",
+    ) -> dict[str, Any]:
+        """Preview or create a new EvEMTBench TypLne and connected ElmLne."""
+        profile = str(profile or "").strip().lower()
+        line_name = str(line_name or "").strip()
+        type_name = str(type_name or "").strip()
+        first_bus_name = str(bus1_name or "").strip()
+        second_bus_name = str(bus2_name or "").strip()
+        created_type = None
+        created_type_folder = None
+        equipment_folder = None
+        type_folder = None
+        item = None
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "type_created": False,
+                "line_created": False,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        database_loader = _database_loader or cls._load_evemtbench_line_database
+        plan_builder = _plan_builder or cls._evemtbench_line_plan
+        try:
+            database = database_loader()
+        except Exception as exc:
+            return failure(str(exc))
+        for field_name, value in (
+            ("line_name", line_name),
+            ("type_name", type_name),
+            ("bus1_name", first_bus_name),
+            ("bus2_name", second_bus_name),
+        ):
+            if not value:
+                return failure(f"{field_name} must not be empty")
+        for field_name, value in (
+            ("line_name", line_name),
+            ("type_name", type_name),
+        ):
+            if len(value) > cls._max_loc_name_length:
+                return failure(
+                    f"{field_name} must be at most "
+                    f"{cls._max_loc_name_length} characters"
+                )
+        if first_bus_name.casefold() == second_bus_name.casefold():
+            return failure("Line buses must be different")
+
+        def positive_number(name, value):
+            if isinstance(value, bool):
+                raise ValueError(f"{name} must be a number")
+            try:
+                converted = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} must be a number") from exc
+            if not math.isfinite(converted) or converted <= 0:
+                raise ValueError(f"{name} must be a finite positive number")
+            return converted
+
+        try:
+            voltage = positive_number("voltage_kv", voltage_kv)
+            nominal_frequency = positive_number(
+                "nominal_frequency_hz",
+                nominal_frequency_hz,
+            )
+            rated_current = positive_number(
+                "rated_current_ka",
+                rated_current_ka,
+            )
+            line_length = positive_number("length_km", length_km)
+        except ValueError as exc:
+            return failure(str(exc))
+        if nominal_frequency not in database["nominal_frequencies_hz"]:
+            return failure("nominal_frequency_hz must be 50 or 60")
+
+        try:
+            voltage_class, line_class, item = plan_builder(
+                voltage,
+                nominal_frequency,
+                rated_current,
+                profile,
+                type_name,
+            )
+        except Exception as exc:
+            return failure(str(exc))
+        length_range = line_class["length_km"]
+        if not (
+            float(length_range["min"])
+            <= line_length
+            <= float(length_range["max"])
+        ):
+            return failure(
+                f"length_km must be between {length_range['min']:g} and "
+                f"{length_range['max']:g} for {voltage_class} kV "
+                f"{_component_label}",
+                item=item,
+            )
+        current_guidance = line_class.get("rated_current_guidance_ka")
+        if current_guidance and not (
+            float(current_guidance["min"])
+            <= rated_current
+            <= float(current_guidance["max"])
+        ):
+            return failure(
+                f"rated_current_ka must be between "
+                f"{current_guidance['min']:g} and "
+                f"{current_guidance['max']:g} for {voltage_class} kV "
+                "overhead lines",
+                item=item,
+            )
+
+        required_confirmation = (
+            f"CREATE {line_name} WITH {type_name} {voltage_class}kV "
+            f"{profile} {line_length:g}km {rated_current:g}kA "
+            f"{nominal_frequency:g}Hz"
+        )
+
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+
+            equipment_folder = app.GetProjectFolder("equip")
+            if equipment_folder is None:
+                raise RuntimeError(
+                    "Equipment Type Library is unavailable: "
+                    "GetProjectFolder('equip') returned None"
+                )
+            type_folders = cls._find_named_contents(
+                equipment_folder,
+                "Line Types",
+                "IntPrjfolder",
+            )
+            if len(type_folders) > 1:
+                raise RuntimeError("Multiple Line Types folders were found")
+            type_folder = type_folders[0] if type_folders else None
+            if cls._find_named_contents(equipment_folder, type_name, "TypLne"):
+                raise RuntimeError(f"Line type already exists: {type_name}")
+
+            grid = cls._select_grid(app, grid_name)
+            if cls._find_named_contents(grid, line_name, "ElmLne"):
+                raise RuntimeError(
+                    f"Line already exists in the selected grid: {line_name}"
+                )
+            first_bus = cls._select_bus(grid, first_bus_name)
+            second_bus = cls._select_bus(grid, second_bus_name)
+            for label, bus in (("first", first_bus), ("second", second_bus)):
+                actual = float(bus.GetAttribute("uknom"))
+                if not math.isclose(actual, voltage, rel_tol=1e-9, abs_tol=1e-6):
+                    raise RuntimeError(
+                        f"{label} bus nominal voltage is {actual:g} kV; "
+                        f"expected {voltage_class} kV"
+                    )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "type_created": False,
+                "line_created": False,
+                "voltage_class": voltage_class,
+                "profile": profile,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "target": {
+                    "grid": grid.GetFullName(),
+                    "line_name": line_name,
+                    "type_name": type_name,
+                    "bus1": first_bus.GetFullName(),
+                    "bus2": second_bus.GetFullName(),
+                    "length_km": line_length,
+                    "out_of_service": bool(out_of_service),
+                },
+                "equipment_folder": (
+                    type_folder or equipment_folder
+                ).GetFullName(),
+                "item": item,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    _preview_message
+                    or "Preview only; no line type, grid element, cubicle, or "
+                    "switch was created. The profile uses the paper's "
+                    "published sequence-parameter percentile, not a geometric "
+                    "ULM model."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    f"confirmation must exactly match: {required_confirmation}",
+                    item=item,
+                )
+
+            if type_folder is None:
+                type_folder = equipment_folder.CreateObject(
+                    "IntPrjfolder",
+                    "Line Types",
+                )
+                if type_folder is None:
+                    raise RuntimeError("Could not create Line Types folder")
+                created_type_folder = type_folder
+
+            created_type = type_folder.CreateObject("TypLne", type_name)
+            if created_type is None:
+                raise RuntimeError(f"Could not create line type: {type_name}")
+            if created_type.GetClassName() != "TypLne":
+                raise RuntimeError("PowerFactory created an unexpected type class")
+            attributes = item["powerfactory_attributes"]
+            nameplate = {
+                name: attributes[name]
+                for name in ("uline", "sline", "frnom")
+            }
+            electrical = {
+                name: value
+                for name, value in attributes.items()
+                if name not in nameplate
+            }
+            cls._set_and_verify_attributes(
+                created_type,
+                nameplate,
+                "Line type",
+            )
+            created_type.WriteChangesToDb()
+            cls._verify_attributes(
+                created_type,
+                nameplate,
+                "Line type",
+                "after committing nameplate attributes",
+            )
+            cls._set_and_verify_attributes(
+                created_type,
+                electrical,
+                "Line type",
+            )
+            created_type.WriteChangesToDb()
+            cls._verify_attributes(
+                created_type,
+                attributes,
+                "Line type",
+                "after completing line type initialization",
+            )
+            if str(created_type.GetAttribute("loc_name")) != type_name:
+                raise RuntimeError(
+                    f"PowerFactory did not retain type name: {type_name}"
+                )
+            item["full_name"] = created_type.GetFullName()
+
+            _, _, created_line, _ = cls._create_connected_element(
+                app,
+                "ElmLne",
+                "Line",
+                line_name,
+                (first_bus_name, second_bus_name),
+                grid_name,
+                attributes={
+                    "typ_id": created_type,
+                    "dline": line_length,
+                    "outserv": int(bool(out_of_service)),
+                },
+                connection_attributes=("bus1", "bus2"),
+            )
+            result.update({
+                "applied": True,
+                "type_created": True,
+                "line_created": True,
+                "created_type": created_type.GetFullName(),
+                "created_line": created_line.GetFullName(),
+                "message": (
+                    f"Created TypLne '{type_name}' and connected ElmLne "
+                    f"'{line_name}'"
+                ),
+            })
+            return result
+
+        except Exception as exc:
+            rolled_back = None
+            remaining_type = False
+            remaining_folder = False
+            if created_type is not None:
+                try:
+                    created_type.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_type = bool(cls._find_named_contents(
+                        equipment_folder,
+                        type_name,
+                        "TypLne",
+                    ))
+                    rolled_back = not remaining_type
+                except Exception:
+                    remaining_type = True
+            if created_type_folder is not None:
+                try:
+                    if not (created_type_folder.GetContents("*", 0) or []):
+                        created_type_folder.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_folder = bool(cls._find_named_contents(
+                        equipment_folder,
+                        "Line Types",
+                        "IntPrjfolder",
+                    ))
+                except Exception:
+                    remaining_folder = True
+            if created_type is not None or created_type_folder is not None:
+                rolled_back = not remaining_type and not remaining_folder
+            return failure(
+                str(exc),
+                rolled_back=rolled_back,
+                type_created=remaining_type,
+                remaining_type=type_name if remaining_type else None,
+                item=item,
+            )
+
+    @classmethod
+    def create_evemtbench_cable(
+        cls,
+        nominal_frequency_hz: float,
+        rated_current_ka: float,
+        profile: str,
+        length_km: float,
+        cable_name: str,
+        type_name: str,
+        bus1_name: str,
+        bus2_name: str,
+        grid_name: str = "",
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create a Table 6 cable sequence equivalent."""
+        result = cls.create_evemtbench_line(
+            20.0,
+            nominal_frequency_hz,
+            rated_current_ka,
+            profile,
+            length_km,
+            cable_name,
+            type_name,
+            bus1_name,
+            bus2_name,
+            grid_name,
+            out_of_service,
+            confirmation,
+            open_digsilent,
+            _database_loader=cls._load_evemtbench_cable_database,
+            _plan_builder=cls._evemtbench_cable_plan,
+            _component_label="underground cables",
+            _preview_message=(
+                "Preview only; no cable type, grid element, cubicle, or "
+                "switch was created. The TypLne uses the paper's published "
+                "sequence-parameter percentile, not its geometric ULM model."
+            ),
+        )
+        result["cable_created"] = result.pop("line_created", False)
+        if "created_line" in result:
+            result["created_cable"] = result.pop("created_line")
+        target = result.get("target")
+        if isinstance(target, dict) and "line_name" in target:
+            target["cable_name"] = target.pop("line_name")
+        if result.get("success") and result.get("applied"):
+            result["message"] = (
+                f"Created TypLne '{type_name}' and connected cable ElmLne "
+                f"'{str(cable_name).strip()}'"
+            )
+        return result
+
+    @classmethod
+    def create_evemtbench_external_grid(
+        cls,
+        voltage_kv: float,
+        external_grid_name: str,
+        bus_name: str,
+        grid_name: str = "",
+        seed: int = 0,
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create a new Table 4 ElmXnet on an existing bus."""
+        external_grid_name = str(external_grid_name or "").strip()
+        bus_name = str(bus_name or "").strip()
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "external_grid_created": False,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        for field_name, value in (
+            ("external_grid_name", external_grid_name),
+            ("bus_name", bus_name),
+        ):
+            if not value:
+                return failure(f"{field_name} must not be empty")
+        if len(external_grid_name) > cls._max_loc_name_length:
+            return failure(
+                "external_grid_name must be at most "
+                f"{cls._max_loc_name_length} characters"
+            )
+        if isinstance(voltage_kv, bool):
+            return failure("voltage_kv must be a number")
+        try:
+            voltage = float(voltage_kv)
+        except (TypeError, ValueError):
+            return failure("voltage_kv must be a number")
+        if not math.isfinite(voltage) or voltage <= 0:
+            return failure("voltage_kv must be a finite positive number")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            return failure("seed must be an integer")
+
+        try:
+            database = cls._load_evemtbench_external_grid_database()
+            voltage_class, item = cls._evemtbench_external_grid_plan(
+                voltage,
+                external_grid_name,
+                seed,
+            )
+        except Exception as exc:
+            return failure(str(exc))
+
+        required_confirmation = (
+            f"CREATE {external_grid_name} AT {bus_name} "
+            f"{voltage:g}kV seed={seed}"
+        )
+        creating = False
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+            grid = cls._select_grid(app, grid_name)
+            if cls._find_named_contents(
+                grid,
+                external_grid_name,
+                "ElmXnet",
+            ):
+                raise RuntimeError(
+                    "External grid already exists in the selected grid: "
+                    f"{external_grid_name}"
+                )
+            bus = cls._select_bus(grid, bus_name)
+            actual_voltage = float(bus.GetAttribute("uknom"))
+            if not math.isclose(
+                actual_voltage,
+                voltage,
+                rel_tol=1e-9,
+                abs_tol=1e-6,
+            ):
+                raise RuntimeError(
+                    f"Bus nominal voltage is {actual_voltage:g} kV; "
+                    f"expected {voltage:g} kV"
+                )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "external_grid_created": False,
+                "voltage_class": voltage_class,
+                "seed": seed,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "target": {
+                    "grid": grid.GetFullName(),
+                    "external_grid_name": external_grid_name,
+                    "bus": bus.GetFullName(),
+                    "out_of_service": bool(out_of_service),
+                },
+                "item": item,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no external grid, cubicle, or switch was "
+                    "created. Table 4 intervals were sampled reproducibly."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    f"confirmation must exactly match: "
+                    f"{required_confirmation}",
+                    item=item,
+                )
+
+            creating = True
+            attributes = {
+                **item["powerfactory_attributes"],
+                "outserv": int(bool(out_of_service)),
+            }
+            _, _, created, actual = cls._create_connected_element(
+                app,
+                "ElmXnet",
+                "External grid",
+                external_grid_name,
+                (bus_name,),
+                grid_name,
+                attributes=attributes,
+                connection_attributes=("bus1",),
+            )
+            result.update({
+                "applied": True,
+                "external_grid_created": True,
+                "created_external_grid": created.GetFullName(),
+                "retained_powerfactory_attributes": actual,
+                "message": (
+                    f"Created ElmXnet '{external_grid_name}' and connected "
+                    f"it to '{bus_name}'"
+                ),
+            })
+            return result
+        except Exception as exc:
+            message = str(exc)
+            extra = {"item": item}
+            if creating:
+                extra["rolled_back"] = "rolled_back=True" in message
+            return failure(message, **extra)
+
+    @classmethod
+    def create_evemtbench_load(
+        cls,
+        voltage_kv: float,
+        load_name: str,
+        bus_name: str,
+        grid_name: str = "",
+        seed: int = 0,
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create a seeded Table 5 ElmLod."""
+        load_name = str(load_name or "").strip()
+        bus_name = str(bus_name or "").strip()
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "load_created": False,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        for field_name, value in (
+            ("load_name", load_name),
+            ("bus_name", bus_name),
+        ):
+            if not value:
+                return failure(f"{field_name} must not be empty")
+        if len(load_name) > cls._max_loc_name_length:
+            return failure(
+                "load_name must be at most "
+                f"{cls._max_loc_name_length} characters"
+            )
+        if isinstance(voltage_kv, bool):
+            return failure("voltage_kv must be a number")
+        try:
+            voltage = float(voltage_kv)
+        except (TypeError, ValueError):
+            return failure("voltage_kv must be a number")
+        if not math.isfinite(voltage) or voltage <= 0:
+            return failure("voltage_kv must be a finite positive number")
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            return failure("seed must be an integer")
+
+        try:
+            database = cls._load_evemtbench_load_database()
+            voltage_class, item = cls._evemtbench_load_plan(
+                voltage,
+                load_name,
+                seed,
+            )
+        except Exception as exc:
+            return failure(str(exc))
+
+        required_confirmation = (
+            f"CREATE {load_name} AT {bus_name} "
+            f"{voltage:g}kV seed={seed}"
+        )
+        creating = False
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+            grid = cls._select_grid(app, grid_name)
+            if cls._find_named_contents(grid, load_name, "ElmLod"):
+                raise RuntimeError(
+                    "Load already exists in the selected grid: " + load_name
+                )
+            bus = cls._select_bus(grid, bus_name)
+            actual_voltage = float(bus.GetAttribute("uknom"))
+            if not math.isclose(
+                actual_voltage,
+                voltage,
+                rel_tol=1e-9,
+                abs_tol=1e-6,
+            ):
+                raise RuntimeError(
+                    f"Bus nominal voltage is {actual_voltage:g} kV; "
+                    f"expected {voltage:g} kV"
+                )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "load_created": False,
+                "voltage_class": voltage_class,
+                "seed": seed,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "target": {
+                    "grid": grid.GetFullName(),
+                    "load_name": load_name,
+                    "bus": bus.GetFullName(),
+                    "out_of_service": bool(out_of_service),
+                },
+                "item": item,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no load, cubicle, or switch was created. "
+                    "Table 5 power intervals were sampled reproducibly."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    "confirmation must exactly match: "
+                    + required_confirmation,
+                    item=item,
+                )
+
+            creating = True
+            attributes = {
+                **item["powerfactory_attributes"],
+                "outserv": int(bool(out_of_service)),
+            }
+            _, _, created, actual = cls._create_connected_element(
+                app,
+                "ElmLod",
+                "Load",
+                load_name,
+                (bus_name,),
+                grid_name,
+                attributes=attributes,
+                connection_attributes=("bus1",),
+            )
+            result.update({
+                "applied": True,
+                "load_created": True,
+                "created_load": created.GetFullName(),
+                "retained_powerfactory_attributes": actual,
+                "message": (
+                    f"Created ElmLod '{load_name}' and connected it to "
+                    f"'{bus_name}'"
+                ),
+            })
+            return result
+        except Exception as exc:
+            message = str(exc)
+            extra = {"item": item}
+            if creating:
+                extra["rolled_back"] = "rolled_back=True" in message
+            return failure(message, **extra)
+
+    @classmethod
+    def create_evemtbench_synchronous_machine(
+        cls,
+        machine_type: str,
+        rated_power_mva: float,
+        machine_name: str,
+        type_name: str,
+        bus_name: str,
+        grid_name: str = "",
+        seed: int = 0,
+        active_power_mw: float = 0.0,
+        reactive_power_mvar: float = 0.0,
+        out_of_service: bool = False,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create a seeded round-rotor TypSym and ElmSym."""
+        machine_type = str(machine_type or "").strip().lower()
+        machine_name = str(machine_name or "").strip()
+        type_name = str(type_name or "").strip()
+        bus_name = str(bus_name or "").strip()
+        created_type = None
+        created_type_folder = None
+        equipment_folder = None
+        item = None
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "type_created": False,
+                "machine_created": False,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        for field_name, value in (
+            ("machine_name", machine_name),
+            ("type_name", type_name),
+            ("bus_name", bus_name),
+        ):
+            if not value:
+                return failure(f"{field_name} must not be empty")
+        for field_name, value in (
+            ("machine_name", machine_name),
+            ("type_name", type_name),
+        ):
+            if len(value) > cls._max_loc_name_length:
+                return failure(
+                    f"{field_name} must be at most "
+                    f"{cls._max_loc_name_length} characters"
+                )
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            return failure("seed must be an integer")
+
+        numbers = {}
+        for field_name, value in (
+            ("rated_power_mva", rated_power_mva),
+            ("active_power_mw", active_power_mw),
+            ("reactive_power_mvar", reactive_power_mvar),
+        ):
+            if isinstance(value, bool):
+                return failure(f"{field_name} must be a number")
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                return failure(f"{field_name} must be a number")
+            if not math.isfinite(number):
+                return failure(f"{field_name} must be finite")
+            numbers[field_name] = number
+        rated_power = numbers["rated_power_mva"]
+        active_power = numbers["active_power_mw"]
+        reactive_power = numbers["reactive_power_mvar"]
+        if rated_power <= 0:
+            return failure("rated_power_mva must be positive")
+        if active_power < 0:
+            return failure("active_power_mw must be non-negative")
+
+        try:
+            database = cls._load_evemtbench_synchronous_machine_database()
+            item = cls._evemtbench_synchronous_machine_plan(
+                machine_type,
+                rated_power,
+                type_name,
+                seed,
+            )
+        except Exception as exc:
+            return failure(str(exc))
+
+        source_parameters = item["parameters"]
+        if math.hypot(active_power, reactive_power) > rated_power + 1e-9:
+            return failure(
+                "The requested active/reactive operating point exceeds "
+                "rated_power_mva",
+                item=item,
+            )
+        reactive_min = (
+            float(source_parameters["reactive_power_min_pu"])
+            * rated_power
+        )
+        reactive_max = (
+            float(source_parameters["reactive_power_max_pu"])
+            * rated_power
+        )
+        if not reactive_min <= reactive_power <= reactive_max:
+            return failure(
+                "reactive_power_mvar must be between "
+                f"{reactive_min:g} and {reactive_max:g} for this type",
+                item=item,
+            )
+
+        rated_voltage = float(source_parameters["rated_voltage_kv"])
+        required_confirmation = (
+            f"CREATE {machine_name} WITH {type_name} {machine_type} "
+            f"{rated_power:g}MVA {rated_voltage:g}kV seed={seed}"
+        )
+        try:
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+
+            equipment_folder = app.GetProjectFolder("equip")
+            if equipment_folder is None:
+                raise RuntimeError(
+                    "Equipment Type Library is unavailable: "
+                    "GetProjectFolder('equip') returned None"
+                )
+            type_folders = cls._find_named_contents(
+                equipment_folder,
+                "Generator Types",
+                "IntPrjfolder",
+            )
+            if len(type_folders) > 1:
+                raise RuntimeError("Multiple Generator Types folders were found")
+            type_folder = type_folders[0] if type_folders else None
+            if cls._find_named_contents(
+                equipment_folder,
+                type_name,
+                "TypSym",
+            ):
+                raise RuntimeError(
+                    f"Synchronous-machine type already exists: {type_name}"
+                )
+
+            grid = cls._select_grid(app, grid_name)
+            if cls._find_named_contents(grid, machine_name, "ElmSym"):
+                raise RuntimeError(
+                    "Synchronous machine already exists in the selected "
+                    f"grid: {machine_name}"
+                )
+            bus = cls._select_bus(grid, bus_name)
+            actual_voltage = float(bus.GetAttribute("uknom"))
+            if not math.isclose(
+                actual_voltage,
+                rated_voltage,
+                rel_tol=1e-9,
+                abs_tol=1e-6,
+            ):
+                raise RuntimeError(
+                    f"Bus nominal voltage is {actual_voltage:g} kV; "
+                    f"expected {rated_voltage:g} kV for a "
+                    f"{rated_power:g} MVA {machine_type} machine"
+                )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "type_created": False,
+                "machine_created": False,
+                "machine_type": machine_type,
+                "seed": seed,
+                "catalog_id": database["catalog_id"],
+                "source": database["source"],
+                "affiliation": database["affiliation"],
+                "target": {
+                    "grid": grid.GetFullName(),
+                    "machine_name": machine_name,
+                    "type_name": type_name,
+                    "bus": bus.GetFullName(),
+                    "active_power_mw": active_power,
+                    "reactive_power_mvar": reactive_power,
+                    "out_of_service": bool(out_of_service),
+                },
+                "equipment_folder": (
+                    type_folder or equipment_folder
+                ).GetFullName(),
+                "item": item,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no synchronous-machine type, grid "
+                    "element, cubicle, or switch was created. Table 13 "
+                    "ranges were sampled reproducibly."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    "confirmation must exactly match: "
+                    + required_confirmation,
+                    item=item,
+                )
+
+            if type_folder is None:
+                type_folder = equipment_folder.CreateObject(
+                    "IntPrjfolder",
+                    "Generator Types",
+                )
+                if type_folder is None:
+                    raise RuntimeError("Could not create Generator Types folder")
+                created_type_folder = type_folder
+
+            created_type = type_folder.CreateObject("TypSym", type_name)
+            if created_type is None:
+                raise RuntimeError(
+                    f"Could not create synchronous-machine type: {type_name}"
+                )
+            if created_type.GetClassName() != "TypSym":
+                raise RuntimeError("PowerFactory created an unexpected type class")
+
+            attributes = item["powerfactory_attributes"]
+            structural = {"iturbo": attributes["iturbo"]}
+            nameplate = {
+                name: attributes[name]
+                for name in ("sgn", "ugn", "cosn")
+            }
+            electrical = {
+                name: value
+                for name, value in attributes.items()
+                if name not in structural and name not in nameplate
+            }
+            for values, stage in (
+                (structural, "rotor-mode"),
+                (nameplate, "nameplate"),
+                (electrical, "electrical"),
+            ):
+                cls._set_and_verify_attributes(
+                    created_type,
+                    values,
+                    "Synchronous-machine type",
+                )
+                created_type.WriteChangesToDb()
+                cls._verify_attributes(
+                    created_type,
+                    values,
+                    "Synchronous-machine type",
+                    f"after committing {stage} attributes",
+                )
+            retained_type_attributes = cls._verify_attributes(
+                created_type,
+                attributes,
+                "Synchronous-machine type",
+                "after completing type initialization",
+            )
+            retained_derived_attributes = cls._verify_attributes(
+                created_type,
+                item["powerfactory_derived_attributes"],
+                "Synchronous-machine type",
+                "after deriving short-circuit time constants",
+            )
+            if str(created_type.GetAttribute("loc_name")) != type_name:
+                raise RuntimeError(
+                    f"PowerFactory did not retain type name: {type_name}"
+                )
+            item["full_name"] = created_type.GetFullName()
+
+            _, _, created_machine, retained_element_attributes = (
+                cls._create_connected_element(
+                    app,
+                    "ElmSym",
+                    "Synchronous machine",
+                    machine_name,
+                    (bus_name,),
+                    grid_name,
+                    attributes={
+                        "typ_id": created_type,
+                        "pgini": active_power,
+                        "qgini": reactive_power,
+                        "outserv": int(bool(out_of_service)),
+                    },
+                    connection_attributes=("bus1",),
+                )
+            )
+            result.update({
+                "applied": True,
+                "type_created": True,
+                "machine_created": True,
+                "created_type": created_type.GetFullName(),
+                "created_machine": created_machine.GetFullName(),
+                "retained_type_attributes": retained_type_attributes,
+                "retained_derived_attributes": retained_derived_attributes,
+                "retained_element_attributes": retained_element_attributes,
+                "message": (
+                    f"Created TypSym '{type_name}' and connected ElmSym "
+                    f"'{machine_name}'"
+                ),
+            })
+            return result
+
+        except Exception as exc:
+            rolled_back = None
+            remaining_type = False
+            remaining_folder = False
+            if created_type is not None:
+                try:
+                    created_type.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_type = bool(cls._find_named_contents(
+                        equipment_folder,
+                        type_name,
+                        "TypSym",
+                    ))
+                    rolled_back = not remaining_type
+                except Exception:
+                    remaining_type = True
+            if created_type_folder is not None:
+                try:
+                    if not (created_type_folder.GetContents("*", 0) or []):
+                        created_type_folder.Delete()
+                except Exception:
+                    pass
+                try:
+                    remaining_folder = bool(cls._find_named_contents(
+                        equipment_folder,
+                        "Generator Types",
+                        "IntPrjfolder",
+                    ))
+                except Exception:
+                    remaining_folder = True
+            if created_type is not None or created_type_folder is not None:
+                rolled_back = not remaining_type and not remaining_folder
+            return failure(
+                str(exc),
+                rolled_back=rolled_back,
+                type_created=remaining_type,
+                remaining_type=type_name if remaining_type else None,
+                item=item,
+            )
+
+    @classmethod
+    def create_grid_with_buses(
+        cls,
+        grid_name: str,
+        nominal_frequency_hz: float,
+        buses: list[dict[str, Any]],
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create one ElmNet and its initial ElmTerm objects."""
+        grid_name = str(grid_name or "").strip()
+        project = None
+        grid = None
+        created_grid = None
+        created_buses = []
+        created_folders = []
+        activated_grid = False
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "grid_created": False,
+                "grid_activated": False,
+                "buses_created": 0,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        if not grid_name:
+            return failure("grid_name must not be empty")
+        if len(grid_name) > cls._max_loc_name_length:
+            return failure(
+                "grid_name must be at most "
+                f"{cls._max_loc_name_length} characters"
+            )
+        if isinstance(nominal_frequency_hz, bool):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        try:
+            frequency = float(nominal_frequency_hz)
+        except (TypeError, ValueError):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        if frequency not in (50.0, 60.0):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        if not isinstance(buses, list) or not buses:
+            return failure("buses must be a non-empty list")
+        if len(buses) > 100:
+            return failure("buses must contain at most 100 entries")
+
+        definitions = []
+        seen_names = set()
+        allowed_fields = {
+            "name",
+            "nominal_voltage_kv",
+            "out_of_service",
+        }
+        for index, bus in enumerate(buses):
+            if not isinstance(bus, dict):
+                return failure(f"buses[{index}] must be an object")
+            missing = {"name", "nominal_voltage_kv"} - set(bus)
+            unexpected = set(bus) - allowed_fields
+            if missing:
+                return failure(
+                    f"buses[{index}] is missing: {', '.join(sorted(missing))}"
+                )
+            if unexpected:
+                return failure(
+                    f"buses[{index}] has unsupported fields: "
+                    + ", ".join(sorted(unexpected))
+                )
+            name = str(bus["name"] or "").strip()
+            if not name:
+                return failure(f"buses[{index}].name must not be empty")
+            if len(name) > cls._max_loc_name_length:
+                return failure(
+                    f"buses[{index}].name must be at most "
+                    f"{cls._max_loc_name_length} characters"
+                )
+            key = name.casefold()
+            if key in seen_names:
+                return failure(f"Duplicate bus name: {name}")
+            seen_names.add(key)
+            raw_voltage = bus["nominal_voltage_kv"]
+            if isinstance(raw_voltage, bool):
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a number"
+                )
+            try:
+                voltage = float(raw_voltage)
+            except (TypeError, ValueError):
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a number"
+                )
+            if not math.isfinite(voltage) or voltage <= 0:
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a finite "
+                    "positive number"
+                )
+            out_of_service = bus.get("out_of_service", False)
+            if not isinstance(out_of_service, bool):
+                return failure(
+                    f"buses[{index}].out_of_service must be a boolean"
+                )
+            definitions.append({
+                "name": name,
+                "nominal_voltage_kv": voltage,
+                "out_of_service": out_of_service,
+            })
+
+        plan_digest = hashlib.sha256(json.dumps(
+            definitions,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")).hexdigest()[:12]
+        required_confirmation = (
+            f"CREATE GRID {grid_name} {frequency:g}Hz WITH "
+            f"{len(definitions)} BUSES plan={plan_digest}"
+        )
+
+        try:
+            app = cls._get_application(open_digsilent)
+            project = app.GetActiveProject()
+            if project is None:
+                raise RuntimeError("No PowerFactory project is active")
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            grid_matches = cls._find_named_contents(
+                project,
+                grid_name,
+                "ElmNet",
+            )
+            if len(grid_matches) > 1:
+                raise RuntimeError(f"Multiple grids matched: {grid_name}")
+            grid = grid_matches[0] if grid_matches else None
+            active_grid_names = {
+                item.GetFullName()
+                for item in (app.GetCalcRelevantObjects("*.ElmNet") or [])
+            }
+            grid_is_active = (
+                grid is not None and grid.GetFullName() in active_grid_names
+            )
+            if grid is not None:
+                actual_frequency = float(grid.GetAttribute("frnom"))
+                if not math.isclose(
+                    actual_frequency,
+                    frequency,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                ):
+                    raise RuntimeError(
+                        f"Existing grid frequency is {actual_frequency:g} Hz; "
+                        f"expected {frequency:g} Hz"
+                    )
+
+            reused_buses = []
+            pending_buses = []
+            if grid is None:
+                pending_buses = list(definitions)
+            else:
+                for definition in definitions:
+                    matches = cls._find_named_contents(
+                        grid,
+                        definition["name"],
+                        "ElmTerm",
+                    )
+                    if len(matches) > 1:
+                        raise RuntimeError(
+                            "Multiple buses matched: " + definition["name"]
+                        )
+                    if not matches:
+                        pending_buses.append(definition)
+                        continue
+                    existing = matches[0]
+                    actual_voltage = float(existing.GetAttribute("uknom"))
+                    actual_outserv = bool(int(existing.GetAttribute("outserv")))
+                    if not math.isclose(
+                        actual_voltage,
+                        definition["nominal_voltage_kv"],
+                        rel_tol=1e-6,
+                        abs_tol=1e-6,
+                    ):
+                        raise RuntimeError(
+                            f"Existing bus '{definition['name']}' is "
+                            f"{actual_voltage:g} kV; expected "
+                            f"{definition['nominal_voltage_kv']:g} kV"
+                        )
+                    if actual_outserv != definition["out_of_service"]:
+                        raise RuntimeError(
+                            f"Existing bus '{definition['name']}' has "
+                            f"out_of_service={actual_outserv}; expected "
+                            f"{definition['out_of_service']}"
+                        )
+                    reused_buses.append(existing.GetFullName())
+
+            result = {
+                "success": True,
+                "applied": False,
+                "grid_created": False,
+                "grid_activated": False,
+                "buses_created": 0,
+                "grid_will_be_created": grid is None,
+                "grid_will_be_activated": not grid_is_active,
+                "grid_name": grid_name,
+                "nominal_frequency_hz": frequency,
+                "bus_count": len(definitions),
+                "buses": definitions,
+                "buses_to_create": [
+                    definition["name"] for definition in pending_buses
+                ],
+                "reused_buses": reused_buses,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no grid, folder, or bus was created."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    f"confirmation must exactly match: {required_confirmation}"
+                )
+            if grid is not None and not pending_buses and grid_is_active:
+                result.update({
+                    "message": "Grid and all requested buses already exist",
+                    "grid": grid.GetFullName(),
+                })
+                return result
+
+            if grid is None:
+                data_folders = cls._find_named_contents(
+                    project,
+                    "Network Data",
+                    "IntPrjfolder",
+                )
+                if len(data_folders) > 1:
+                    raise RuntimeError("Multiple Network Data folders were found")
+                data_folder = data_folders[0] if data_folders else None
+                if data_folder is None:
+                    model_folders = cls._find_named_contents(
+                        project,
+                        "Network Model",
+                        "IntPrjfolder",
+                    )
+                    if len(model_folders) > 1:
+                        raise RuntimeError(
+                            "Multiple Network Model folders were found"
+                        )
+                    model_folder = (
+                        model_folders[0] if model_folders else None
+                    )
+                    if model_folder is None:
+                        model_folder = project.CreateObject(
+                            "IntPrjfolder",
+                            "Network Model",
+                        )
+                        if model_folder is None:
+                            raise RuntimeError(
+                                "Could not create Network Model folder"
+                            )
+                        created_folders.append((project, model_folder))
+                    data_folder = model_folder.CreateObject(
+                        "IntPrjfolder",
+                        "Network Data",
+                    )
+                    if data_folder is None:
+                        raise RuntimeError("Could not create Network Data folder")
+                    created_folders.append((model_folder, data_folder))
+
+                grid = data_folder.CreateObject("ElmNet", grid_name)
+                if grid is None:
+                    raise RuntimeError(f"Could not create grid: {grid_name}")
+                created_grid = grid
+                cls._set_and_verify_attributes(
+                    grid,
+                    {"frnom": frequency},
+                    "Grid",
+                )
+                if str(grid.GetAttribute("loc_name")) != grid_name:
+                    raise RuntimeError(
+                        f"PowerFactory did not retain grid name: {grid_name}"
+                    )
+
+            if not grid_is_active:
+                activation_code = grid.Activate()
+                if activation_code not in (None, 0):
+                    raise RuntimeError(
+                        "Could not activate grid: "
+                        f"{grid_name} (error code {activation_code})"
+                    )
+                activated_grid = True
+                active_grid_names = {
+                    item.GetFullName()
+                    for item in (app.GetCalcRelevantObjects("*.ElmNet") or [])
+                }
+                if grid.GetFullName() not in active_grid_names:
+                    raise RuntimeError(
+                        "Grid activation did not make the grid "
+                        f"calculation-relevant: {grid_name}"
+                    )
+
+            for definition in pending_buses:
+                bus = grid.CreateObject("ElmTerm", definition["name"])
+                if bus is None:
+                    raise RuntimeError(
+                        f"Could not create bus: {definition['name']}"
+                    )
+                created_buses.append(bus)
+                cls._set_and_verify_attributes(
+                    bus,
+                    {
+                        "uknom": definition["nominal_voltage_kv"],
+                        "outserv": int(definition["out_of_service"]),
+                    },
+                    "Bus",
+                )
+                if str(bus.GetAttribute("loc_name")) != definition["name"]:
+                    raise RuntimeError(
+                        "PowerFactory did not retain bus name: "
+                        + definition["name"]
+                    )
+
+            if created_grid is not None:
+                message = (
+                    f"Created and activated grid '{grid_name}' with "
+                    f"{len(created_buses)} bus(es)"
+                )
+            elif activated_grid and not created_buses:
+                message = f"Activated existing grid '{grid_name}'"
+            else:
+                message = (
+                    f"Added {len(created_buses)} bus(es) to grid "
+                    f"'{grid_name}'"
+                )
+
+            result.update({
+                "applied": True,
+                "grid_created": created_grid is not None,
+                "grid_activated": activated_grid,
+                "buses_created": len(created_buses),
+                "grid": grid.GetFullName(),
+                "created_buses": [
+                    bus.GetFullName() for bus in created_buses
+                ],
+                "message": message,
+            })
+            return result
+
+        except Exception as exc:
+            for bus in reversed(created_buses):
+                try:
+                    bus.Delete()
+                except Exception:
+                    pass
+            if activated_grid:
+                try:
+                    grid.Deactivate()
+                except Exception:
+                    pass
+            if created_grid is not None:
+                try:
+                    created_grid.Delete()
+                except Exception:
+                    pass
+            for parent, folder in reversed(created_folders):
+                try:
+                    if not (folder.GetContents("*", 0) or []):
+                        folder.Delete()
+                except Exception:
+                    pass
+
+            remaining = []
+            try:
+                if created_grid is not None and cls._find_named_contents(
+                    project,
+                    grid_name,
+                    "ElmNet",
+                ):
+                    remaining.append(grid_name)
+                elif grid is not None:
+                    for bus in created_buses:
+                        name = str(bus.GetAttribute("loc_name"))
+                        if cls._find_named_contents(grid, name, "ElmTerm"):
+                            remaining.append(name)
+                for parent, folder in created_folders:
+                    name = str(folder.GetAttribute("loc_name"))
+                    if cls._find_named_contents(parent, name, "IntPrjfolder"):
+                        remaining.append(name)
+                if activated_grid and created_grid is None:
+                    active_names = {
+                        item.GetFullName()
+                        for item in (
+                            app.GetCalcRelevantObjects("*.ElmNet") or []
+                        )
+                    }
+                    if grid.GetFullName() in active_names:
+                        remaining.append(f"{grid_name} (active)")
+            except Exception:
+                remaining.append("rollback verification failed")
+            return failure(
+                str(exc),
+                rolled_back=not remaining,
+                remaining_objects=remaining,
+            )
+
     @staticmethod
     def _select_grid(app, grid_name: str):
         grids = app.GetCalcRelevantObjects("*.ElmNet") or []
@@ -1144,6 +4487,29 @@ class DIgSILENTAgent:
 
     @staticmethod
     def _set_and_verify_attributes(element, expected, component_label):
+        for attribute, value in expected.items():
+            element.SetAttribute(attribute, value)
+            DIgSILENTAgent._verify_attributes(
+                element,
+                {attribute: value},
+                component_label,
+                "immediately after assignment",
+            )
+
+        return DIgSILENTAgent._verify_attributes(
+            element,
+            expected,
+            component_label,
+            "after all assignments",
+        )
+
+    @staticmethod
+    def _verify_attributes(
+        element,
+        expected,
+        component_label,
+        stage="",
+    ):
         import math
 
         labels = {
@@ -1157,9 +4523,6 @@ class DIgSILENTAgent:
             "typ_id": f"{component_label.lower()} type",
         }
 
-        for attribute, value in expected.items():
-            element.SetAttribute(attribute, value)
-
         actual = {}
         for attribute, expected_value in expected.items():
             actual_value = element.GetAttribute(attribute)
@@ -1170,8 +4533,8 @@ class DIgSILENTAgent:
                     matches = math.isclose(
                         float(actual_value),
                         expected_value,
-                        rel_tol=1e-9,
-                        abs_tol=1e-9,
+                        rel_tol=1e-6,
+                        abs_tol=1e-6,
                     )
                 elif hasattr(expected_value, "GetFullName"):
                     matches = (
@@ -1187,7 +4550,9 @@ class DIgSILENTAgent:
             if not matches:
                 raise RuntimeError(
                     "PowerFactory did not retain the "
-                    f"{labels.get(attribute, attribute)}"
+                    f"{labels.get(attribute, attribute)}: "
+                    f"expected {expected_value!r}, got {actual_value!r}"
+                    + (f" {stage}" if stage else "")
                 )
 
         return actual

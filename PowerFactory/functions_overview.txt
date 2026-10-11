@@ -15,6 +15,21 @@ Implemented MCP tools
 - ping: connectivity check that returns pong.
 - close_digsilent: closes the PowerFactory session.
 - get_config: returns the active configuration file.
+- export_active_grid_pdf: exports one active-project single-line diagram to a new PDF file.
+- create_evemtbench_component: routes a component type and parameter object to any validated EvEMTBench creator while preserving preview, confirmation, verification, and rollback behavior.
+- list_evemtbench_components: validates and filters the versioned EvEMTBench transformer database without opening PowerFactory.
+- create_evemtbench_transformer: previews or creates a new database-backed TypTr2 and connected ElmTr2 without an existing template.
+- list_evemtbench_line_profiles: validates and filters the versioned 20/110/345 kV overhead-line sequence profiles without opening PowerFactory.
+- create_evemtbench_line: previews or creates a new profile-backed TypLne and connected ElmLne without an existing template.
+- list_evemtbench_cable_profiles: validates and filters the versioned 20 kV underground-cable sequence profiles without opening PowerFactory.
+- create_evemtbench_cable: previews or creates a Table 6 cable-equivalent TypLne and connected ElmLne without an existing template.
+- list_evemtbench_external_grid_profiles: validates and filters the versioned Table 4 external-grid ranges without opening PowerFactory.
+- create_evemtbench_external_grid: previews or creates a seeded Table 4 ElmXnet on an existing 110, 345, or 380 kV bus.
+- list_evemtbench_load_profiles: validates and filters the versioned Table 5 load-power ranges without opening PowerFactory.
+- create_evemtbench_load: previews or creates a seeded Table 5 ElmLod on an existing 20, 110, or 345 kV bus.
+- list_evemtbench_synchronous_machine_profiles: validates and filters the versioned Table 13 salient-pole and round-rotor ranges without opening PowerFactory.
+- create_evemtbench_synchronous_machine: previews or creates a seeded round-rotor TypSym and connected ElmSym without an existing template.
+- create_grid_with_buses: previews or bootstraps and activates an ElmNet with one to 100 initial ElmTerm objects in the active project and study case.
 - import_project: imports a .pfd project and activates it.
 - create_study_case: creates or activates a study case with optional idempotency support.
 - modify_parameter: updates one PowerFactory attribute across matching objects.
@@ -25,7 +40,7 @@ Implemented MCP tools
 - read_results_csv: returns the latest RMS CSV or a specific file.
 - get_active_project: returns the active PowerFactory project.
 - get_active_study_case: returns the active study case.
-- get_parameters: reads selected attributes from matching objects.
+- get_parameters: reads selected attributes, optional metadata, and opt-in non-calculation-relevant project objects.
 - list_objects: lists objects using a PowerFactory object query.
 - list_components: lists objects using friendly equipment categories.
 - list_study_cases: lists study cases and identifies the active case.
@@ -53,6 +68,17 @@ Implemented simulation engine behavior
 - DIgSILENTAgent._apply_fault_event: supports bus faults, line faults, and generator switch events.
 - DIgSILENTAgent.addSwitchEvent: creates PowerFactory EvtSwitch events.
 - DIgSILENTAgent.export_results_to_csv: exports the RMS results to CSV via ComRes.
+- DIgSILENTAgent.export_active_grid_pdf: exports a selected Graphics Board single-line diagram to PDF via ComWr.
+- DIgSILENTAgent.create_evemtbench_component: validates and routes unified component requests to the existing specialized creator.
+- DIgSILENTAgent.list_evemtbench_components: validates and filters the transformer catalog.
+- DIgSILENTAgent.create_evemtbench_transformer: samples, previews, creates, connects, verifies, and rolls back a transformer type and element.
+- DIgSILENTAgent.list_evemtbench_line_profiles: validates and filters the overhead-line profile catalog.
+- DIgSILENTAgent.create_evemtbench_line: previews, creates, connects, verifies, and rolls back an overhead-line type and element.
+- DIgSILENTAgent.list_evemtbench_cable_profiles: validates and filters the underground-cable profile catalog.
+- DIgSILENTAgent.create_evemtbench_cable: previews, creates, connects, verifies, and rolls back a cable type and element.
+- DIgSILENTAgent.list_evemtbench_external_grid_profiles: validates and filters the external-grid catalog.
+- DIgSILENTAgent.create_evemtbench_external_grid: samples, previews, creates, connects, verifies, and rolls back an external grid.
+- DIgSILENTAgent.create_grid_with_buses: previews, creates or reuses, activates, verifies, and rolls back a grid and its initial buses.
 - DIgSILENTAgent.export_project_to_pfd: exports the active project to .pfd via ComPfdexport.
 - DIgSILENTAgent.generate_standard_plots: creates voltage and generator speed plots, placing large voltage legends below the axes.
 - DIgSILENTAgent.import_project: imports a .pfd project file.

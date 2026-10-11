@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-transformers-tables-10-12-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [10, 11, 12]
+  },
+  "affiliation": "Chair of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "sampling": {
+    "interval_distribution": "uniform",
+    "intervals_are_closed": true,
+    "seeded": true,
+    "nominal_frequencies_hz": [50.0, 60.0]
+  },
+  "powerfactory": {
+    "type_class": "TypTr2",
+    "element_class": "ElmTr2",
+    "mapped_table_11_attributes": {
+      "rated_power_mva": "strn",
+      "high_voltage_kv": "utrn_h",
+      "low_voltage_kv": "utrn_l",
+      "short_circuit_voltage_pct": "uktr",
+      "winding_losses_kw": "pcutr",
+      "no_load_losses_kw": "pfe",
+      "no_load_current_pct": "curmg",
+      "high_winding_connection": "tr2cn_h",
+      "low_winding_connection": "tr2cn_l",
+      "clock_number": "nt2ag"
+    },
+    "unmapped_source_tables": [10, 12]
+  },
+  "vector_groups": {
+    "Dyn": {
+      "high_winding_connection": "D",
+      "low_winding_connection": "YN",
+      "clock_numbers_referenced_in_text": [5]
+    },
+    "Yzn": {
+      "high_winding_connection": "Y",
+      "low_winding_connection": "ZN",
+      "clock_numbers_referenced_in_text": [5]
+    },
+    "YNd": {
+      "high_winding_connection": "YN",
+      "low_winding_connection": "D",
+      "clock_numbers_referenced_in_text": [5, 11]
+    },
+    "YNyn": {
+      "high_winding_connection": "YN",
+      "low_winding_connection": "YN",
+      "clock_numbers_referenced_in_text": []
+    }
+  },
+  "saturation": {
+    "source_table": 12,
+    "flux_linkage_pu": {"min": 1.2, "max": 1.25},
+    "air_core_reactance_multiplier_of_uk": {"min": 1.0, "max": 2.0},
+    "saturation_sharpness": {"value": 15.0},
+    "powerfactory_mapping_status": "pending"
+  },
+  "classes": {
+    "20/0.4": {
+      "source_table": 11,
+      "high_voltage_kv": 20.0,
+      "low_voltage_kv": 0.4,
+      "ratings": [
+        {
+          "rated_power_mva": 0.16,
+          "short_circuit_voltage_pct": {"value": 4.0},
+          "winding_losses_kw": {"min": 2.35, "max": 3.1},
+          "no_load_losses_kw": {"min": 0.375, "max": 0.46},
+          "no_load_current_pct": {"min": 1.1, "max": 1.7},
+          "vector_groups": ["Dyn", "Yzn"]
+        },
+        {
+          "rated_power_mva": 0.25,
+          "short_circuit_voltage_pct": {"min": 4.0, "max": 6.0},
+          "winding_losses_kw": {"min": 2.75, "max": 4.2},
+          "no_load_losses_kw": {"min": 0.425, "max": 0.65},
+          "no_load_current_pct": {"min": 1.1, "max": 1.7},
+          "vector_groups": ["Dyn", "Yzn"]
+        },
+        {
+          "rated_power_mva": 0.4,
+          "short_circuit_voltage_pct": {"min": 4.0, "max": 6.0},
+          "winding_losses_kw": {"min": 3.85, "max": 6.0},
+          "no_load_losses_kw": {"min": 0.61, "max": 0.93},
+          "no_load_current_pct": {"min": 0.9, "max": 1.4},
+          "vector_groups": ["Dyn"]
+        },
+        {
+          "rated_power_mva": 0.63,
+          "short_circuit_voltage_pct": {"min": 4.0, "max": 6.0},
+          "winding_losses_kw": {"min": 5.4, "max": 8.7},
+          "no_load_losses_kw": {"min": 0.8, "max": 1.3},
+          "no_load_current_pct": {"min": 0.8, "max": 1.2},
+          "vector_groups": ["Dyn"]
+        },
+        {
+          "rated_power_mva": 1.0,
+          "short_circuit_voltage_pct": {"value": 6.0},
+          "winding_losses_kw": {"min": 9.5, "max": 13.0},
+          "no_load_losses_kw": {"min": 1.1, "max": 1.7},
+          "no_load_current_pct": {"min": 0.8, "max": 1.2},
+          "vector_groups": ["Dyn"]
+        },
+        {
+          "rated_power_mva": 1.6,
+          "short_circuit_voltage_pct": {"value": 6.0},
+          "winding_losses_kw": {"min": 14.0, "max": 20.0},
+          "no_load_losses_kw": {"min": 1.7, "max": 2.6},
+          "no_load_current_pct": {"min": 0.7, "max": 1.1},
+          "vector_groups": ["Dyn"]
+        }
+      ],
+      "zero_sequence_rules": [
+        {
+          "when": {"vector_group": "Dyn"},
+          "x0_x1_ratio": {"min": 0.95, "max": 1.0},
+          "r0_r1_ratio": {"min": 1.2, "max": 1.8}
+        },
+        {
+          "when": {"vector_group": "Yzn"},
+          "x0_x1_ratio": {"min": 0.07, "max": 0.11},
+          "r0_r1_ratio": {"min": 0.45, "max": 0.54}
+        }
+      ]
+    },
+    "110/20": {
+      "source_table": 11,
+      "high_voltage_kv": 110.0,
+      "low_voltage_kv": 20.0,
+      "ratings": [
+        {"rated_power_mva": 20.0, "short_circuit_voltage_pct": {"min": 10.0, "max": 12.0}, "winding_losses_kw": {"min": 95.0, "max": 100.0}, "no_load_losses_kw": {"min": 14.0, "max": 16.0}, "no_load_current_pct": {"min": 0.4, "max": 0.5}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 25.0, "short_circuit_voltage_pct": {"min": 10.0, "max": 12.0}, "winding_losses_kw": {"min": 110.0, "max": 115.0}, "no_load_losses_kw": {"min": 16.0, "max": 19.0}, "no_load_current_pct": {"min": 0.4, "max": 0.5}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 31.5, "short_circuit_voltage_pct": {"min": 10.0, "max": 13.0}, "winding_losses_kw": {"min": 130.0, "max": 135.0}, "no_load_losses_kw": {"min": 19.0, "max": 23.0}, "no_load_current_pct": {"min": 0.4, "max": 0.45}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 40.0, "short_circuit_voltage_pct": {"min": 10.0, "max": 15.0}, "winding_losses_kw": {"min": 155.0, "max": 160.0}, "no_load_losses_kw": {"min": 23.0, "max": 27.0}, "no_load_current_pct": {"min": 0.35, "max": 0.4}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 50.0, "short_circuit_voltage_pct": {"min": 13.0, "max": 15.8}, "winding_losses_kw": {"value": 190.0}, "no_load_losses_kw": {"value": 32.0}, "no_load_current_pct": {"min": 0.35, "max": 0.4}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 63.0, "short_circuit_voltage_pct": {"min": 13.0, "max": 16.0}, "winding_losses_kw": {"value": 220.0}, "no_load_losses_kw": {"value": 38.0}, "no_load_current_pct": {"min": 0.35, "max": 0.4}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 80.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"value": 260.0}, "no_load_losses_kw": {"value": 45.0}, "no_load_current_pct": {"value": 0.35}, "vector_groups": ["YNd"]}
+      ],
+      "zero_sequence_rules": [
+        {"when": {"limb_count": 3}, "x0_x1_ratio": {"min": 0.85, "max": 1.0}, "r0_r1_ratio": {"min": 1.5, "max": 2.8}},
+        {"when": {"limb_count": 5}, "x0_x1_ratio": {"min": 0.95, "max": 1.05}, "r0_r1_ratio": {"min": 1.05, "max": 1.1}}
+      ]
+    },
+    "110/11": {
+      "source_table": 11,
+      "high_voltage_kv": 110.0,
+      "low_voltage_kv": 11.0,
+      "ratings": [
+        {"rated_power_mva": 20.0, "short_circuit_voltage_pct": {"min": 10.0, "max": 12.0}, "winding_losses_kw": {"min": 95.0, "max": 100.0}, "no_load_losses_kw": {"min": 14.0, "max": 16.0}, "no_load_current_pct": {"min": 0.4, "max": 0.5}, "vector_groups": ["YNd"]}
+      ],
+      "zero_sequence_rules": [
+        {"when": {"limb_count": 3}, "x0_x1_ratio": {"min": 0.85, "max": 1.0}, "r0_r1_ratio": {"min": 1.5, "max": 2.8}},
+        {"when": {"limb_count": 5}, "x0_x1_ratio": {"min": 0.95, "max": 1.05}, "r0_r1_ratio": {"min": 1.05, "max": 1.1}}
+      ]
+    },
+    "380/110": {
+      "source_table": 11,
+      "high_voltage_kv": 380.0,
+      "low_voltage_kv": 110.0,
+      "ratings": [
+        {"rated_power_mva": 100.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 350.0, "max": 460.0}, "no_load_losses_kw": {"min": 40.0, "max": 60.0}, "no_load_current_pct": {"min": 0.35, "max": 0.46}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 160.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 480.0, "max": 560.0}, "no_load_losses_kw": {"min": 64.0, "max": 96.0}, "no_load_current_pct": {"min": 0.3, "max": 0.35}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 200.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 560.0, "max": 700.0}, "no_load_losses_kw": {"min": 80.0, "max": 120.0}, "no_load_current_pct": {"min": 0.28, "max": 0.35}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 250.0, "short_circuit_voltage_pct": {"min": 15.0, "max": 17.0}, "winding_losses_kw": {"min": 650.0, "max": 825.0}, "no_load_losses_kw": {"min": 100.0, "max": 150.0}, "no_load_current_pct": {"min": 0.26, "max": 0.33}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 300.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 19.0}, "winding_losses_kw": {"min": 690.0, "max": 930.0}, "no_load_losses_kw": {"min": 120.0, "max": 180.0}, "no_load_current_pct": {"min": 0.23, "max": 0.31}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 400.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 840.0, "max": 1160.0}, "no_load_losses_kw": {"min": 160.0, "max": 240.0}, "no_load_current_pct": {"min": 0.21, "max": 0.29}, "vector_groups": ["YNyn"]},
+        {"rated_power_mva": 500.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 1000.0, "max": 1400.0}, "no_load_losses_kw": {"min": 200.0, "max": 300.0}, "no_load_current_pct": {"min": 0.2, "max": 0.28}, "vector_groups": ["YNyn"]}
+      ],
+      "zero_sequence_rules": [
+        {"when": {"limb_count": 3, "internal_delta": true}, "x0_x1_ratio": {"min": 1.8, "max": 3.0}, "r0_r1_ratio": {"min": 0.95, "max": 1.05}},
+        {"when": {"limb_count": 3, "internal_delta": false}, "x0_x1_ratio": {"min": 5.0, "max": 10.0}, "r0_r1_ratio": {"min": 0.95, "max": 1.05}},
+        {"when": {"limb_count": 5, "internal_delta": true}, "x0_x1_ratio": {"min": 2.0, "max": 5.0}, "r0_r1_ratio": {"min": 0.95, "max": 1.05}},
+        {"when": {"limb_count": 5, "internal_delta": false}, "x0_x1_ratio": {"min": 10.0, "max": 100.0}, "r0_r1_ratio": {"min": 0.95, "max": 1.05}}
+      ]
+    },
+    "345/25": {
+      "source_table": 11,
+      "high_voltage_kv": 345.0,
+      "low_voltage_kv": 25.0,
+      "ratings": [
+        {"rated_power_mva": 100.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 350.0, "max": 460.0}, "no_load_losses_kw": {"min": 40.0, "max": 60.0}, "no_load_current_pct": {"min": 0.35, "max": 0.46}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 160.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 480.0, "max": 560.0}, "no_load_losses_kw": {"min": 64.0, "max": 96.0}, "no_load_current_pct": {"min": 0.3, "max": 0.35}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 200.0, "short_circuit_voltage_pct": {"min": 14.0, "max": 16.0}, "winding_losses_kw": {"min": 560.0, "max": 700.0}, "no_load_losses_kw": {"min": 80.0, "max": 120.0}, "no_load_current_pct": {"min": 0.28, "max": 0.35}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 250.0, "short_circuit_voltage_pct": {"min": 15.0, "max": 17.0}, "winding_losses_kw": {"min": 650.0, "max": 825.0}, "no_load_losses_kw": {"min": 100.0, "max": 150.0}, "no_load_current_pct": {"min": 0.26, "max": 0.33}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 300.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 19.0}, "winding_losses_kw": {"min": 690.0, "max": 930.0}, "no_load_losses_kw": {"min": 120.0, "max": 180.0}, "no_load_current_pct": {"min": 0.23, "max": 0.31}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 400.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 840.0, "max": 1160.0}, "no_load_losses_kw": {"min": 160.0, "max": 240.0}, "no_load_current_pct": {"min": 0.21, "max": 0.29}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 500.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 1000.0, "max": 1400.0}, "no_load_losses_kw": {"min": 200.0, "max": 300.0}, "no_load_current_pct": {"min": 0.2, "max": 0.28}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 600.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 1200.0, "max": 1680.0}, "no_load_losses_kw": {"min": 240.0, "max": 360.0}, "no_load_current_pct": {"min": 0.2, "max": 0.28}, "vector_groups": ["YNd"]},
+        {"rated_power_mva": 800.0, "short_circuit_voltage_pct": {"min": 16.0, "max": 20.0}, "winding_losses_kw": {"min": 1440.0, "max": 2080.0}, "no_load_losses_kw": {"min": 320.0, "max": 480.0}, "no_load_current_pct": {"min": 0.18, "max": 0.26}, "vector_groups": ["YNd"]}
+      ],
+      "zero_sequence_rules": [
+        {"when": {"rated_power_mva": {"lt": 50.0}, "limb_count": 3}, "x0_x1_ratio": {"min": 0.85, "max": 1.0}, "r0_r1_ratio": {"min": 1.0, "max": 3.0}},
+        {"when": {"rated_power_mva": {"min": 50.0, "max": 350.0}, "limb_count": 3}, "x0_x1_ratio": {"min": 0.85, "max": 0.95}, "r0_r1_ratio": {"min": 1.8, "max": 2.0}},
+        {"when": {"rated_power_mva": {"gt": 350.0}, "limb_count": 5}, "x0_x1_ratio": {"min": 0.95, "max": 1.05}, "r0_r1_ratio": {"min": 1.0, "max": 1.1}}
+      ]
+    }
+  },
+  "catalog_only": {
+    "Block": {
+      "reason": "The low-side voltage depends on generator rating and the high side depends on the project voltage level; implementation requires an explicit voltage-selection rule.",
+      "source_tables": [10, 11]
+    },
+    "other_component_families": {
+      "reason": "Source data are documented in references/evemtbench_component_catalog.md, but PowerFactory mappings are not yet validated."
+    }
+  }
+}

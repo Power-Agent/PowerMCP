@@ -24,6 +24,21 @@ Tools
   configure_contingency_screening       Configure persistent ComSimoutage screening criteria.
   add_contingency_result_variables      Add variables to AC/DC result recording.
   remove_contingency_result_variables   Remove variables from AC/DC result recording.
+  export_active_grid_pdf                Export an active single-line diagram to PDF.
+  create_evemtbench_component           Create any supported EvEMTBench component.
+  list_evemtbench_components            Inspect the versioned equipment database.
+  create_evemtbench_transformer         Create a new Table 11 TypTr2 and ElmTr2.
+  list_evemtbench_line_profiles         Inspect the overhead-line profile database.
+  create_evemtbench_line                Create a new Table 7 TypLne and ElmLne.
+  list_evemtbench_cable_profiles        Inspect the underground-cable database.
+  create_evemtbench_cable               Create a new Table 6 TypLne and ElmLne.
+  list_evemtbench_external_grid_profiles Inspect the Table 4 external-grid database.
+  create_evemtbench_external_grid       Create a new Table 4 ElmXnet.
+  list_evemtbench_load_profiles         Inspect the Table 5 load-power database.
+  create_evemtbench_load                Create a new Table 5 ElmLod.
+  list_evemtbench_synchronous_machine_profiles
+                                        Inspect the Table 13 machine database.
+  create_grid_with_buses                Bootstrap an ElmNet and initial ElmTerm objects.
   import_project                        Import a .pfd file and activate it in PowerFactory.
   create_study_case                     Create/activate a study case by name (no simulation run).
   modify_parameter                      Modify an object attribute by object query + variable name.
@@ -149,12 +164,16 @@ def _pf(fn, *args, **kwargs):
 
 def _agent_result(method_name: str, *args, structured: bool = False) -> str:
     _, DIgSILENTAgent = _load_modules()
+    if structured:
+        return _pf(
+            lambda: _to_json(
+                getattr(DIgSILENTAgent, method_name)(*args)
+            )
+        )
     result = _pf(
         getattr(DIgSILENTAgent, method_name),
         *args,
     )
-    if structured:
-        return json.dumps(result)
     ok, message = result
     return json.dumps({"success": ok, "message": message})
 
@@ -211,6 +230,11 @@ def _to_json(obj: Any) -> str:
             return None if (math.isnan(o) or math.isinf(o)) else o
         if isinstance(o, (str, int, bool, type(None))):
             return o
+        if hasattr(o, "GetFullName"):
+            try:
+                return o.GetFullName()
+            except Exception:
+                pass
         return str(o)
 
     return json.dumps(_clean(obj), indent=2, ensure_ascii=False)
@@ -601,8 +625,16 @@ def get_parameters(
     object_query: str,
     variables: list[str],
     max_results: int = 100,
+    include_metadata: bool = False,
+    include_project_objects: bool = False,
 ) -> str:
-    """Return selected attributes for calculation-relevant objects."""
+    """Return selected attributes for calculation-relevant objects.
+
+    Set ``include_metadata`` to also request each attribute's PowerFactory
+    type, unit, and description. Metadata lookup failures are reported per
+    method without hiding readable values. Set ``include_project_objects`` to
+    also inspect non-calculation-relevant objects in the active project tree.
+    """
     _, DIgSILENTAgent = _load_modules()
 
     def _impl(app):
@@ -615,7 +647,20 @@ def get_parameters(
                 "message": "At least one variable is required",
             }
 
-        objects = app.GetCalcRelevantObjects(object_query) or []
+        objects = list(app.GetCalcRelevantObjects(object_query) or [])
+        if include_project_objects:
+            project = app.GetActiveProject()
+            project_objects = (
+                project.GetContents(object_query, 1) or []
+                if project is not None
+                else []
+            )
+            known = {obj.GetFullName() for obj in objects}
+            objects.extend(
+                obj
+                for obj in project_objects
+                if obj.GetFullName() not in known
+            )
         if not objects:
             return {
                 "success": False,
@@ -628,6 +673,8 @@ def get_parameters(
         for obj in objects[:limit]:
             values = {}
             errors = {}
+            metadata = {}
+            metadata_errors = {}
 
             for variable in variable_names:
                 try:
@@ -641,6 +688,28 @@ def get_parameters(
                 except Exception as exc:
                     errors[variable] = str(exc)
 
+                if include_metadata:
+                    details = {}
+                    detail_errors = {}
+                    for key, method_name in (
+                        ("type", "GetAttributeType"),
+                        ("unit", "GetAttributeUnit"),
+                        ("description", "GetAttributeDescription"),
+                    ):
+                        try:
+                            detail = getattr(obj, method_name)(variable)
+                            if not isinstance(
+                                detail,
+                                (str, int, float, bool, list, type(None)),
+                            ):
+                                detail = str(detail)
+                            details[key] = detail
+                        except Exception as exc:
+                            detail_errors[key] = str(exc)
+                    metadata[variable] = details
+                    if detail_errors:
+                        metadata_errors[variable] = detail_errors
+
             item = {
                 "name": obj.GetAttribute("loc_name"),
                 "class_name": obj.GetClassName(),
@@ -649,6 +718,10 @@ def get_parameters(
             }
             if errors:
                 item["errors"] = errors
+            if include_metadata:
+                item["metadata"] = metadata
+                if metadata_errors:
+                    item["metadata_errors"] = metadata_errors
 
             results.append(item)
 
@@ -1071,6 +1144,462 @@ def configure_contingency_screening(
         }
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+@mcp.tool()
+def export_active_grid_pdf(
+    file_path: str = "",
+    diagram_name: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """
+    Export a single-line diagram from the active PowerFactory project as PDF.
+
+    The active project and study case are required. If the Graphics Board has
+    more than one single-line diagram, provide its exact name. Existing files
+    are never overwritten.
+
+    Parameters
+    ----------
+    file_path : str
+        Absolute destination path ending in .pdf. The parent directory must
+        already exist and must be inside an allowed MCP root.
+    diagram_name : str, optional
+        Exact single-line diagram name. May be omitted only when exactly one
+        diagram is available in the Graphics Board.
+    open_digsilent : bool
+        If True (default), requests the PowerFactory GUI window via app.Show().
+
+    Returns
+    -------
+    str
+        JSON string with success flag and the exported diagram/path or error.
+    """
+    if not file_path:
+        return json.dumps({"success": False, "message": "file_path is required"})
+    file_path = checked_path(
+        file_path,
+        purpose="file_path",
+        for_write=True,
+    )
+    return _agent_result(
+        "export_active_grid_pdf",
+        file_path,
+        diagram_name,
+        open_digsilent,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_components(
+    voltage_class: str = "",
+    rated_power_mva: float | None = None,
+) -> str:
+    """List executable EvEMTBench transformer data without opening PowerFactory.
+
+    Leave both filters empty to list every supported fixed-voltage transformer
+    class. Set ``voltage_class`` for one class, and optionally select an exact
+    published ``rated_power_mva``. The response includes Table 10 zero-sequence
+    rules and Table 12 saturation data even though those fields are not yet
+    mapped to PowerFactory attributes.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(DIgSILENTAgent.list_evemtbench_components(
+        voltage_class,
+        rated_power_mva,
+    ))
+
+
+@mcp.tool()
+def create_evemtbench_component(
+    component_type: str,
+    parameters: dict[str, Any],
+) -> str:
+    """Preview or create any supported EvEMTBench-backed component.
+
+    ``component_type`` must be ``transformer``, ``overhead_line``,
+    ``underground_cable``, ``external_grid``, ``load``, or
+    ``synchronous_machine``. Put the corresponding specialized creator's
+    arguments in ``parameters``. Use an empty ``confirmation`` for the
+    read-only preview, then repeat the same request with the exact returned
+    ``confirmation_required`` value. Validation, creation, verification, and
+    rollback are delegated unchanged to the existing specialized creator.
+    """
+    return _agent_result(
+        "create_evemtbench_component",
+        component_type,
+        parameters,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def create_evemtbench_transformer(
+    voltage_class: str,
+    rated_power_mva: float,
+    nominal_frequency_hz: float,
+    vector_group: str,
+    clock_number: int,
+    transformer_name: str,
+    type_name: str,
+    high_voltage_bus_name: str,
+    low_voltage_bus_name: str,
+    grid_name: str = "",
+    seed: int = 0,
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a new transformer type and connected transformer.
+
+    No existing transformer or type is used as a template. Table 11 supplies
+    the sampled electrical values and winding-connection family. The caller
+    explicitly supplies the clock number because the paper does not select one
+    for every transformer. Nominal frequency must explicitly be 50 or 60 Hz;
+    it is not inferred from the grid. Existing high- and low-voltage buses are required.
+    An empty ``confirmation`` performs a read-only preview; a confirmed call
+    creates the ``TypTr2``, connected ``ElmTr2``, cubicles, and closed switches.
+    The new type is rolled back if element creation fails. Tables 10 and 12 are
+    stored in the database but are not applied until their PowerFactory
+    attribute mappings have been validated.
+    """
+    return _agent_result(
+        "create_evemtbench_transformer",
+        voltage_class,
+        rated_power_mva,
+        nominal_frequency_hz,
+        vector_group,
+        clock_number,
+        transformer_name,
+        type_name,
+        high_voltage_bus_name,
+        low_voltage_bus_name,
+        grid_name,
+        seed,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_line_profiles(
+    voltage_kv: float | None = None,
+    profile: str = "",
+) -> str:
+    """List executable EvEMTBench overhead-line sequence profiles.
+
+    The database exposes the paper's 5th, 50th and 95th percentile R/X/C
+    values per kilometre for 20, 110 and 345 kV overhead lines, plus the
+    corresponding Table 3 length ranges. This is a read-only catalog tool and
+    does not open PowerFactory.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(DIgSILENTAgent.list_evemtbench_line_profiles(
+        voltage_kv,
+        profile,
+    ))
+
+
+@mcp.tool()
+def create_evemtbench_line(
+    voltage_kv: float,
+    nominal_frequency_hz: float,
+    rated_current_ka: float,
+    profile: str,
+    length_km: float,
+    line_name: str,
+    type_name: str,
+    bus1_name: str,
+    bus2_name: str,
+    grid_name: str = "",
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a new paper-backed TypLne and connected ElmLne.
+
+    The caller selects a published ``p05``, ``p50`` or ``p95`` per-kilometre
+    electrical profile and supplies the engineering current rating. Both buses
+    must already exist at the selected 20, 110 or 345 kV voltage level, and the
+    requested length must remain inside the paper's range for that voltage.
+    Capacitances are converted from nF/km to PowerFactory's uF/km fields.
+
+    An empty confirmation performs a read-only preview. A confirmed call
+    creates a new ``TypLne``, connected ``ElmLne``, cubicles and closed circuit
+    breakers, rolling the new objects back if creation fails. This is a sequence
+    equivalent; it does not reproduce the paper's geometric ULM model.
+    """
+    return _agent_result(
+        "create_evemtbench_line",
+        voltage_kv,
+        nominal_frequency_hz,
+        rated_current_ka,
+        profile,
+        length_km,
+        line_name,
+        type_name,
+        bus1_name,
+        bus2_name,
+        grid_name,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_cable_profiles(
+    profile: str = "",
+) -> str:
+    """List executable 20 kV EvEMTBench cable sequence profiles.
+
+    The database exposes Table 6's 5th, 50th and 95th percentile R/X/C values
+    per kilometre and the Table 3 cable-length range. Construction and
+    installation data are returned for inspection but are not written. This
+    read-only catalog tool does not open PowerFactory.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(DIgSILENTAgent.list_evemtbench_cable_profiles(profile))
+
+
+@mcp.tool()
+def create_evemtbench_cable(
+    nominal_frequency_hz: float,
+    rated_current_ka: float,
+    profile: str,
+    length_km: float,
+    cable_name: str,
+    type_name: str,
+    bus1_name: str,
+    bus2_name: str,
+    grid_name: str = "",
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a 20 kV Table 6 cable sequence equivalent.
+
+    The caller selects a published ``p05``, ``p50`` or ``p95`` profile,
+    supplies the engineering current rating, and selects 50 or 60 Hz. Both
+    existing buses must be 20 kV, and length must be 0.5 to 3.75 km. An empty
+    confirmation is read-only; a confirmed call creates a new ``TypLne``,
+    connected ``ElmLne``, cubicles, and closed circuit breakers. Failed
+    creation is rolled back. The tool does not reproduce the paper's geometric
+    ULM cable model.
+    """
+    return _agent_result(
+        "create_evemtbench_cable",
+        nominal_frequency_hz,
+        rated_current_ka,
+        profile,
+        length_km,
+        cable_name,
+        type_name,
+        bus1_name,
+        bus2_name,
+        grid_name,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_external_grid_profiles(
+    voltage_kv: float | None = None,
+) -> str:
+    """List executable EvEMTBench Table 4 external-grid profiles.
+
+    Leave ``voltage_kv`` empty to return the 110 kV and combined 380/345 kV
+    classes. An exact 110, 345, or 380 kV filter returns the applicable source
+    ranges. This read-only catalog tool does not open PowerFactory.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(
+        DIgSILENTAgent.list_evemtbench_external_grid_profiles(voltage_kv)
+    )
+
+
+@mcp.tool()
+def create_evemtbench_external_grid(
+    voltage_kv: float,
+    external_grid_name: str,
+    bus_name: str,
+    grid_name: str = "",
+    seed: int = 0,
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a seeded Table 4 external-grid equivalent.
+
+    The selected existing bus must be exactly 110, 345, or 380 kV. Table 4
+    supplies uniformly sampled short-circuit power, positive- and zero-sequence
+    ratios, voltage setpoint, and initial phase angle. An empty confirmation is
+    read-only; a confirmed call creates one connected slack ``ElmXnet`` plus a
+    cubicle and closed circuit breaker. Failed creation is rolled back.
+    """
+    return _agent_result(
+        "create_evemtbench_external_grid",
+        voltage_kv,
+        external_grid_name,
+        bus_name,
+        grid_name,
+        seed,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_load_profiles(
+    voltage_kv: float | None = None,
+) -> str:
+    """List executable EvEMTBench Table 5 load-power profiles.
+
+    Leave ``voltage_kv`` empty to return the 20, 110 and 345 kV profiles.
+    The catalog also returns the paper's ZIP coefficients, which remain
+    read-only until their PowerFactory attributes are live-validated.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(
+        DIgSILENTAgent.list_evemtbench_load_profiles(voltage_kv)
+    )
+
+
+@mcp.tool()
+def create_evemtbench_load(
+    voltage_kv: float,
+    load_name: str,
+    bus_name: str,
+    grid_name: str = "",
+    seed: int = 0,
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a seeded Table 5 balanced load.
+
+    At 110 and 345 kV, active and reactive powers are sampled directly. At
+    20 kV, apparent power and a reactive-power angle spanning the paper's
+    0.95 capacitive to 0.8 inductive limits are sampled, then converted to P
+    and Q. An empty confirmation is read-only; a confirmed call creates one
+    connected ``ElmLod`` plus a cubicle and closed circuit breaker. Failed
+    creation is rolled back.
+    """
+    return _agent_result(
+        "create_evemtbench_load",
+        voltage_kv,
+        load_name,
+        bus_name,
+        grid_name,
+        seed,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def list_evemtbench_synchronous_machine_profiles(
+    machine_type: str = "",
+) -> str:
+    """List EvEMTBench Table 13 synchronous-machine profiles.
+
+    Use ``salient_pole`` or ``round_rotor`` to filter the catalog. Leave the
+    value empty to return both. This tool is read-only and does not open
+    PowerFactory. Round-rotor creation is available separately; salient-pole
+    creation remains disabled because Table 13 omits q-axis transient data.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(
+        DIgSILENTAgent.list_evemtbench_synchronous_machine_profiles(
+            machine_type
+        )
+    )
+
+
+@mcp.tool()
+def create_evemtbench_synchronous_machine(
+    machine_type: str,
+    rated_power_mva: float,
+    machine_name: str,
+    type_name: str,
+    bus_name: str,
+    grid_name: str = "",
+    seed: int = 0,
+    active_power_mw: float = 0.0,
+    reactive_power_mvar: float = 0.0,
+    out_of_service: bool = False,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or create a seeded Table 13 round-rotor machine.
+
+    The MVA rating must be 25 to 1200. Its rated voltage is derived from the
+    paper's rating rule, so the selected existing bus must be at 6.3, 10.5,
+    21, or 27 kV as applicable. An empty confirmation is read-only; a confirmed
+    call creates a new ``TypSym``, connected ``ElmSym``, cubicle, and closed
+    circuit breaker. New objects are rolled back on failure. ``salient_pole``
+    remains catalog-only because Table 13 does not provide xq transient data.
+    """
+    return _agent_result(
+        "create_evemtbench_synchronous_machine",
+        machine_type,
+        rated_power_mva,
+        machine_name,
+        type_name,
+        bus_name,
+        grid_name,
+        seed,
+        active_power_mw,
+        reactive_power_mvar,
+        out_of_service,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
+
+@mcp.tool()
+def create_grid_with_buses(
+    grid_name: str,
+    nominal_frequency_hz: float,
+    buses: list[dict[str, Any]],
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or bootstrap a grid and its initial buses in the active project.
+
+    ``buses`` must contain one to 100 objects with ``name`` and positive
+    ``nominal_voltage_kv`` fields. ``out_of_service`` is an optional boolean.
+    Nominal frequency must be 50 or 60 Hz. An exactly matching existing grid
+    and buses are reused; conflicting values are rejected.
+
+    An empty confirmation performs a read-only preview. Repeat the call with
+    the exact returned ``confirmation_required`` string to create a missing
+    Network Model/Network Data folder hierarchy, ``ElmNet``, and ``ElmTerm``
+    objects. New objects are rolled back if any creation or verification step
+    fails. The tool requires an active project and study case, and activates
+    the resulting grid so it is calculation-relevant. It does not require an
+    existing grid, line type, transformer type, or diagram.
+    """
+    return _agent_result(
+        "create_grid_with_buses",
+        grid_name,
+        nominal_frequency_hz,
+        buses,
+        confirmation,
+        open_digsilent,
+        structured=True,
+    )
+
 
 @mcp.tool()
 def import_project(
