@@ -29,6 +29,8 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer as FastMCP
 
+from powermcp.sandbox import PathNotAllowed, checked_path
+
 from .system_tools import R2X_NOT_INSTALLED_MESSAGE, _component_counts
 
 
@@ -36,7 +38,14 @@ def _load_side(path_str: str) -> tuple[dict[str, Any] | None, dict[str, Any] | N
     """Load one side of the comparison. Returns (loaded, error)."""
     from r2x_core import System
 
-    path = Path(path_str).expanduser()
+    try:
+        path = Path(checked_path(path_str, purpose="SIENNA comparison input"))
+    except PathNotAllowed as exc:
+        return None, {
+            "error_type": "path_not_allowed",
+            "message": str(exc),
+            "path": str(path_str),
+        }
     if not path.is_file():
         return None, {
             "error_type": "file_not_found",
