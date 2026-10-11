@@ -42,4 +42,5 @@ jobs:
           HOPE/tests
           PSCAD/tests
           PLEXOSDB/tests
+          SIENNA/tests
           surge/test_integration.py -q
