@@ -136,6 +136,31 @@ class EvEMTBenchLoadTest(unittest.TestCase):
         self.assertEqual(grid["ElmLod"], [])
         self.assertEqual(bus["StaCubic"], [])
 
+    def test_confirmation_is_bound_to_load_name_bus_seed_and_state(self):
+        grid, bus, app = self.network()
+        alternate_bus = grid.CreateObject("ElmTerm", "Other Load Bus")
+        alternate_bus.SetAttribute("uknom", 20.0)
+        preview = self.call(app)
+
+        changed_requests = (
+            {"load_name": "Renamed Load"},
+            {"bus_name": "Other Load Bus"},
+            {"seed": 43},
+            {"out_of_service": True},
+        )
+        for changes in changed_requests:
+            with self.subTest(changes=changes):
+                result = self.call(
+                    app,
+                    confirmation=preview["confirmation_required"],
+                    **changes,
+                )
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(grid["ElmLod"], [])
+                self.assertEqual(bus["StaCubic"], [])
+                self.assertEqual(alternate_bus["StaCubic"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
