@@ -356,12 +356,14 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertEqual(grid["ElmTr2"], [])
         self.assertEqual(high_bus["StaCubic"], [])
         self.assertEqual(low_bus["StaCubic"], [])
-        self.assertEqual(
-            first["confirmation_required"],
-            "CREATE Research Transformer WITH Research Transformer Type "
-            "110/20 20MVA YNd11 60Hz seed=42 grid=<active> "
-            "buses=HV Bus->LV Bus out_of_service=0",
+        self.assertTrue(
+            first["confirmation_required"].startswith(
+                "CREATE Research Transformer WITH Research Transformer Type "
+                "110/20 20MVA YNd11 60Hz seed=42 grid=<active> "
+                "buses=HV Bus->LV Bus out_of_service=0"
+            )
         )
+        self.assertRegex(first["confirmation_required"], r" plan=[0-9a-f]{64}$")
         attributes = first["item"]["powerfactory_attributes"]
         self.assertEqual(
             list(attributes)[:9],
@@ -552,6 +554,45 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertIn("0 to 11", bad_clock["message"])
         self.assertFalse(bad_frequency["success"])
         self.assertIn("must be 50 or 60", bad_frequency["message"])
+
+    def test_confirmation_binds_delimiter_names_and_resolved_grid(self):
+        folder, grid, high_bus, low_bus, app = self.network()
+        preview = self.call(app, transformer_name="Research -> Transformer")
+        self.assertRegex(preview["confirmation_required"], r" plan=[0-9a-f]{64}$")
+
+        result = self.call(
+            app,
+            transformer_name="Research",
+            type_name="Transformer WITH Research Transformer Type",
+            confirmation=preview["confirmation_required"],
+        )
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(self.transformer_types(folder), [])
+        self.assertEqual(grid["ElmTr2"], [])
+        self.assertEqual(high_bus["StaCubic"], [])
+        self.assertEqual(low_bus["StaCubic"], [])
+
+    def test_confirmation_rejects_active_grid_change(self):
+        folder, grid, high_bus, low_bus, app = self.network()
+        preview = self.call(app)
+
+        alternate_grid = FakeObject(None, "ElmNet", "Alternate Grid")
+        alternate_high = alternate_grid.CreateObject("ElmTerm", "HV Bus")
+        alternate_low = alternate_grid.CreateObject("ElmTerm", "LV Bus")
+        alternate_high.SetAttribute("uknom", 110.0)
+        alternate_low.SetAttribute("uknom", 20.0)
+        app.grid = alternate_grid
+
+        result = self.call(app, confirmation=preview["confirmation_required"])
+
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(self.transformer_types(folder), [])
+        self.assertEqual(grid["ElmTr2"], [])
+        self.assertEqual(alternate_grid["ElmTr2"], [])
+        self.assertEqual(alternate_high["StaCubic"], [])
+        self.assertEqual(alternate_low["StaCubic"], [])
 
     def test_confirmation_is_bound_to_bus_seed_and_service_state(self):
         folder, grid, high_bus, low_bus, app = self.network()
