@@ -1160,6 +1160,19 @@ class DIgSILENTAgent:
     # COMPONENT MANAGEMENT
     # ──────────────────────────────────────────────────────────────
     @staticmethod
+    def _creation_confirmation_token(readable_prefix: str, plan: dict[str, Any]) -> str:
+        """Bind confirmation to a canonical, lossless representation of the plan."""
+        canonical_plan = json.dumps(
+            plan,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        digest = hashlib.sha256(canonical_plan.encode("utf-8")).hexdigest()
+        return f"{readable_prefix} plan={digest}"
+
+    @staticmethod
     def _find_named_contents(parent, name: str, class_name: str):
         requested = str(name or "").strip()
         # GetContents name patterns are case-sensitive; match names in Python.
@@ -2647,7 +2660,7 @@ class DIgSILENTAgent:
         except Exception as exc:
             return failure(str(exc))
 
-        required_confirmation = (
+        confirmation_prefix = (
             f"CREATE {transformer_name} WITH {type_name} {voltage_class} "
             f"{rated_power:g}MVA {vector_group}{clock_number} "
             f"{nominal_frequency:g}Hz seed={seed} "
@@ -2719,6 +2732,28 @@ class DIgSILENTAgent:
                         f"{label} bus nominal voltage is {actual:g} kV; "
                         f"expected {expected:g} kV for {voltage_class}"
                     )
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "component": "transformer",
+                    "voltage_class": voltage_class,
+                    "rated_power_mva": rated_power,
+                    "nominal_frequency_hz": nominal_frequency,
+                    "vector_group": vector_group,
+                    "clock_number": clock_number,
+                    "transformer_name": transformer_name,
+                    "type_name": type_name,
+                    "high_voltage_bus_name": high_bus_name,
+                    "low_voltage_bus_name": low_bus_name,
+                    "requested_grid_name": str(grid_name or "").strip(),
+                    "resolved_grid": grid.GetFullName(),
+                    "resolved_high_voltage_bus": high_bus.GetFullName(),
+                    "resolved_low_voltage_bus": low_bus.GetFullName(),
+                    "seed": seed,
+                    "out_of_service": bool(out_of_service),
+                },
+            )
 
             result = {
                 "success": True,
@@ -3069,7 +3104,7 @@ class DIgSILENTAgent:
                 item=item,
             )
 
-        required_confirmation = (
+        confirmation_prefix = (
             f"CREATE {line_name} WITH {type_name} {voltage_class}kV "
             f"{profile} {line_length:g}km {rated_current:g}kA "
             f"{nominal_frequency:g}Hz grid={grid_name or '<active>'} "
@@ -3113,6 +3148,27 @@ class DIgSILENTAgent:
                         f"{label} bus nominal voltage is {actual:g} kV; "
                         f"expected {voltage_class} kV"
                     )
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "component": _component_label,
+                    "line_name": line_name,
+                    "type_name": type_name,
+                    "voltage_kv": voltage,
+                    "nominal_frequency_hz": nominal_frequency,
+                    "rated_current_ka": rated_current,
+                    "profile": profile,
+                    "length_km": line_length,
+                    "requested_bus1_name": first_bus_name,
+                    "requested_bus2_name": second_bus_name,
+                    "requested_grid_name": str(grid_name or "").strip(),
+                    "resolved_grid": grid.GetFullName(),
+                    "resolved_bus1": first_bus.GetFullName(),
+                    "resolved_bus2": second_bus.GetFullName(),
+                    "out_of_service": bool(out_of_service),
+                },
+            )
 
             result = {
                 "success": True,
@@ -3388,7 +3444,7 @@ class DIgSILENTAgent:
         except Exception as exc:
             return failure(str(exc))
 
-        required_confirmation = (
+        confirmation_prefix = (
             f"CREATE {external_grid_name} AT {bus_name} "
             f"{voltage:g}kV seed={seed} grid={grid_name or '<active>'} "
             f"out_of_service={int(bool(out_of_service))}"
@@ -3420,6 +3476,21 @@ class DIgSILENTAgent:
                     f"Bus nominal voltage is {actual_voltage:g} kV; "
                     f"expected {voltage:g} kV"
                 )
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "component": "external_grid",
+                    "voltage_kv": voltage,
+                    "external_grid_name": external_grid_name,
+                    "requested_bus_name": bus_name,
+                    "requested_grid_name": str(grid_name or "").strip(),
+                    "resolved_grid": grid.GetFullName(),
+                    "resolved_bus": bus.GetFullName(),
+                    "seed": seed,
+                    "out_of_service": bool(out_of_service),
+                },
+            )
 
             result = {
                 "success": True,
@@ -3543,7 +3614,7 @@ class DIgSILENTAgent:
         except Exception as exc:
             return failure(str(exc))
 
-        required_confirmation = (
+        confirmation_prefix = (
             f"CREATE {load_name} AT {bus_name} "
             f"{voltage:g}kV seed={seed} grid={grid_name or '<active>'} "
             f"out_of_service={int(bool(out_of_service))}"
@@ -3570,6 +3641,21 @@ class DIgSILENTAgent:
                     f"Bus nominal voltage is {actual_voltage:g} kV; "
                     f"expected {voltage:g} kV"
                 )
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "component": "load",
+                    "voltage_kv": voltage,
+                    "load_name": load_name,
+                    "requested_bus_name": bus_name,
+                    "requested_grid_name": str(grid_name or "").strip(),
+                    "resolved_grid": grid.GetFullName(),
+                    "resolved_bus": bus.GetFullName(),
+                    "seed": seed,
+                    "out_of_service": bool(out_of_service),
+                },
+            )
 
             result = {
                 "success": True,
@@ -3748,7 +3834,7 @@ class DIgSILENTAgent:
             )
 
         rated_voltage = float(source_parameters["rated_voltage_kv"])
-        required_confirmation = (
+        confirmation_prefix = (
             f"CREATE {machine_name} WITH {type_name} {machine_type} "
             f"{rated_power:g}MVA {rated_voltage:g}kV seed={seed} "
             f"grid={grid_name or '<active>'} bus={bus_name} "
@@ -3802,6 +3888,26 @@ class DIgSILENTAgent:
                     f"expected {rated_voltage:g} kV for a "
                     f"{rated_power:g} MVA {machine_type} machine"
                 )
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "component": "synchronous_machine",
+                    "machine_type": machine_type,
+                    "rated_power_mva": rated_power,
+                    "rated_voltage_kv": rated_voltage,
+                    "machine_name": machine_name,
+                    "type_name": type_name,
+                    "requested_bus_name": bus_name,
+                    "requested_grid_name": str(grid_name or "").strip(),
+                    "resolved_grid": grid.GetFullName(),
+                    "resolved_bus": bus.GetFullName(),
+                    "seed": seed,
+                    "active_power_mw": active_power,
+                    "reactive_power_mvar": reactive_power,
+                    "out_of_service": bool(out_of_service),
+                },
+            )
 
             result = {
                 "success": True,
