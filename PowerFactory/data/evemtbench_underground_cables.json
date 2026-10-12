@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-underground-cables-tables-3-6-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [3, 6]
+  },
+  "affiliation": "Chair of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "nominal_frequencies_hz": [50.0, 60.0],
+  "profiles": ["p05", "p50", "p95"],
+  "powerfactory": {
+    "type_class": "TypLne",
+    "element_class": "ElmLne",
+    "model": "three-phase underground-cable sequence equivalent",
+    "mapped_attributes": {
+      "nominal_voltage_kv": "uline",
+      "rated_current_ka": "sline",
+      "nominal_frequency_hz": "frnom",
+      "positive_sequence_resistance_ohm_per_km": "rline",
+      "positive_sequence_reactance_ohm_per_km": "xline",
+      "positive_sequence_capacitance_uf_per_km": "cline",
+      "zero_sequence_resistance_ohm_per_km": "rline0",
+      "zero_sequence_reactance_ohm_per_km": "xline0",
+      "zero_sequence_capacitance_uf_per_km": "cline0"
+    },
+    "source_capacitance_unit": "nF/km",
+    "powerfactory_capacitance_unit": "uF/km",
+    "capacitance_conversion_factor": 0.001
+  },
+  "classes": {
+    "20": {
+      "source_tables": [3, 6],
+      "nominal_voltage_kv": 20.0,
+      "length_km": {"min": 0.5, "max": 3.75},
+      "electrical_profiles": {
+        "p05": {"r1_ohm_per_km": 0.0841, "x1_ohm_per_km": 0.1007, "c1_nf_per_km": 154.08, "r0_ohm_per_km": 0.6561, "x0_ohm_per_km": 0.2397, "c0_nf_per_km": 154.08},
+        "p50": {"r1_ohm_per_km": 0.2125, "x1_ohm_per_km": 0.1411, "c1_nf_per_km": 247.06, "r0_ohm_per_km": 0.7775, "x0_ohm_per_km": 0.2661, "c0_nf_per_km": 247.06},
+        "p95": {"r1_ohm_per_km": 0.6457, "x1_ohm_per_km": 0.2688, "c1_nf_per_km": 420.35, "r0_ohm_per_km": 1.4464, "x0_ohm_per_km": 0.51, "c0_nf_per_km": 420.35}
+      }
+    }
+  },
+  "construction": {
+    "insulation_materials": ["PE", "XLPE", "EPR"],
+    "conductor_material": "aluminum",
+    "sheath_material": "copper",
+    "conductor_cross_section_mm2": [50, 70, 95, 120, 150, 185, 240, 300, 400, 500],
+    "matching_sheath_cross_section_mm2": [16, 16, 16, 16, 25, 25, 25, 25, 25, 25],
+    "conductor_radius_formula": "sqrt(Acond/pi) mm",
+    "insulation_thickness_mm": 5.5,
+    "sheath_thickness_formula": "sqrt(Ash/pi + (r + tins)^2) - (r + tins) mm",
+    "oversheath_thickness_mm": 2.5,
+    "conductor_resistivity_micro_ohm_cm": 2.8264,
+    "sheath_resistivity_micro_ohm_cm": 1.7241,
+    "relative_permittivity": {"PE": 2.3, "XLPE": 2.4, "EPR": 3.0},
+    "dielectric_loss_factor": {"PE": 0.0003, "XLPE": 0.0004, "EPR": 0.005},
+    "burial_depth_m": {"min": 0.7, "max": 1.2},
+    "arrangements": ["flat", "trefoil"],
+    "flat_phase_spacing_m": {"min_formula": "dcab + 0.07", "max": 0.3},
+    "trefoil_phase_spacing_formula_m": "dcab + 0.005",
+    "earth_resistivity_ohm_m": {"min": 5.0, "max": 500.0}
+  },
+  "catalog_only": {
+    "geometric_ulm_model": {
+      "source_table": 6,
+      "reason": "Construction and installation parameters are returned for inspection but are not written. The creator uses the published sequence-parameter percentiles and does not claim to recreate the paper's geometric ULM model."
+    },
+    "rated_current": {
+      "reason": "Table 6 does not publish cable ampacity. The caller must provide a validated engineering current rating for PowerFactory sline."
+    }
+  }
+}

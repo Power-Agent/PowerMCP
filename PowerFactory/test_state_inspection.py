@@ -1,6 +1,7 @@
 import builtins
 import json
 import sys
+import threading
 import unittest
 from types import ModuleType
 from unittest.mock import Mock, patch
@@ -73,10 +74,20 @@ class FakeObject:
         self.attributes = {"loc_name": name}
         self.attributes.update(attributes or {})
         self.attribute_reads = []
+        self.contents = {}
 
     def GetAttribute(self, attribute):
         self.attribute_reads.append(attribute)
         return self.attributes[attribute]
+
+    def GetAttributeType(self, attribute):
+        return "double"
+
+    def GetAttributeUnit(self, attribute):
+        return {"uktr": "%", "pcutr": "kW"}.get(attribute, "")
+
+    def GetAttributeDescription(self, attribute):
+        return f"Description for {attribute}"
 
     def SetAttribute(self, attribute, value):
         self.attributes[attribute] = value
@@ -89,6 +100,9 @@ class FakeObject:
 
     def GetParent(self):
         return self.parent
+
+    def GetContents(self, pattern, recursive):
+        return self.contents.get(pattern, [])
 
 
 class FakeFolder:
@@ -1164,6 +1178,74 @@ class StateInspectionTest(unittest.TestCase):
             "message": "Short-circuit calculation OK",
         })
 
+    def test_agent_result_sanitizes_structured_powerfactory_objects(self):
+        class PowerFactoryObject:
+            def __init__(self, owner_thread):
+                self.owner_thread = owner_thread
+
+            def GetFullName(self):
+                if threading.get_ident() != self.owner_thread:
+                    raise AssertionError(
+                        "PowerFactory object accessed from the wrong thread"
+                    )
+                return r"\user\test.IntPrj\Generator Type.TypSym"
+
+            def __str__(self):
+                raise AssertionError("PowerFactory object must use GetFullName")
+
+        def create_component():
+            return {
+                "success": True,
+                "retained_element_attributes": {
+                    "typ_id": PowerFactoryObject(threading.get_ident()),
+                    "pgini": 60.0,
+                },
+            }
+
+        with patch.object(
+            FakeAgent,
+            "create_component",
+            side_effect=create_component,
+            create=True,
+        ):
+            result = json.loads(mcp_module._agent_result(
+                "create_component",
+                structured=True,
+            ))
+
+        self.assertEqual(
+            result["retained_element_attributes"],
+            {
+                "typ_id": r"\user\test.IntPrj\Generator Type.TypSym",
+                "pgini": 60.0,
+            },
+        )
+
+    def test_unified_evemtbench_tool_uses_structured_agent_result(self):
+        parameters = {
+            "voltage_kv": 20,
+            "load_name": "Research Load",
+            "bus_name": "MV Bus",
+            "confirmation": "",
+        }
+        with patch.object(
+            mcp_module,
+            "_agent_result",
+            return_value='{"success": true}',
+        ) as agent_result:
+            response = mcp_module.create_evemtbench_component(
+                "load",
+                parameters,
+            )
+
+        self.assertEqual(response, '{"success": true}')
+        agent_result.assert_called_once_with(
+            "create_evemtbench_component",
+            "load",
+            parameters,
+            structured=True,
+        )
+
     def test_get_parameters_serializes_object_lists(self):
         reference = FakeObject(
             "Bus 02",
@@ -1191,8 +1273,62 @@ class StateInspectionTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(
             result["results"][0]["values"]["references"],
-            [str(reference)],
+            [reference.GetFullName()],
         )
+
+    def test_get_parameters_optionally_returns_attribute_metadata(self):
+        transformer_type = FakeObject(
+            "Type 1",
+            "TypTr2",
+            r"\user\test.IntPrj\Library\Type 1.TypTr2",
+            {"pcutr": 95.0, "uktr": 11.0},
+        )
+        FakeAgent._shared_app = FakeApplication(
+            project=None,
+            active_case=None,
+            study_cases=[],
+            objects={"Type 1.TypTr2": [transformer_type]},
+        )
+
+        result = json.loads(mcp_module.get_parameters(
+            "Type 1.TypTr2",
+            ["pcutr", "uktr"],
+            include_metadata=True,
+        ))
+
+        item = result["results"][0]
+        self.assertEqual(item["metadata"]["pcutr"], {
+            "type": "double",
+            "unit": "kW",
+            "description": "Description for pcutr",
+        })
+        self.assertEqual(item["metadata"]["uktr"]["unit"], "%")
+        self.assertNotIn("metadata_errors", item)
+
+    def test_get_parameters_can_include_project_library_objects(self):
+        transformer_type = FakeObject(
+            "Offline Type",
+            "TypTr2",
+            r"\user\test.IntPrj\Library\Offline Type.TypTr2",
+            {"pcutr": 95.0},
+        )
+        project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
+        project.contents["Offline Type.TypTr2"] = [transformer_type]
+        FakeAgent._shared_app = FakeApplication(
+            project=project,
+            active_case=None,
+            study_cases=[],
+            objects={"Offline Type.TypTr2": []},
+        )
+
+        result = json.loads(mcp_module.get_parameters(
+            "Offline Type.TypTr2",
+            ["pcutr"],
+            include_project_objects=True,
+        ))
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["results"][0]["values"]["pcutr"], 95.0)
 
     def test_read_only_tools_connect_on_cold_start(self):
         project = FakeObject("test", "IntPrj", r"\user\test.IntPrj")
@@ -1274,9 +1410,11 @@ class StateInspectionTest(unittest.TestCase):
             "message": "Component deleted, but graphical objects remain",
         }
 
-        with (
-            patch.object(FakeAgent, "delete_component", create=True),
-            patch.object(mcp_module, "_pf", return_value=expected),
+        with patch.object(
+            FakeAgent,
+            "delete_component",
+            return_value=expected,
+            create=True,
         ):
             result = json.loads(mcp_module.delete_component(
                 "load",

@@ -1,0 +1,116 @@
+Evidence ID: FT-17
+Title: Greenfield EvEMTBench overhead-line type and connected line creation
+Date: 10 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0080
+
+Provenance:
+The contributor supplied individual automated-test output and MCP client
+responses from the PowerFactory development PC. This is not a continuous
+terminal capture. The tested working tree had not yet been committed, and no
+independent byte-for-byte revision comparison was performed. The PowerFactory
+account identifier is replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Grid: Grid
+- Existing connection buses: Bus 01 and Bus 02, both 345 kV
+- New line configured out of service for validation
+
+Automated validation before the live test:
+- 88 tests passed
+- 31 subtests passed
+- elapsed time: 2.97 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+The response confirms that the existing case was activated. No study case was
+created or copied.
+
+Catalog lookup:
+list_evemtbench_line_profiles(voltage_kv=345, profile="p50") returned one
+profile from catalog evemtbench-overhead-lines-tables-3-7-9-v1. It reported:
+- length range: 1.0 to 111.0 km
+- positive-sequence resistance: 0.02 ohm/km
+- positive-sequence reactance: 0.26 ohm/km
+- positive-sequence capacitance: 13.82 nF/km
+- zero-sequence resistance: 0.22 ohm/km
+- zero-sequence reactance: 0.95 ohm/km
+- zero-sequence capacitance: 6.32 nF/km
+
+The response identified the PowerFactory representation as a three-phase
+TypLne sequence equivalent and disclosed that underground-cable and geometric
+ULM creation remain catalog-only.
+
+Read-only creation preview:
+create_evemtbench_line was called for:
+- voltage: 345 kV
+- nominal frequency: 60 Hz
+- rated current: 1.0 kA
+- electrical profile: p50
+- length: 10.0 km
+- line name: EvEMTBench Test Line 345
+- type name: EvEMTBench Test Line Type 345
+- connection buses: Bus 01 and Bus 02
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, type_created=false and
+line_created=false. The exact returned confirmation phrase was:
+CREATE EvEMTBench Test Line 345 WITH EvEMTBench Test Line Type 345 345kV p50 10km 1kA 60Hz
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, type_created=true and line_created=true,
+with the message:
+Created TypLne 'EvEMTBench Test Line Type 345' and connected ElmLne 'EvEMTBench Test Line 345'
+
+Created type:
+\<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type Library.IntPrjfolder\Line Types.IntPrjfolder\EvEMTBench Test Line Type 345.TypLne
+
+Created line:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network Data.IntPrjfolder\Grid.ElmNet\EvEMTBench Test Line 345.ElmLne
+
+The operation created a new TypLne directly rather than requiring an existing
+line or line type as a template. It also created and assigned the two cubicles
+needed to connect the new ElmLne to the existing buses.
+
+Line-type readback:
+get_parameters found the new TypLne in the project library with
+include_project_objects=true. It returned success=true, total_count=1 and
+returned_count=1, with these stored values:
+- uline: 345.0 kV
+- sline: 1.0 kA
+- frnom: 60.0 Hz
+- rline: 0.019999999552965164 ohm/km
+- xline: 0.25999999046325684 ohm/km
+- cline: 0.013819999992847443 uF/km
+- rline0: 0.2199999988079071 ohm/km
+- xline0: 0.949999988079071 ohm/km
+- cline0: 0.006320000160485506 uF/km
+
+The values agree with the catalog profile within normal single-precision
+floating-point rounding. The capacitances confirm the intended conversion from
+13.82 and 6.32 nF/km to 0.01382 and 0.00632 uF/km.
+
+Line-element readback:
+get_parameters found the new ElmLne with these values:
+- dline: 10.0 km
+- outserv: 1
+- typ_id: EvEMTBench Test Line Type 345.TypLne
+- bus1 cubicle: Bus 01 / EvEMTBench Test Line 345 Cubicle 1
+- bus2 cubicle: Bus 02 / EvEMTBench Test Line 345 Cubicle 2
+
+Conclusion and limits:
+This run validates catalog filtering, preview/confirmation safety, direct
+TypLne creation, sequence-parameter and capacitance-unit mapping, connected
+ElmLne creation, type assignment, length, and out-of-service state on
+PowerFactory 2026 SP1. No load flow, short-circuit calculation, dynamic
+simulation, in-service energization, geometric ULM construction, underground-
+cable creation, or PowerFactory 2026 SP4 validation was performed.

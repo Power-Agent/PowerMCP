@@ -1,0 +1,82 @@
+Evidence ID: FT-14
+Title: Post-merge contingency inspection validation on PowerFactory 2026 SP4
+Date: 9 October 2026
+Classification: Compiled evidence record
+Source revision: GitHub main after PR #95 merge commit 397f711
+
+Provenance:
+The contributor supplied individual MCP client responses from the restricted
+PowerFactory test PC. This is not a continuous terminal capture. The installed
+PowerMCP 0.4.0 package was force-reinstalled from the GitHub main archive after
+PR #95 merged. Its exposed get_contingency_results schema contained the merged
+variables and max_read_seconds parameters. No independent byte-for-byte
+revision comparison was performed. PowerFactory account identifiers are
+replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP4
+- Windows 11, Python 3.13, Claude MCP client, stdio transport
+- Project: test(1)
+- Contingency study case: MCP_Copy_01
+- Result file: Contingency Analysis AC.ElmRes
+
+Fault-case discovery:
+list_contingencies(max_results=100) returned:
+- success: true
+- total_count: 46
+- returned_count: 46
+- 34 line cases and 12 two-winding-transformer cases
+- one EvtShc per IntEvt case
+- event_count: 1 and fault_count: 1 for every returned case
+- fault time: 0.0 s
+- fault position: 50.0 percent
+- outage_count: 0 and switch_count: 0
+
+The returned fault records included the target name, class and full name. Line
+targets were ElmLne objects and transformer targets were ElmTr2 objects. This
+positively validates EvtShc discovery on the PowerFactory build where the
+original omission was observed.
+
+Existing contingency configuration:
+MCP_Copy_01 contained Contingency Analysis.ComSimoutage. The configuration was
+read without creating a command or running the analysis. Other inspected study
+cases without an existing ComSimoutage returned a controlled unavailable
+response.
+
+Filtered result-read request:
+- calculation_method: ac
+- max_rows: 100
+- max_columns: 100
+- variables: ["c:loading"]
+- max_read_seconds: 30
+
+Result-read response metadata:
+- success: true
+- total_rows: 48
+- total_columns: 838
+- matching_columns: 47
+- selected columns: b:i_obj plus 46 c:loading columns
+- selected elements: 34 lines and 12 transformers
+- truncated: false
+- serialized response length reported by the client: 75,086 characters
+
+The client saved the large response locally instead of displaying it all. It
+inspected the first 41,423 characters, including response metadata, mapped
+column identities and rows 0 through 18. The remaining result values were not
+reviewed for this evidence record. The client-side display limit was not a tool
+timeout: the MCP call completed successfully and reported an untruncated
+filtered result.
+
+Session integrity and side effects:
+The result reader used previously stored results; it did not run or refresh the
+contingency analysis. Existing study cases were temporarily activated for
+inspection, and the originally active MCP_RMS_02 case was restored afterward.
+No study case or PowerFactory object was created or copied. A final ping
+returned pong, confirming that the MCP server and PowerFactory engine remained
+responsive after the large result read.
+
+Conclusion:
+The post-merge SP4 run validates both reported contingency-inspection fixes:
+generated EvtShc cases are discoverable with element metadata, and an exact
+c:loading result filter completes without the previous timeout or loss of the
+PowerFactory session.
