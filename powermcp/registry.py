@@ -219,6 +219,17 @@ TOOLS: dict[str, "Tool"] = {
             ),
         ),
         Tool(
+            "narp", "NARP", "open-source", windows_only=False, extra="narp",
+            server_dir="NARP", run_kind="script", entry_rel="narp_mcp.py",
+            probe="reliabilityassessment",
+            notes=(
+                "Thin connector for the external MIT-licensed Breakthrough Energy "
+                "reliability-assessment package. Install it separately with "
+                'pip install "reliabilityassessment @ git+https://github.com/Breakthrough-Energy/reliability-assessment.git"; '
+                "the narp extra is intentionally empty because the upstream dependency is Git-hosted."
+            ),
+        ),
+        Tool(
             "plexosdb", "PLEXOSDB", "closed-source", windows_only=False, extra="plexosdb",
             server_dir="PLEXOSDB", run_kind="script", entry_rel="plexosdb_mcp/main.py",
             # NOT run_kind="module": our own package dir is deliberately named
