@@ -180,13 +180,21 @@ class EvEMTBenchLineTest(unittest.TestCase):
     def test_confirmation_distinguishes_float_values_hidden_by_general_format(self):
         folder, grid, first_bus, second_bus, app = self.network()
         preview = self.call(app, length_km=1.0000001)
+        changed_preview = self.call(app, length_km=1.0000002)
+        self.assertTrue(preview["success"], preview.get("message"))
+        self.assertEqual(
+            preview["confirmation_required"].split(" plan=")[0],
+            changed_preview["confirmation_required"].split(" plan=")[0],
+        )
+        self.assertNotEqual(
+            preview["confirmation_required"],
+            changed_preview["confirmation_required"],
+        )
         changed = self.call(
             app,
             length_km=1.0000002,
             confirmation=preview["confirmation_required"],
         )
-        self.assertTrue(preview["success"], preview.get("message"))
-        self.assertTrue(preview["confirmation_required"].split(" plan=")[0].find("1km") >= 0)
         self.assertFalse(changed["success"])
         self.assertIn("confirmation must exactly match", changed["message"])
         self.assertEqual(self.line_types(folder), [])
