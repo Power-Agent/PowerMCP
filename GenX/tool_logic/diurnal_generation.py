@@ -68,6 +68,10 @@ def diurnal_by_tech(case_dir, period, zones="all", verbose=False):
     res_dir = os.path.join(case_dir, "results", f"results_p{period}")
     power = pd.read_csv(os.path.join(res_dir, "power.csv"), index_col=0)
     weights = pd.read_csv(os.path.join(res_dir, "time_weights.csv"))["Weight"].to_numpy()
+    if not np.isfinite(weights).all():
+        raise ValueError(f"{case_dir}: time weights must all be finite")
+    if (weights < 0).any():
+        raise ValueError(f"{case_dir}: time weights must be non-negative")
 
     power = power.drop(columns=["Total"], errors="ignore")
     res_zone = power.loc["Zone"].astype(float).astype(int)
@@ -103,6 +107,12 @@ def diurnal_by_tech(case_dir, period, zones="all", verbose=False):
 
     hod = np.arange(T) % 24                      # t1 -> hour 0; 168 % 24 == 0 so
     wsum = np.bincount(hod, weights, minlength=24) # every rep week aligns
+    uncovered_hours = np.flatnonzero(wsum <= 0).tolist()
+    if uncovered_hours:
+        raise ValueError(
+            f"{case_dir}: no positive time-weight coverage for hour(s) "
+            f"{uncovered_hours}; cannot compute weighted generation averages"
+        )
     out = {}
     for g, cols in groups.items():
         x = data[cols].sum(axis=1).to_numpy()
