@@ -118,11 +118,6 @@ def _dep_status(t: Tool) -> tuple[str, str]:
         return "cyan", "vendor engine, loaded from a configured path"
     if t.probe:
         if not probe_installed(t.probe):
-            if t.name == "narp":
-                return "red", (
-                    "missing; install upstream with pip install "
-                    '"reliabilityassessment @ git+https://github.com/Breakthrough-Energy/reliability-assessment.git"'
-                )
             return "red", f"missing; {install_hint(t.extra)}"
         stale = _version_status(t.probe)
         if stale:
