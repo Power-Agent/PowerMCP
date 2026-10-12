@@ -76,12 +76,14 @@ class EvEMTBenchLineTest(unittest.TestCase):
         self.assertEqual(grid["ElmLne"], [])
         self.assertEqual(first_bus["StaCubic"], [])
         self.assertEqual(second_bus["StaCubic"], [])
-        self.assertEqual(
-            result["confirmation_required"],
-            "CREATE Research Line WITH Research Line Type 110kV p50 "
-            "10km 1kA 50Hz grid=<active> "
-            "buses=Bus A->Bus B out_of_service=0",
+        self.assertTrue(
+            result["confirmation_required"].startswith(
+                "CREATE Research Line WITH Research Line Type 110kV p50 "
+                "10km 1kA 50Hz grid=<active> "
+                "buses=Bus A->Bus B out_of_service=0"
+            )
         )
+        self.assertRegex(result["confirmation_required"], r" plan=[0-9a-f]{64}$")
         attributes = result["item"]["powerfactory_attributes"]
         self.assertEqual(attributes["rline"], 0.06)
         self.assertEqual(attributes["xline"], 0.29)
@@ -170,6 +172,23 @@ class EvEMTBenchLineTest(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertTrue(result["rolled_back"])
+        self.assertEqual(self.line_types(folder), [])
+        self.assertEqual(grid["ElmLne"], [])
+        self.assertEqual(first_bus["StaCubic"], [])
+        self.assertEqual(second_bus["StaCubic"], [])
+
+    def test_confirmation_distinguishes_float_values_hidden_by_general_format(self):
+        folder, grid, first_bus, second_bus, app = self.network()
+        preview = self.call(app, length_km=1.0000001)
+        changed = self.call(
+            app,
+            length_km=1.0000002,
+            confirmation=preview["confirmation_required"],
+        )
+        self.assertTrue(preview["success"], preview.get("message"))
+        self.assertTrue(preview["confirmation_required"].split(" plan=")[0].find("1km") >= 0)
+        self.assertFalse(changed["success"])
+        self.assertIn("confirmation must exactly match", changed["message"])
         self.assertEqual(self.line_types(folder), [])
         self.assertEqual(grid["ElmLne"], [])
         self.assertEqual(first_bus["StaCubic"], [])
