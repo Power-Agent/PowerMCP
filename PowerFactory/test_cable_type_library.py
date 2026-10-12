@@ -73,12 +73,14 @@ class EvEMTBenchCableTest(unittest.TestCase):
         self.assertEqual(grid["ElmLne"], [])
         self.assertEqual(first_bus["StaCubic"], [])
         self.assertEqual(second_bus["StaCubic"], [])
-        self.assertEqual(
-            result["confirmation_required"],
-            "CREATE Research Cable WITH Research Cable Type 20kV p50 "
-            "2km 0.4kA 50Hz grid=<active> "
-            "buses=Cable Bus A->Cable Bus B out_of_service=0",
+        self.assertTrue(
+            result["confirmation_required"].startswith(
+                "CREATE Research Cable WITH Research Cable Type 20kV p50 "
+                "2km 0.4kA 50Hz grid=<active> "
+                "buses=Cable Bus A->Cable Bus B out_of_service=0"
+            )
         )
+        self.assertRegex(result["confirmation_required"], r" plan=[0-9a-f]{64}$")
         attributes = result["item"]["powerfactory_attributes"]
         self.assertEqual(attributes["rline"], 0.2125)
         self.assertEqual(attributes["xline"], 0.1411)
