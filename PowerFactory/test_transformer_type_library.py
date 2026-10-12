@@ -555,15 +555,31 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertFalse(bad_frequency["success"])
         self.assertIn("must be 50 or 60", bad_frequency["message"])
 
-    def test_confirmation_binds_delimiter_names_and_resolved_grid(self):
+    def test_confirmation_prevents_delimiter_name_token_collision(self):
         folder, grid, high_bus, low_bus, app = self.network()
-        preview = self.call(app, transformer_name="Research -> Transformer")
-        self.assertRegex(preview["confirmation_required"], r" plan=[0-9a-f]{64}$")
+        preview = self.call(
+            app,
+            transformer_name="A",
+            type_name="B WITH C",
+        )
+        changed_preview = self.call(
+            app,
+            transformer_name="A WITH B",
+            type_name="C",
+        )
+        self.assertEqual(
+            preview["confirmation_required"].split(" plan=")[0],
+            changed_preview["confirmation_required"].split(" plan=")[0],
+        )
+        self.assertNotEqual(
+            preview["confirmation_required"],
+            changed_preview["confirmation_required"],
+        )
 
         result = self.call(
             app,
-            transformer_name="Research",
-            type_name="Other WITH grid=Grid",
+            transformer_name="A WITH B",
+            type_name="C",
             confirmation=preview["confirmation_required"],
         )
         self.assertFalse(result["success"])
