@@ -62,11 +62,13 @@ class EvEMTBenchExternalGridTest(unittest.TestCase):
         self.assertEqual(first["item"], second["item"])
         self.assertEqual(grid["ElmXnet"], [])
         self.assertEqual(bus["StaCubic"], [])
-        self.assertEqual(
-            first["confirmation_required"],
-            "CREATE Research External Grid AT Source Bus 110kV seed=42 "
-            "grid=<active> out_of_service=0",
+        self.assertTrue(
+            first["confirmation_required"].startswith(
+                "CREATE Research External Grid AT Source Bus 110kV seed=42 "
+                "grid=<active> out_of_service=0"
+            )
         )
+        self.assertRegex(first["confirmation_required"], r" plan=[0-9a-f]{64}$")
         parameters = first["item"]["parameters"]
         self.assertGreaterEqual(parameters["short_circuit_power_mva"], 800.0)
         self.assertLessEqual(parameters["short_circuit_power_mva"], 8000.0)
