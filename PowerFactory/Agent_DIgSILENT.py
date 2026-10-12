@@ -2736,7 +2736,9 @@ class DIgSILENTAgent:
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
-                    "component": "transformer",
+"component": "transformer",
+                    "catalog_id": database["catalog_id"],
+                    "resolved_item": item,
                     "voltage_class": voltage_class,
                     "rated_power_mva": rated_power,
                     "nominal_frequency_hz": nominal_frequency,
@@ -3152,7 +3154,9 @@ class DIgSILENTAgent:
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
-                    "component": _component_label,
+"component": _component_label,
+                    "catalog_id": database["catalog_id"],
+                    "resolved_item": item,
                     "line_name": line_name,
                     "type_name": type_name,
                     "voltage_kv": voltage,
@@ -3480,7 +3484,9 @@ class DIgSILENTAgent:
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
-                    "component": "external_grid",
+"component": "external_grid",
+                    "catalog_id": database["catalog_id"],
+                    "resolved_item": item,
                     "voltage_kv": voltage,
                     "external_grid_name": external_grid_name,
                     "requested_bus_name": bus_name,
@@ -3645,7 +3651,9 @@ class DIgSILENTAgent:
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
-                    "component": "load",
+"component": "load",
+                    "catalog_id": database["catalog_id"],
+                    "resolved_item": item,
                     "voltage_kv": voltage,
                     "load_name": load_name,
                     "requested_bus_name": bus_name,
@@ -3892,7 +3900,9 @@ class DIgSILENTAgent:
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
-                    "component": "synchronous_machine",
+"component": "synchronous_machine",
+                    "catalog_id": database["catalog_id"],
+                    "resolved_item": item,
                     "machine_type": machine_type,
                     "rated_power_mva": rated_power,
                     "rated_voltage_kv": rated_voltage,
