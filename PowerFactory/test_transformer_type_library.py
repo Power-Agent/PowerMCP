@@ -563,7 +563,7 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         result = self.call(
             app,
             transformer_name="Research",
-            type_name="Transformer WITH Research Transformer Type",
+            type_name="Other WITH grid=Grid",
             confirmation=preview["confirmation_required"],
         )
         self.assertFalse(result["success"])
