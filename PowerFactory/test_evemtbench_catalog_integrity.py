@@ -231,6 +231,11 @@ def test_validator_rejects_range_with_missing_bound():
     with pytest.raises(ValueError, match="both min and max"):
         validate_catalog(broken, {5})
 
+    broken = copy.deepcopy(catalog)
+    broken["classes"]["110"]["active_power_mw"].pop("min")
+    with pytest.raises(ValueError, match="both min and max"):
+        validate_catalog(broken, {5})
+
 
 @pytest.mark.parametrize(
     "filename,expected_tables",
