@@ -2,6 +2,58 @@
 
 ## Document control
 
+**Report updated:** 12 October 2026. The original September document-control
+table and detailed FT-01–FT-11 scenarios below are historical records. The
+following update records the later validation without changing those results.
+
+### October 2026 validation update
+
+Contributions by Aswin Krishna Poyil were carried out at the **Chair of Electrical
+Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)**,
+with supervision by **Tobias Lorz** and **Timon Conrad**.
+
+| Evidence | Scope verified | Environment |
+|---|---|---|
+| [FT-14](FT-14_contingency_inspection_sp4.txt) | Contingency discovery and filtered stored-result reads without the previous metadata timeout. | PowerFactory 2026 SP4, separate test PC |
+| [FT-15](FT-15_active_grid_pdf_export_sp1.txt) | Existing Grid diagram exported to PDF; file size and SHA-256 recorded. | PowerFactory 2026 SP1 |
+| [FT-16](FT-16_evemtbench_transformer_creation_sp1.txt) | New transformer type and element; parameter retention after per-unit impedance assignment. | PowerFactory 2026 SP1 |
+| [FT-17](FT-17_evemtbench_overhead_line_creation_sp1.txt) | New overhead-line type and connected element; catalog/unit conversion and readback. | PowerFactory 2026 SP1 |
+| [FT-18](FT-18_greenfield_grid_bootstrap_sp1.txt) | Grid/bus creation, activation and discovery. | PowerFactory 2026 SP1 |
+| [FT-19](FT-19_greenfield_bootstrap_transformer_sp1.txt) | Transformer creation using the bootstrapped 110/20 kV grid and buses. | PowerFactory 2026 SP1 |
+| [FT-20](FT-20_evemtbench_external_grid_creation_sp1.txt) | External-grid creation and retained parameters/connectivity. | PowerFactory 2026 SP1 |
+| [FT-21](FT-21_evemtbench_load_creation_sp1.txt) | Load creation and retained parameters/connectivity. | PowerFactory 2026 SP1 |
+| [FT-22](FT-22_evemtbench_underground_cable_creation_sp1.txt) | Cable type/element creation and readback. | PowerFactory 2026 SP1 |
+| [FT-23](FT-23_evemtbench_synchronous_machine_creation_sp1.txt) | Round-rotor type/element creation, time-constant conversion, derived values and JSON serialization. | PowerFactory 2026 SP1 |
+| [FT-24](FT-24_unified_evemtbench_component_creation_sp1.txt) | Unified synchronous-machine route and independent type/element readback. | PowerFactory 2026 SP1 |
+
+FT-14–FT-24 are compiled evidence records, not continuous terminal captures.
+The SP1 builder records identify working-tree patches; they do not independently
+prove byte-for-byte equivalence to the later committed PR. FT-24's large response
+was supplemented by independent readback. Automated routing tests cover all six
+component kinds; the live unified route recorded here covers synchronous machines.
+
+PR #109 revision `9c6eb37` passed CI for Python 3.10, 3.12, 3.13 and 3.14
+and the isolated installed-wheel catalog/listing smoke test. Follow-up tests
+cover stale confirmations after input or active-grid changes, delimiter and
+float-rendering collisions, missing catalog metadata, and duplicate transformer
+voltage pairs. These tests use fake PowerFactory objects.
+
+Live regression of the final confirmation-hash revision remains pending.
+The newer builders were verified out of service. No corresponding in-service
+load-flow, short-circuit or dynamic validation is claimed. SP4 validation applies
+to contingency inspection only. Salient-pole creation and transformer Tables 10
+and 12 attribute mappings remain unvalidated.
+
+Current test command from the repository root:
+
+```powershell
+python -m pytest PowerFactory/tests -q
+```
+
+The wheel smoke script runs separately against an installed package outside the
+checkout. Tests are in `PowerFactory/tests/`; the reports and FT/UT records are
+in `PowerFactory/evidence/`.
+
 | Item | Value                                                    |
 |---|----------------------------------------------------------|
 | Report purpose | Verification of locally developed PowerFactory MCP tools |
@@ -89,14 +141,14 @@ All eight contributed functions and the two extended component-management behavi
 
 | Contributed function | Automated evidence | Live evidence | Supporting record | Final assessment |
 |---|---|---|---|---|
-| `get_active_project` | `test_state_and_discovery_tools` | FT-01 | [FT-01](evidence/FT-01_active_context.txt) | VERIFIED |
-| `get_active_study_case` | `test_state_and_discovery_tools` | FT-01 | [FT-01](evidence/FT-01_active_context.txt) | VERIFIED |
-| `get_parameters` | `test_state_and_discovery_tools` | FT-02, FT-06, FT-07 | [FT-02](evidence/FT-02_parameter_inspection.txt), [FT-06](evidence/FT-06_generator_verification.txt), [FT-07](evidence/FT-07_transformer_verification.txt) | VERIFIED |
-| `list_objects` | `test_state_and_discovery_tools` | FT-03, FT-09 | [FT-03](evidence/FT-03_component_discovery.txt), [FT-09](evidence/FT-09_cleanup_calculations.txt) | VERIFIED |
-| `list_components` | `test_list_components` | FT-03 | [FT-03](evidence/FT-03_component_discovery.txt) | VERIFIED |
-| `list_study_cases` | `test_state_and_discovery_tools` | FT-04 | [FT-04](evidence/FT-04_study_case_discovery.txt) | VERIFIED |
-| `add_component` | Creation/validation, graphical update, and circuit-breaker assertions | FT-05, FT-06, FT-07, FT-10, FT-11 | [FT-05](evidence/FT-05_component_creation.txt), [FT-06](evidence/FT-06_generator_verification.txt), [FT-07](evidence/FT-07_transformer_verification.txt), [FT-10](evidence/FT-10_graphical_synchronization.txt), [FT-11](evidence/FT-11_circuit_breaker_lifecycle.txt) | VERIFIED |
-| `delete_component` | Guard, graphical cleanup, cubicle cleanup, and switchgear cleanup tests | FT-08, FT-09, FT-10, FT-11 | [FT-08](evidence/FT-08_component_deletion.txt), [FT-09](evidence/FT-09_cleanup_calculations.txt), [FT-10](evidence/FT-10_graphical_synchronization.txt), [FT-11](evidence/FT-11_circuit_breaker_lifecycle.txt) | VERIFIED |
+| `get_active_project` | `test_state_and_discovery_tools` | FT-01 | [FT-01](FT-01_active_context.txt) | VERIFIED |
+| `get_active_study_case` | `test_state_and_discovery_tools` | FT-01 | [FT-01](FT-01_active_context.txt) | VERIFIED |
+| `get_parameters` | `test_state_and_discovery_tools` | FT-02, FT-06, FT-07 | [FT-02](FT-02_parameter_inspection.txt), [FT-06](FT-06_generator_verification.txt), [FT-07](FT-07_transformer_verification.txt) | VERIFIED |
+| `list_objects` | `test_state_and_discovery_tools` | FT-03, FT-09 | [FT-03](FT-03_component_discovery.txt), [FT-09](FT-09_cleanup_calculations.txt) | VERIFIED |
+| `list_components` | `test_list_components` | FT-03 | [FT-03](FT-03_component_discovery.txt) | VERIFIED |
+| `list_study_cases` | `test_state_and_discovery_tools` | FT-04 | [FT-04](FT-04_study_case_discovery.txt) | VERIFIED |
+| `add_component` | Creation/validation, graphical update, and circuit-breaker assertions | FT-05, FT-06, FT-07, FT-10, FT-11 | [FT-05](FT-05_component_creation.txt), [FT-06](FT-06_generator_verification.txt), [FT-07](FT-07_transformer_verification.txt), [FT-10](FT-10_graphical_synchronization.txt), [FT-11](FT-11_circuit_breaker_lifecycle.txt) | VERIFIED |
+| `delete_component` | Guard, graphical cleanup, cubicle cleanup, and switchgear cleanup tests | FT-08, FT-09, FT-10, FT-11 | [FT-08](FT-08_component_deletion.txt), [FT-09](FT-09_cleanup_calculations.txt), [FT-10](FT-10_graphical_synchronization.txt), [FT-11](FT-11_circuit_breaker_lifecycle.txt) | VERIFIED |
 
 ## 5. Automated test results
 
@@ -110,12 +162,12 @@ Commands were run from the repository root:
 & $Python -m py_compile `
     .\PowerFactory\Agent_DIgSILENT.py `
     .\PowerFactory\MCP_PowerFactory.py `
-    .\PowerFactory\test_component_creation.py `
-    .\PowerFactory\test_state_inspection.py
+    .\PowerFactory\tests\test_component_creation.py `
+    .\PowerFactory\tests\test_state_inspection.py
 
 & $Python -m pytest `
-    .\PowerFactory\test_component_creation.py `
-    .\PowerFactory\test_state_inspection.py `
+    .\PowerFactory\tests\test_component_creation.py `
+    .\PowerFactory\tests\test_state_inspection.py `
     -v --tb=short --color=no -p no:cacheprovider
 ```
 
@@ -131,7 +183,7 @@ The 29 tests cover component creation and rollback, input edge cases, case-insen
 
 These tests use fake/mock PowerFactory objects; they do not replace the separate live PowerFactory FT evidence. The complete command, environment, test names, and captured output are preserved in UT-01.
 
-**Supporting evidence:** [UT-01 automated tests](evidence/UT-01_automated_tests.txt)
+**Supporting evidence:** [UT-01 automated tests](UT-01_automated_tests.txt)
 
 ## 6. Live test FT-01 - Active context inspection
 
@@ -185,7 +237,7 @@ get_active_study_case()
 
 `get_active_project` and `get_active_study_case` correctly identified the live PowerFactory context and produced no model changes.
 
-**Supporting evidence:** [FT-01 active context](evidence/FT-01_active_context.txt)
+**Supporting evidence:** [FT-01 active context](FT-01_active_context.txt)
 
 ## 7. Live test FT-02 - Parameter inspection
 
@@ -235,7 +287,7 @@ max_results=5
 
 `get_parameters` returned the expected exact bus, its 345 kV nominal voltage, and its in-service state.
 
-**Supporting evidence:** [FT-02 parameter inspection](evidence/FT-02_parameter_inspection.txt)
+**Supporting evidence:** [FT-02 parameter inspection](FT-02_parameter_inspection.txt)
 
 ## 8. Live test FT-03 - Object and component discovery
 
@@ -267,7 +319,7 @@ The raw and friendly discovery interfaces returned consistent identities and cou
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-03 component discovery](evidence/FT-03_component_discovery.txt)
+**Supporting evidence:** [FT-03 component discovery](FT-03_component_discovery.txt)
 
 ## 9. Live test FT-04 - Study-case discovery
 
@@ -309,7 +361,7 @@ Representative decoded result:
 
 `list_study_cases` returned all seven available study cases and correctly identified `Case 1` as active.
 
-**Supporting evidence:** [FT-04 study-case discovery](evidence/FT-04_study_case_discovery.txt)
+**Supporting evidence:** [FT-04 study-case discovery](FT-04_study_case_discovery.txt)
 
 ## 10. Live test FT-05 - Bus, line, and load creation
 
@@ -368,7 +420,7 @@ The bus, line, and load were created with the requested attributes and connectio
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-05 component creation](evidence/FT-05_component_creation.txt)
+**Supporting evidence:** [FT-05 component creation](FT-05_component_creation.txt)
 
 ## 11. Live test FT-06 - In-service generator
 
@@ -426,7 +478,7 @@ The in-service generator retained the requested power values, reused the expecte
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-06 generator verification](evidence/FT-06_generator_verification.txt)
+**Supporting evidence:** [FT-06 generator verification](FT-06_generator_verification.txt)
 
 ## 12. Live test FT-07 - In-service transformer
 
@@ -482,7 +534,7 @@ The in-service transformer retained its type and service state, connected to the
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-07 transformer verification](evidence/FT-07_transformer_verification.txt)
+**Supporting evidence:** [FT-07 transformer verification](FT-07_transformer_verification.txt)
 
 ## 13. Live test FT-08 - Guarded deletion
 
@@ -552,7 +604,7 @@ DELETE transformer MCP Verification Transformer 20260822A
 
 `delete_component` enforced its preview and exact-confirmation safeguards and removed every supported component type together with tested connection cubicles.
 
-**Supporting evidence:** [FT-08 component deletion](evidence/FT-08_component_deletion.txt)
+**Supporting evidence:** [FT-08 component deletion](FT-08_component_deletion.txt)
 
 ## 14. Live test FT-09 - Absence and post-cleanup calculations
 
@@ -610,7 +662,7 @@ Both temporary in-service components were absent, and the cleaned model successf
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-09 cleanup calculations](evidence/FT-09_cleanup_calculations.txt)
+**Supporting evidence:** [FT-09 cleanup calculations](FT-09_cleanup_calculations.txt)
 
 ## 15. Live test FT-10 - Single-line diagram synchronization
 
@@ -659,7 +711,7 @@ Graphical insertion and confirmed graphical deletion both worked when explicitly
 
 **Status: PASS WITH DOCUMENTED LIMITATION**
 
-**Supporting evidence:** [FT-10 graphical synchronization](evidence/FT-10_graphical_synchronization.txt)
+**Supporting evidence:** [FT-10 graphical synchronization](FT-10_graphical_synchronization.txt)
 
 ## 16. Live test FT-11 - Circuit-breaker creation and cleanup
 
@@ -723,7 +775,7 @@ Automatic circuit-breaker creation, retained breaker attributes, component-state
 
 **Status: PASS**
 
-**Supporting evidence:** [FT-11 circuit-breaker lifecycle](evidence/FT-11_circuit_breaker_lifecycle.txt)
+**Supporting evidence:** [FT-11 circuit-breaker lifecycle](FT-11_circuit_breaker_lifecycle.txt)
 
 ## 17. Deviations and observations
 
@@ -748,17 +800,17 @@ Within the documented scope and limitations, the contributed tools are verified 
 
 | Evidence ID | Record |
 |---|---|
-| UT-01 | [Compilation and automated tests](evidence/UT-01_automated_tests.txt) |
-| FT-01 | [Active project and study-case context](evidence/FT-01_active_context.txt) |
-| FT-02 | [Parameter inspection](evidence/FT-02_parameter_inspection.txt) |
-| FT-03 | [Object and component discovery](evidence/FT-03_component_discovery.txt) |
-| FT-04 | [Study-case discovery](evidence/FT-04_study_case_discovery.txt) |
-| FT-05 | [Bus, line, and load creation](evidence/FT-05_component_creation.txt) |
-| FT-06 | [Generator verification](evidence/FT-06_generator_verification.txt) |
-| FT-07 | [Transformer verification](evidence/FT-07_transformer_verification.txt) |
-| FT-08 | [Guarded component deletion](evidence/FT-08_component_deletion.txt) |
-| FT-09 | [Absence checks and cleanup calculations](evidence/FT-09_cleanup_calculations.txt) |
-| FT-10 | [Single-line diagram synchronization](evidence/FT-10_graphical_synchronization.txt) |
-| FT-11 | [Circuit-breaker creation and cleanup](evidence/FT-11_circuit_breaker_lifecycle.txt) |
+| UT-01 | [Compilation and automated tests](UT-01_automated_tests.txt) |
+| FT-01 | [Active project and study-case context](FT-01_active_context.txt) |
+| FT-02 | [Parameter inspection](FT-02_parameter_inspection.txt) |
+| FT-03 | [Object and component discovery](FT-03_component_discovery.txt) |
+| FT-04 | [Study-case discovery](FT-04_study_case_discovery.txt) |
+| FT-05 | [Bus, line, and load creation](FT-05_component_creation.txt) |
+| FT-06 | [Generator verification](FT-06_generator_verification.txt) |
+| FT-07 | [Transformer verification](FT-07_transformer_verification.txt) |
+| FT-08 | [Guarded component deletion](FT-08_component_deletion.txt) |
+| FT-09 | [Absence checks and cleanup calculations](FT-09_cleanup_calculations.txt) |
+| FT-10 | [Single-line diagram synchronization](FT-10_graphical_synchronization.txt) |
+| FT-11 | [Circuit-breaker creation and cleanup](FT-11_circuit_breaker_lifecycle.txt) |
 
 The supporting files preserve the captured AI client results. Records copied from complete supplied transcripts are marked as verbatim, records assembled from individually supplied raw responses are marked as compiled evidence records.

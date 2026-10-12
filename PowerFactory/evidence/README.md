@@ -1,6 +1,7 @@
 # PowerFactory MCP supporting evidence
 
-These files support `POWERFACTORY_MCP_FUNCTION_TEST_REPORT.md`.
+These files support the [function test report](POWERFACTORY_MCP_FUNCTION_TEST_REPORT.md).
+The [contribution report](POWERFACTORY_MCP_CONTRIBUTION_REPORT.md) records the implementation scope.
 
 - **Verbatim transcript:** copied from a complete captured MCP client transcript supplied during verification.
 - **Verbatim extract:** an unchanged operation-and-response excerpt from a complete captured transcript.

@@ -169,6 +169,6 @@ exclude = [
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests", "PSSE/tests",
     "PSCAD/conftest.py", "surge/conftest.py",
     "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
-    "**/PowerFactory/test_*.py",
+    "**/PowerFactory/tests",
     ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",
 ]

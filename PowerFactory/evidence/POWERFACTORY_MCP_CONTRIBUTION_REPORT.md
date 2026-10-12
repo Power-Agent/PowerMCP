@@ -1,14 +1,54 @@
 # PowerMCP PowerFactory Tooling Contribution Report
 
-**Status:** Local contribution, not pushed to Repo
-**Final verified branch:** `feat/powerfactory-switchgear`
-**Latest verified commit:** `8521cb6` (`Insert PowerFactory components using diagram layout tool`)
-**Verification completed:** 1 September 2026
-**Target system:** DIgSILENT PowerFactory 2026 SP1 with Python 3.10
+**Report updated:** 12 October 2026
+**Publication:** Original contributions and contingency follow-up are upstream; PDF export and EvEMTBench builders are in PR #108 and the expanded quality gates in PR #109.
+**Reviewed quality-gate revision:** `9c6eb37` (PR #109)
+**Live evidence:** PowerFactory 2026 SP1 development PC; SP4 contingency follow-up only.
 
 > **Historical scope:** The metadata and live PowerFactory results in this report describe the original 1 September 2026 verification. Section 6 and UT-01 were refreshed on 19 September 2026 against PR #77 commit `2aeb38b`; that refresh used mocked PowerFactory objects and did not re-run the live FT scenarios.
 
 ## 1. Executive summary
+
+### October 2026 contribution update
+
+The integration now includes active-grid diagram PDF export and a versioned
+EvEMTBench component catalog, with source attribution to the paper. Contributions
+by Aswin Krishna Poyil were carried out at the **Chair of Electrical Energy
+Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)**, with supervision
+and the opportunity to work independently provided by **Tobias Lorz** and
+**Timon Conrad**. The paper's authors remain credited separately in the catalogs.
+
+| Contribution | Implementation and evidence |
+|---|---|
+| Contingency inspection and bounded result reads | Follow-up merged through PR #95; SP1 FT-13 and SP4 [FT-14](FT-14_contingency_inspection_sp4.txt). |
+| Active-grid PDF export | Exports an existing diagram from an active project; [FT-15](FT-15_active_grid_pdf_export_sp1.txt). This is a diagram PDF, not a project archive or a complete parameter report. |
+| Transformer catalog and creator | Tables 10–12 catalog; new TypTr2 and connected ElmTr2 without a template; [FT-16](FT-16_evemtbench_transformer_creation_sp1.txt) and [FT-19](FT-19_greenfield_bootstrap_transformer_sp1.txt). |
+| Overhead-line catalog and creator | Tables 3, 7 and 9; new TypLne and ElmLne; [FT-17](FT-17_evemtbench_overhead_line_creation_sp1.txt). |
+| Grid and bus bootstrap | Creates and activates ElmNet with caller-selected bus voltages; [FT-18](FT-18_greenfield_grid_bootstrap_sp1.txt). An existing active project and study case are still prerequisites. |
+| External-grid creator | Table 4 catalog and connected ElmXnet; [FT-20](FT-20_evemtbench_external_grid_creation_sp1.txt). |
+| Load creator | Table 5 catalog and connected ElmLod; [FT-21](FT-21_evemtbench_load_creation_sp1.txt). |
+| Underground-cable creator | Tables 3 and 6 catalog, new TypLne and ElmLne; [FT-22](FT-22_evemtbench_underground_cable_creation_sp1.txt). |
+| Synchronous-machine catalog and creator | Table 13, round-rotor TypSym and connected ElmSym, with time-constant conversion and retained-value checks; [FT-23](FT-23_evemtbench_synchronous_machine_creation_sp1.txt). |
+| Unified component creator | One entry point dispatches all six equipment kinds to their guarded creators; live round-rotor route in [FT-24](FT-24_unified_evemtbench_component_creation_sp1.txt). |
+
+Each equipment creator previews its plan, requires exact confirmation, verifies
+retained attributes, and attempts rollback on failure. PR #109 binds confirmation
+to canonical JSON hashed with SHA-256, including resolved grid/bus paths and
+catalog values. It adds catalog mutation tests and an isolated installed-wheel
+smoke test. CI passed for reviewed revision `9c6eb37`; this is automated
+verification and does not replace live PowerFactory testing of that revision.
+
+The completed scope is a component-building foundation, not reproduction of the
+paper's complete simulation dataset. Transformer zero-sequence and saturation
+tables remain catalog metadata pending validated attribute mappings. Salient-pole
+machines remain catalog-only. Automated project creation, full network assembly,
+controls/protection, event generation and dataset production remain outside
+the validated builder scope. The newer equipment was tested out of service;
+energization, load-flow, short-circuit and dynamic performance remain unverified.
+
+Automated tests now reside in `PowerFactory/tests/`; reports and live validation
+records reside in `PowerFactory/evidence/`. The sections below preserve the
+original September contribution and its verification history.
 
 This work extends the PowerFactory integration in PowerMCP with a coherent set of read-only discovery tools and guarded model-editing tools. The contribution enables an AI client to inspect the active PowerFactory context, discover objects, read selected parameters, create supported network components with optional single-line diagram synchronization and circuit breakers, and safely preview or perform exact-name deletion.
 
@@ -25,7 +65,8 @@ Eight MCP tools were created:
 
 The implementation was verified with automated tests and live calls from the VS Code AI chat client against a running PowerFactory project. Live verification included in-service component creation, graphical insertion and deletion, automatic circuit-breaker creation, parameter inspection, load-flow calculations, short-circuit calculations, guarded deletion, hierarchical cleanup, absence checks, and post-cleanup calculations.
 
-The work remains local. It has not been pushed to the online PowerMCP repository.
+This paragraph's original September scope is historical; current publication
+and verification status is recorded in the October update above.
 
 ## 2. Baseline and scope
 
@@ -306,7 +347,7 @@ Representative coverage includes:
 12. Automatic diagram insertion without K-neighbourhood relayout, desktop restoration, and rebuild.
 13. Exact, case-insensitive named-object lookup despite PowerFactory's case-sensitive query behavior.
 
-These are automated fake/mock-object tests; the live PowerFactory evidence remains in the FT records. The complete command, environment, test list, and captured output are preserved in [UT-01](evidence/UT-01_automated_tests.txt).
+These are automated fake/mock-object tests; the live PowerFactory evidence remains in the FT records. The complete command, environment, test list, and captured output are preserved in [UT-01](UT-01_automated_tests.txt).
 
 ## 7. Live PowerFactory verification
 
@@ -520,12 +561,12 @@ The final contribution modifies or adds:
 
 - `PowerFactory/Agent_DIgSILENT.py`
 - `PowerFactory/MCP_PowerFactory.py`
-- `PowerFactory/test_component_creation.py`
-- `PowerFactory/test_state_inspection.py`
+- `PowerFactory/tests/test_component_creation.py`
+- `PowerFactory/tests/test_state_inspection.py`
 
 This report is intended to be added as:
 
-- `PowerFactory/POWERFACTORY_MCP_CONTRIBUTION_REPORT.md`
+- `PowerFactory/evidence/POWERFACTORY_MCP_CONTRIBUTION_REPORT.md`
 
 ## 12. Recommended next actions
 

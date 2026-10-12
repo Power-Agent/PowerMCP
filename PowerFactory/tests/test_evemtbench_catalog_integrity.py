@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 CATALOGS = {
     "evemtbench_transformers.json": {10, 11, 12},
     "evemtbench_overhead_lines.json": {3, 7, 9},
