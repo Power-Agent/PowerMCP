@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from pathlib import Path
 from importlib.metadata import (
     PackageNotFoundError,
     packages_distributions,
@@ -177,13 +178,27 @@ def _path_status(t: Tool) -> tuple[str, str]:
     if not t.config_keys:
         return "dim", "-"
     missing = []
+    wrong_type = []
     for ck in required:
         try:
-            cfg.get_path(t.name, ck.key)
+            resolved = Path(cfg.get_path(t.name, ck.key))
         except cfg.ConfigError:
             missing.append(f"{t.name}.{ck.key}")
-    if missing:
-        return "yellow", "set: " + ", ".join(missing)
+            continue
+        valid = (
+            resolved.is_dir() if ck.validate == "dir"
+            else resolved.is_file() if ck.validate == "file"
+            else resolved.exists()
+        )
+        if not valid:
+            wrong_type.append(f"{t.name}.{ck.key} (expected {ck.validate}, got {resolved})")
+    if missing or wrong_type:
+        problems = []
+        if missing:
+            problems.append("set: " + ", ".join(missing))
+        if wrong_type:
+            problems.append("wrong type: " + ", ".join(wrong_type))
+        return "yellow", "; ".join(problems)
     label = "configured"
     if optional:
         label += f" ({len(optional)} optional)"
