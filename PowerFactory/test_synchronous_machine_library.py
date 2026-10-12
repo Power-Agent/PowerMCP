@@ -124,12 +124,14 @@ class EvEMTBenchSynchronousMachineCreatorTest(unittest.TestCase):
         self.assertEqual(self.machine_types(equipment), [])
         self.assertEqual(grid["ElmSym"], [])
         self.assertEqual(bus["StaCubic"], [])
-        self.assertEqual(
-            first["confirmation_required"],
-            "CREATE Research Generator WITH Research Generator Type "
-            "round_rotor 100MVA 10.5kV seed=42 grid=<active> "
-            "bus=Generator Bus p=60MW q=5Mvar out_of_service=0",
+        self.assertTrue(
+            first["confirmation_required"].startswith(
+                "CREATE Research Generator WITH Research Generator Type "
+                "round_rotor 100MVA 10.5kV seed=42 grid=<active> "
+                "bus=Generator Bus p=60MW q=5Mvar out_of_service=0"
+            )
         )
+        self.assertRegex(first["confirmation_required"], r" plan=[0-9a-f]{64}$")
         values = first["item"]["parameters"]
         self.assertEqual(values["rated_voltage_kv"], 10.5)
         self.assertGreaterEqual(
