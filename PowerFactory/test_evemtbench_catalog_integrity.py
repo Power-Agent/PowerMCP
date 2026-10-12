@@ -101,7 +101,29 @@ def validate_catalog(catalog: dict, expected_tables: set[int]) -> None:
     # intentionally left as source metadata rather than interpreted here.
     def walk(value: object, path: str) -> None:
         if isinstance(value, dict):
-            if "min" in value or "max" in value:
+            if "min_formula" in value:
+                if "max" not in value:
+                    raise ValueError(f"{path} must define both min_formula and max bounds")
+                if (
+                    not isinstance(value["min_formula"], str)
+                    or not value["min_formula"].strip()
+                    or not _finite_number(value["max"])
+                ):
+                    raise ValueError(f"{path} has invalid formula range bounds")
+            elif "maximum" in value:
+                if "min" not in value:
+                    raise ValueError(f"{path} must define both min and maximum bounds")
+                if not _finite_number(value["min"]):
+                    raise ValueError(f"{path} has a non-finite or non-numeric minimum")
+                maximum = value["maximum"]
+                if isinstance(maximum, str):
+                    if not maximum.strip():
+                        raise ValueError(f"{path}.maximum must not be empty")
+                elif not _finite_number(maximum):
+                    raise ValueError(f"{path} has an invalid maximum")
+                elif float(value["min"]) > float(maximum):
+                    raise ValueError(f"{path} has reversed bounds")
+            elif "min" in value or "max" in value:
                 if "min" not in value or "max" not in value:
                     raise ValueError(f"{path} must define both min and max bounds")
                 low, high = value["min"], value["max"]
@@ -238,3 +260,19 @@ def test_validator_rejects_duplicate_transformer_voltage_pair():
     )
     with pytest.raises(ValueError, match="duplicate transformer voltage pair"):
         validate_catalog(broken, {10, 11, 12})
+
+
+
+def test_validator_rejects_incomplete_formula_range():
+    catalog = json.loads(
+        (DATA_DIR / "evemtbench_underground_cables.json").read_text(encoding="utf-8")
+    )
+    broken = copy.deepcopy(catalog)
+    broken["construction"]["flat_phase_spacing_m"].pop("max")
+    with pytest.raises(ValueError, match="both min_formula and max"):
+        validate_catalog(broken, {3, 6})
+
+    broken = copy.deepcopy(catalog)
+    broken["construction"]["flat_phase_spacing_m"].pop("min_formula")
+    with pytest.raises(ValueError, match="both min and max"):
+        validate_catalog(broken, {3, 6})
