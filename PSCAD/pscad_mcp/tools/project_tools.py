@@ -177,7 +177,8 @@ async def run_project_to_completion(
             }
 
         status = await get_run_status(project_name)
-        last_state = status["state"]
+        raw_state = status["state"]
+        last_state = "idle" if raw_state == "idle_or_finished" else raw_state
         state_changed = last_state != previous_state
         if state_changed:
             poll_index = 0
