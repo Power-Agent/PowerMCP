@@ -53,12 +53,12 @@ async def run_project_to_completion(
     ctx: Context,
     timeout_seconds: float = 1800.0,
 ) -> Dict[str, Any]:
-    """Run a PSCAD project to a confirmed terminal state and stream progress.
+    """Run a PSCAD project to a terminal state and stream bounded progress.
 
-    Starts the simulation non-blockingly and polls the existing status tool.
-    A transition to idle is only considered successful after a running state
-    was observed; a build that drops directly back to idle is diagnosed using
-    PSCAD's build messages instead of being reported as a successful run.
+    Idle immediately after start is treated as a startup race, not as a
+    terminal result. A transition from building to idle can also mean that a
+    short run completed between polls, so build diagnostics are compared with
+    a pre-run snapshot before choosing the result. A timeout never cancels PSCAD.
     """
     if (
         isinstance(timeout_seconds, bool)
@@ -76,33 +76,56 @@ async def run_project_to_completion(
             "message": "PSCAD is not licensed.",
         }
 
+    # Do not accidentally attach this request to a run left behind by an
+    # earlier request that timed out.
+    initial_status = await get_run_status(project_name)
+    if initial_status["state"] in {"building", "running"}:
+        return {
+            "status": "already_running",
+            "project": project_name,
+            "state": initial_status["state"],
+            "message": "A PSCAD build or simulation is already in progress; it was not restarted.",
+        }
+
+    # Snapshot diagnostics before start so an old build's errors are not
+    # attributed to this run. If diagnostics are unavailable, continue safely
+    # but do not treat an unobserved run as confirmed completion.
+    baseline_errors = []
+    baseline_available = True
+    try:
+        baseline_errors = list((await get_build_messages(project_name)).get("errors", []))
+    except Exception:
+        baseline_available = False
+
     project = await robust_executor.run_safe(pscad.project, project_name)
     await robust_executor.run_safe(project.start)
-
     started_at = time.monotonic()
-    progress_count = 0
+    startup_grace_seconds = min(5.0, timeout_seconds / 2.0)
 
-    async def report(message: str) -> None:
-        nonlocal progress_count
-        progress_count += 1
-        await ctx.report_progress(progress_count, message=message)
+    async def report(progress: float, message: str) -> None:
+        bounded_progress = max(0.0, min(100.0, float(progress)))
+        await ctx.report_progress(bounded_progress, total=100, message=message)
 
-    await report(f"Started build-and-run for '{project_name}'; waiting for PSCAD status.")
+    await report(0, f"Started build-and-run for '{project_name}'; waiting for PSCAD status.")
 
-    # Exponential-ish backoff limits polling overhead without occupying the
-    # single PSCAD worker between calls.
+    # Poll quickly after every state transition. Long backoff intervals can
+    # otherwise miss an entire short Run phase between two status samples.
     poll_delays = (1, 2, 3, 5, 8, 10)
     poll_index = 0
     saw_building = False
     saw_running = False
+    idle_polls = 0
     last_state = "unknown"
+    previous_state = None
+    last_progress = 0.0
 
     while True:
         elapsed = time.monotonic() - started_at
         if elapsed >= timeout_seconds:
             await report(
+                last_progress,
                 f"Timed out after {elapsed:.1f}s while PSCAD state was '{last_state}'. "
-                "The simulation may still be running; inspect get_run_status before retrying."
+                "The simulation may still be running; inspect get_run_status before retrying.",
             )
             return {
                 "status": "timeout",
@@ -114,23 +137,29 @@ async def run_project_to_completion(
 
         status = await get_run_status(project_name)
         last_state = status["state"]
+        state_changed = last_state != previous_state
+        if state_changed:
+            poll_index = 0
+        previous_state = last_state
 
         if last_state == "building":
             saw_building = True
-            await report(f"PSCAD is building '{project_name}'.")
+            idle_polls = 0
+            await report(last_progress, f"PSCAD is building '{project_name}'.")
         elif last_state == "running":
             saw_running = True
+            idle_polls = 0
             run_progress = status.get("progress")
-            progress_text = (
-                f" Simulation progress: {run_progress}%."
-                if isinstance(run_progress, (int, float))
+            if (
+                isinstance(run_progress, (int, float))
                 and not isinstance(run_progress, bool)
-                else ""
-            )
-            await report(f"PSCAD is running '{project_name}'.{progress_text}")
+                and math.isfinite(run_progress)
+            ):
+                last_progress = max(0.0, min(100.0, float(run_progress)))
+            await report(last_progress, f"PSCAD is running '{project_name}'.")
         else:
             if saw_running:
-                await report(f"PSCAD finished running '{project_name}'.")
+                await report(100, f"PSCAD finished running '{project_name}'.")
                 return {
                     "status": "completed",
                     "project": project_name,
@@ -138,53 +167,78 @@ async def run_project_to_completion(
                     "message": "PSCAD was observed running and has now returned to idle.",
                 }
 
-            # A build failure can return directly to idle without ever entering
-            # the running state. Never infer success from idle alone.
-            try:
-                messages = await get_build_messages(project_name)
-            except Exception as exc:
+            idle_polls += 1
+            elapsed = time.monotonic() - started_at
+            if elapsed < startup_grace_seconds and idle_polls < 4:
                 await report(
-                    f"PSCAD returned to idle before a run was observed; "
-                    f"could not read build diagnostics: {exc}"
+                    last_progress,
+                    f"PSCAD is still idle during startup for '{project_name}'; waiting for the run to begin.",
                 )
+            else:
+                try:
+                    messages = await get_build_messages(project_name)
+                except Exception as exc:
+                    await report(
+                        last_progress,
+                        f"PSCAD returned to idle before a run was observed; diagnostics unavailable: {exc}",
+                    )
+                    return {
+                        "status": "failed",
+                        "project": project_name,
+                        "saw_building": saw_building,
+                        "message": f"Could not read build diagnostics after idle: {exc}",
+                    }
+
+                errors = list(messages.get("errors", []))
+                # Remove matching pre-run errors one-for-one; retain only errors
+                # that appeared during this attempt.
+                if baseline_available:
+                    remaining_baseline = list(baseline_errors)
+                    new_errors = []
+                    for error in errors:
+                        try:
+                            remaining_baseline.remove(error)
+                        except ValueError:
+                            new_errors.append(error)
+                    errors = new_errors
+
+                warnings = messages.get("warnings", [])
+                if errors:
+                    final_status = "build_failed"
+                    message = "PSCAD returned to idle before a run was observed; new build errors were found."
+                elif saw_building and baseline_available:
+                    # A short run can pass through Run between samples. Build
+                    # followed by idle with no new errors is the available
+                    # completion evidence when the vendor API exposes no
+                    # durable run identifier or completion event.
+                    final_status = "completed"
+                    message = (
+                        "PSCAD entered Build and returned to idle without new build errors; "
+                        "the Run phase may have completed between polls."
+                    )
+                else:
+                    final_status = "not_completed"
+                    message = (
+                        "PSCAD returned to idle before a simulation was observed. "
+                        "Completion cannot be confirmed from the available status and diagnostics."
+                    )
+                await report(100 if final_status == "completed" else last_progress, message)
                 return {
-                    "status": "failed",
+                    "status": final_status,
                     "project": project_name,
                     "saw_building": saw_building,
-                    "message": (
-                        "PSCAD returned to idle before a simulation was observed; "
-                        f"build diagnostics could not be read: {exc}"
-                    ),
+                    "errors": errors,
+                    "warnings": warnings,
+                    "message": message,
                 }
-
-            errors = messages.get("errors", [])
-            warnings = messages.get("warnings", [])
-            if errors:
-                final_status = "build_failed"
-                message = "PSCAD returned to idle before a simulation was observed; build errors were found."
-            else:
-                final_status = "not_completed"
-                message = (
-                    "PSCAD returned to idle before a simulation was observed. "
-                    "No build errors were reported, so completion cannot be confirmed."
-                )
-            await report(message)
-            return {
-                "status": final_status,
-                "project": project_name,
-                "saw_building": saw_building,
-                "errors": errors,
-                "warnings": warnings,
-                "message": message,
-            }
 
         remaining_seconds = timeout_seconds - (time.monotonic() - started_at)
         if remaining_seconds <= 0:
             continue
-        await asyncio.sleep(
-            min(poll_delays[min(poll_index, len(poll_delays) - 1)], remaining_seconds)
-        )
-        poll_index += 1
+        delay = 1 if state_changed else poll_delays[min(poll_index, len(poll_delays) - 1)]
+        await asyncio.sleep(min(delay, remaining_seconds))
+        if not state_changed:
+            poll_index = min(poll_index + 1, len(poll_delays) - 1)
 
 
 async def build_project(project_name: str, clean: bool = True) -> Dict[str, Any]:
