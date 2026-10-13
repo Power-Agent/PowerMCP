@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import math
 import os
 import time
@@ -6,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from mcp.server.mcpserver import Context, MCPServer as FastMCP
 from pscad_mcp.core.connection_manager import pscad_manager
 from pscad_mcp.core.executor import robust_executor
-from pscad_mcp.utils.sandbox import checked_path
+from pscad_mcp.utils.sandbox import checked_path, checked_read_tree
 
 async def load_projects(filenames: List[str]) -> str:
     """Load projects or workspace into PSCAD."""
@@ -47,6 +48,45 @@ async def run_project(project_name: str) -> Dict[str, Any]:
         "project": project_name,
         "note": "Build+run started. Poll get_run_status until state is 'idle_or_finished'.",
     }
+
+
+async def _snapshot_project_outputs(project: Any) -> Optional[Dict[str, tuple]]:
+    """Snapshot output files before a run; None means the folder was unavailable."""
+    try:
+        folder = await robust_executor.run_safe(lambda: project.temp_folder)
+        if not isinstance(folder, (str, os.PathLike)) or not folder:
+            return None
+        folder = checked_read_tree(os.fspath(folder), purpose="PSCAD output tree")
+        if not os.path.isdir(folder):
+            return None
+        snapshot = {}
+        for pattern in ("*.psout", "*.out"):
+            for path in glob.glob(os.path.join(folder, pattern)):
+                try:
+                    stat = os.stat(path)
+                except OSError:
+                    continue
+                snapshot[os.path.abspath(path)] = (stat.st_mtime_ns, stat.st_size)
+        return snapshot
+    except Exception:
+        # Output location support varies by PSCAD installation and is only
+        # needed to confirm a run that begins and ends between status polls.
+        return None
+
+
+async def _project_output_changed(
+    project: Any, baseline: Optional[Dict[str, tuple]]
+) -> bool:
+    """Return whether this run created or modified a PSCAD output file."""
+    if baseline is None:
+        return False
+    current = await _snapshot_project_outputs(project)
+    if current is None:
+        return False
+    return any(
+        path not in baseline or baseline[path] != metadata
+        for path, metadata in current.items()
+    )
 
 async def run_project_to_completion(
     project_name: str,
@@ -98,6 +138,7 @@ async def run_project_to_completion(
         baseline_available = False
 
     project = await robust_executor.run_safe(pscad.project, project_name)
+    baseline_outputs = await _snapshot_project_outputs(project)
     await robust_executor.run_safe(project.start)
     started_at = time.monotonic()
     startup_grace_seconds = min(5.0, timeout_seconds / 2.0)
@@ -206,21 +247,21 @@ async def run_project_to_completion(
                 if errors:
                     final_status = "build_failed"
                     message = "PSCAD returned to idle before a run was observed; new build errors were found."
-                elif saw_building and baseline_available:
-                    # A short run can pass through Run between samples. Build
-                    # followed by idle with no new errors is the available
-                    # completion evidence when the vendor API exposes no
-                    # durable run identifier or completion event.
+                elif saw_building and baseline_available and await _project_output_changed(project, baseline_outputs):
+                    # A short Run phase may occur entirely between polls. A new
+                    # or modified output file is independent evidence that the
+                    # build-and-run produced results, rather than idle alone.
                     final_status = "completed"
                     message = (
                         "PSCAD entered Build and returned to idle without new build errors; "
-                        "the Run phase may have completed between polls."
+                        "a project output file was created or updated during this run."
                     )
                 else:
                     final_status = "not_completed"
                     message = (
                         "PSCAD returned to idle before a simulation was observed. "
-                        "Completion cannot be confirmed from the available status and diagnostics."
+                        "Completion cannot be confirmed from status, build diagnostics, "
+                        "and a fresh output file."
                     )
                 await report(100 if final_status == "completed" else last_progress, message)
                 return {
