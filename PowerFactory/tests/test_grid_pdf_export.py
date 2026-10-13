@@ -52,6 +52,10 @@ class FakeApplication:
         self.study_case = object() if active_case else None
         self.board = FakeGraphicsBoard(pages)
         self.command = FakeExportCommand()
+        self.current_diagram = None
+
+    def GetCurrentDiagram(self):
+        return self.current_diagram
 
     def GetActiveProject(self):
         return self.project
@@ -122,6 +126,33 @@ class GridPdfExportTest(unittest.TestCase):
 
         self.assertTrue(success, message)
         self.assertEqual(app.board.shown, [summary])
+
+    def test_restores_previous_diagram_after_success_and_failure(self):
+        previous = FakePage("Previously open diagram")
+        selected = FakePage("Export Grid")
+        for fails in (False, True):
+            with self.subTest(export_fails=fails):
+                app = FakeApplication([selected])
+                app.current_diagram = previous
+                with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as directory:
+                    output = os.path.join(directory, "grid.pdf")
+                    if fails:
+                        with patch.object(app.command, "Execute", side_effect=RuntimeError("export failed")):
+                            success, message = self.run_export(app, output)
+                    else:
+                        success, message = self.run_export(app, output)
+                self.assertEqual(success, not fails, message)
+                self.assertEqual(app.board.shown, [selected, previous])
+
+    def test_reports_restoration_failure(self):
+        selected = FakePage("Export Grid")
+        app = FakeApplication([selected])
+        app.current_diagram = FakePage("Previously open diagram")
+        with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as directory:
+            with patch.object(app.board, "Show", side_effect=[0, 1]):
+                success, message = self.run_export(app, os.path.join(directory, "grid.pdf"))
+        self.assertFalse(success)
+        self.assertIn("restore previous diagram", message)
 
     def test_requires_name_when_multiple_diagrams_are_available(self):
         app = FakeApplication([FakePage("Overview"), FakePage("Summary Grid")])

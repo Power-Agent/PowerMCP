@@ -1,7 +1,7 @@
 # PowerMCP PowerFactory Tooling Contribution Report
 
-**Report updated:** 12 October 2026
-**Publication:** Original contributions and contingency follow-up are upstream; PDF export and EvEMTBench builders are in PR #108 and the expanded quality gates in PR #109.
+**Report updated:** 13 October 2026
+**Publication:** PR #108 and PR #109 merged on 12 October 2026. The organization and maintainer follow-up changes are prepared on a separate branch.
 **Reviewed quality-gate revision:** `9c6eb37` (PR #109)
 **Live evidence:** PowerFactory 2026 SP1 development PC; SP4 contingency follow-up only.
 
@@ -10,6 +10,15 @@
 ## 1. Executive summary
 
 ### October 2026 contribution update
+
+The maintainer follow-up renames the installed-wheel check to avoid pytest
+collection, extracts EvEMTBench code into its own module with shared confirmation
+and type-rollback helpers, and binds bootstrap tokens to project and resolved
+create/reuse decisions. [FT-25](FT-25_bootstrap_confirmation_binding_sp1.txt)
+records live rejection of a stale creation token. [FT-26](FT-26_pdf_diagram_restoration_sp1.txt)
+records live restoration of the previous single-line diagram after PDF export.
+Development-PC automated verification passed 158 tests and 62 subtests.
+Local wheel build and six installed listing APIs passed; no new CI run is claimed.
 
 The integration now includes active-grid diagram PDF export and a versioned
 EvEMTBench component catalog, with source attribution to the paper. Contributions

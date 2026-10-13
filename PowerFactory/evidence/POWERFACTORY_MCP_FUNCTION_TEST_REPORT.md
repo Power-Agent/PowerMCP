@@ -2,7 +2,7 @@
 
 ## Document control
 
-**Report updated:** 12 October 2026. The original September document-control
+**Report updated:** 13 October 2026. The original September document-control
 table and detailed FT-01–FT-11 scenarios below are historical records. The
 following update records the later validation without changing those results.
 
@@ -38,7 +38,16 @@ cover stale confirmations after input or active-grid changes, delimiter and
 float-rendering collisions, missing catalog metadata, and duplicate transformer
 voltage pairs. These tests use fake PowerFactory objects.
 
-Live regression of the final confirmation-hash revision remains pending.
+Maintainer follow-up validation passed 158 automated tests and 62 subtests on
+the development PC. Local wheel build and six installed catalog listing APIs
+also passed. [FT-25](FT-25_bootstrap_confirmation_binding_sp1.txt) records live
+stale-token rejection when bootstrap creation becomes a reuse plan.
+[FT-26](FT-26_pdf_diagram_restoration_sp1.txt) records successful restoration
+of the previously active single-line diagram after live PDF export.
+Cross-project bootstrap rejection and export-failure restoration have automated
+coverage only. Active plot pages remain outside the restoration scope.
+Live regression of all six equipment creators after the module extraction
+remains pending.
 The newer builders were verified out of service. No corresponding in-service
 load-flow, short-circuit or dynamic validation is claimed. SP4 validation applies
 to contingency inspection only. Salient-pole creation and transformer Tables 10
