@@ -169,7 +169,7 @@ async def run_project_to_completion(
 
             idle_polls += 1
             elapsed = time.monotonic() - started_at
-            if elapsed < startup_grace_seconds and idle_polls < 4:
+            if not saw_building and elapsed < startup_grace_seconds and idle_polls < 4:
                 await report(
                     last_progress,
                     f"PSCAD is still idle during startup for '{project_name}'; waiting for the run to begin.",
