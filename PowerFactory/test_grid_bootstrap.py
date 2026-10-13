@@ -152,6 +152,21 @@ class GridBootstrapTest(unittest.TestCase):
         self.assertEqual(grid["ElmTerm"], [])
         self.assertNotIn(grid.GetFullName(), self.app.active_grids)
 
+    def test_confirmation_is_bound_to_destination_folder_plan(self):
+        preview = self.call()
+        model = self.project.CreateObject("IntPrjfolder", "Network Model")
+        model.CreateObject("IntPrjfolder", "Network Data")
+
+        result = self.call(confirmation=preview["confirmation_required"])
+
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(self.project.GetContents("*.ElmNet", 1), [])
+        self.assertEqual(
+            self.project["IntPrjfolder"][0]["IntPrjfolder"][0]["ElmNet"],
+            [],
+        )
+
     def test_confirmation_creates_folder_grid_and_buses(self):
         preview = self.call()
 
