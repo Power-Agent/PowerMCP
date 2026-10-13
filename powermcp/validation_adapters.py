@@ -13,10 +13,28 @@ from .validation import ResultSnapshot
 
 
 def _element_id(name: Any, fallback: Any) -> str:
-    if name is None:
+    """Return a stable ID, treating null-like names as missing."""
+    if name is None or str(name) in {"<NA>", "NaT"}:
         return str(fallback)
+    try:
+        unequal_to_self = name != name
+        if isinstance(unequal_to_self, bool) and unequal_to_self:
+            return str(fallback)
+        if type(unequal_to_self).__name__ == "bool_" and bool(unequal_to_self):
+            return str(fallback)
+    except (TypeError, ValueError):
+        pass
     text = str(name).strip()
     return text if text else str(fallback)
+
+
+def _put_metric(values: dict[str, float], key: str, value: Any) -> None:
+    """Never silently overwrite an element when two source names collide."""
+    if key in values:
+        raise ValueError(
+            f"duplicate normalized metric key {key!r}; source element names must be unique"
+        )
+    values[key] = float(value)
 
 
 def _table_element_id(table: Any, index: Any) -> str:
@@ -35,14 +53,14 @@ def snapshot_from_pandapower(
     bus_table = net.bus
     for index, row in net.res_bus.iterrows():
         name = _element_id(bus_table.at[index, "name"], index)
-        values[f"bus:{name}:vm_pu"] = float(row["vm_pu"])
-        values[f"bus:{name}:va_deg"] = float(row["va_degree"])
+        _put_metric(values, f"bus:{name}:vm_pu", row["vm_pu"])
+        _put_metric(values, f"bus:{name}:va_deg", row["va_degree"])
 
     if hasattr(net, "res_line") and hasattr(net, "line"):
         for index, row in net.res_line.iterrows():
             name = _element_id(net.line.at[index, "name"], index)
-            values[f"branch:{name}:p_from_mw"] = float(row["p_from_mw"])
-            values[f"branch:{name}:p_to_mw"] = float(row["p_to_mw"])
+            _put_metric(values, f"branch:{name}:p_from_mw", row["p_from_mw"])
+            _put_metric(values, f"branch:{name}:p_to_mw", row["p_to_mw"])
 
     return ResultSnapshot(
         engine="pandapower",
@@ -84,19 +102,19 @@ def snapshot_from_pypsa(
     va = network.buses_t.v_ang.loc[snapshot]
     for bus_id in network.buses.index:
         name = _table_element_id(network.buses, bus_id)
-        values[f"bus:{name}:vm_pu"] = float(vm[bus_id])
+        _put_metric(values, f"bus:{name}:vm_pu", vm[bus_id])
         angle = float(va[bus_id])
         if angle_unit == "rad":
             angle = math.degrees(angle)
-        values[f"bus:{name}:va_deg"] = angle
+        _put_metric(values, f"bus:{name}:va_deg", angle)
 
     if hasattr(network, "lines_t") and hasattr(network.lines_t, "p0"):
         p0 = network.lines_t.p0.loc[snapshot]
         p1 = network.lines_t.p1.loc[snapshot]
         for line_id in network.lines.index:
             name = _table_element_id(network.lines, line_id)
-            values[f"branch:{name}:p_from_mw"] = float(p0[line_id])
-            values[f"branch:{name}:p_to_mw"] = float(p1[line_id])
+            _put_metric(values, f"branch:{name}:p_from_mw", p0[line_id])
+            _put_metric(values, f"branch:{name}:p_to_mw", p1[line_id])
 
     return ResultSnapshot(
         engine="pypsa",
