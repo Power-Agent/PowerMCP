@@ -4282,10 +4282,56 @@ class DIgSILENTAgent:
                         )
                     reused_buses.append(existing.GetFullName())
 
+            destination_plan = {
+                "destination_data_folder_full_name": None,
+                "destination_parent_full_name": None,
+                "network_model_folder_will_be_created": False,
+                "network_data_folder_will_be_created": False,
+            }
+            if grid is None:
+                data_folders_for_plan = cls._find_named_contents(
+                    project,
+                    "Network Data",
+                    "IntPrjfolder",
+                )
+                if len(data_folders_for_plan) > 1:
+                    raise RuntimeError("Multiple Network Data folders were found")
+                if data_folders_for_plan:
+                    destination_plan["destination_data_folder_full_name"] = (
+                        data_folders_for_plan[0].GetFullName()
+                    )
+                else:
+                    model_folders_for_plan = cls._find_named_contents(
+                        project,
+                        "Network Model",
+                        "IntPrjfolder",
+                    )
+                    if len(model_folders_for_plan) > 1:
+                        raise RuntimeError(
+                            "Multiple Network Model folders were found"
+                        )
+                    model_folder_for_plan = (
+                        model_folders_for_plan[0]
+                        if model_folders_for_plan
+                        else None
+                    )
+                    destination_plan.update({
+                        "destination_parent_full_name": (
+                            model_folder_for_plan.GetFullName()
+                            if model_folder_for_plan is not None
+                            else project.GetFullName()
+                        ),
+                        "network_model_folder_will_be_created": (
+                            model_folder_for_plan is None
+                        ),
+                        "network_data_folder_will_be_created": True,
+                    })
+
             confirmation_plan = {
                 "project_full_name": project.GetFullName(),
                 "grid_name": grid_name,
                 "grid_full_name": grid.GetFullName() if grid is not None else None,
+                **destination_plan,
                 "nominal_frequency_hz": frequency,
                 "grid_will_be_created": grid is None,
                 "grid_will_be_activated": not grid_is_active,
