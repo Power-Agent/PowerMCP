@@ -101,7 +101,7 @@ class GridBootstrapTest(unittest.TestCase):
         self.assertTrue(result["grid_will_be_created"])
         self.assertRegex(
             result["confirmation_required"],
-            r"^CREATE GRID Research Grid 50Hz WITH 2 BUSES plan=[0-9a-f]{12}$",
+            r"^CREATE GRID Research Grid 50Hz WITH 2 BUSES plan=[0-9a-f]{64}$",
         )
         self.assertEqual(self.project["IntPrjfolder"], [])
 
@@ -128,6 +128,29 @@ class GridBootstrapTest(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("confirmation must exactly match", result["message"])
         self.assertEqual(self.project["IntPrjfolder"], [])
+
+    def test_confirmation_is_bound_to_the_active_project(self):
+        preview = self.call()
+        other_project = FakeObject(None, "IntPrj", "Other Project")
+        self.app.project = other_project
+
+        result = self.call(confirmation=preview["confirmation_required"])
+
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(other_project["IntPrjfolder"], [])
+
+    def test_confirmation_is_bound_to_grid_create_or_reuse_decision(self):
+        preview = self.call()
+        grid = self.create_existing_grid()
+        self.app.deactivate(grid)
+
+        result = self.call(confirmation=preview["confirmation_required"])
+
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(grid["ElmTerm"], [])
+        self.assertNotIn(grid.GetFullName(), self.app.active_grids)
 
     def test_confirmation_creates_folder_grid_and_buses(self):
         preview = self.call()
