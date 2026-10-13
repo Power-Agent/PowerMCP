@@ -91,6 +91,7 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
     async def test_run_to_completion_reports_progress_and_waits_for_idle(self):
         mock_project = MagicMock()
         mock_project.run_status.side_effect = [
+            (None, None),  # preflight: idle before starting this request
             ("Build", None),
             ("Run", 10),
             ("Run", 100),
@@ -107,16 +108,22 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         mock_project.start.assert_called_once()
         self.assertGreaterEqual(ctx.report_progress.await_count, 4)
         reported = [call.args[0] for call in ctx.report_progress.await_args_list]
-        self.assertEqual(reported, sorted(set(reported)))
+        self.assertEqual(reported, sorted(reported))
+        self.assertTrue(all(call.kwargs.get("total") == 100 for call in ctx.report_progress.await_args_list))
+        self.assertTrue(any(call.args[0] == 10 for call in ctx.report_progress.await_args_list))
 
     async def test_run_to_completion_reports_build_failure_not_success(self):
         mock_project = MagicMock()
-        mock_project.run_status.side_effect = [("Build", None), (None, None)]
+        mock_project.run_status.side_effect = [
+            (None, None),  # preflight
+            ("Build", None),
+            (None, None),
+        ]
         build_error = MagicMock()
         build_error.status = "Error"
         build_error.text = "compiler failed"
         build_error.name = "EMTDC"
-        mock_project.messages.return_value = [build_error]
+        mock_project.messages.side_effect = [[], [build_error]]  # baseline, then new build error
         self.mock_pscad.project.return_value = mock_project
         ctx = MagicMock()
         ctx.report_progress = AsyncMock()
@@ -130,20 +137,21 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
 
     async def test_run_to_completion_does_not_treat_idle_as_success(self):
         mock_project = MagicMock()
-        mock_project.run_status.return_value = (None, None)
+        mock_project.run_status.side_effect = [(None, None)] * 5  # preflight plus four idle polls
         mock_project.messages.return_value = []
         self.mock_pscad.project.return_value = mock_project
         ctx = MagicMock()
         ctx.report_progress = AsyncMock()
 
-        result = await run_project_to_completion("test", ctx)
+        with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_project_to_completion("test", ctx)
 
         self.assertEqual(result["status"], "not_completed")
         self.assertNotEqual(result["status"], "completed")
 
     async def test_run_to_completion_timeout_does_not_cancel_pscad(self):
         mock_project = MagicMock()
-        mock_project.run_status.return_value = ("Run", 12)
+        mock_project.run_status.side_effect = [(None, None)] + [("Run", 12)] * 20
         self.mock_pscad.project.return_value = mock_project
         ctx = MagicMock()
         ctx.report_progress = AsyncMock()
@@ -167,6 +175,58 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "timeout")
         self.assertEqual(result["last_state"], "running")
         mock_project.start.assert_called_once()
+
+
+    async def test_run_to_completion_waits_through_startup_idle(self):
+        mock_project = MagicMock()
+        mock_project.run_status.side_effect = [
+            (None, None),  # preflight idle
+            (None, None),  # PSCAD has not entered Build yet
+            ("Build", None),
+            ("Run", 50),
+            (None, None),
+        ]
+        mock_project.messages.return_value = []
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(result["message"].startswith("PSCAD was observed running"))
+
+    async def test_run_to_completion_accepts_short_run_between_polls(self):
+        mock_project = MagicMock()
+        mock_project.run_status.side_effect = [
+            (None, None),  # preflight idle
+            ("Build", None),
+            ("Build", None),
+            (None, None),  # Run completed between status samples
+        ]
+        mock_project.messages.return_value = []
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "completed")
+        self.assertIn("may have completed between polls", result["message"])
+
+    async def test_run_to_completion_refuses_to_attach_to_existing_run(self):
+        mock_project = MagicMock()
+        mock_project.run_status.return_value = ("Run", 37)
+        self.mock_pscad.project.return_value = mock_project
+        ctx = MagicMock()
+        ctx.report_progress = AsyncMock()
+
+        result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "already_running")
+        mock_project.start.assert_not_called()
 
     async def test_run_to_completion_rejects_invalid_timeout(self):
         ctx = MagicMock()
