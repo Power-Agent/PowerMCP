@@ -325,7 +325,7 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
             ["20/0.4", "110/20", "110/11", "380/110", "345/25"],
         )
         self.assertEqual(result["unmapped_source_tables"], [10, 12])
-        self.assertIn("Chair of Electrical Energy Systems", result["affiliation"])
+        self.assertIn("Institute of Electrical Energy Systems", result["affiliation"])
 
     def test_catalog_filters_an_exact_rating(self):
         result = agent_module.DIgSILENTAgent.list_evemtbench_components(

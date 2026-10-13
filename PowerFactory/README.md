@@ -742,9 +742,9 @@ Return the sampled values and confirmation phrase without creating anything.
 ## Research provenance and affiliation
 
 PowerFactory development and validation contributions by Aswin Krishna Poyil
-are carried out at the **Chair of Electrical Energy Systems,
+are carried out at the **Institute of Electrical Energy Systems,
 Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)** under the
-supervision of **Tobias Lorz** and **Timon Conrad**, whose support provided the
+supervision of Tobias Lorz and Timon Conrad, whose support provided the
 opportunity to pursue this work independently.
 
 The transformer-type library generator is informed by Georg Kordowich,

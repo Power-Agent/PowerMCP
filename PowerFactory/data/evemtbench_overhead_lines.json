@@ -16,7 +16,7 @@
     "year": 2026,
     "tables": [3, 7, 9]
   },
-  "affiliation": "Chair of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
   "nominal_frequencies_hz": [50.0, 60.0],
   "profiles": ["p05", "p50", "p95"],
   "powerfactory": {

@@ -8,9 +8,9 @@ following update records the later validation without changing those results.
 
 ### October 2026 validation update
 
-Contributions by Aswin Krishna Poyil were carried out at the **Chair of Electrical
+Contributions by Aswin Krishna Poyil were carried out at the **Institute of Electrical
 Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)**,
-with supervision by **Tobias Lorz** and **Timon Conrad**.
+with supervision by Tobias Lorz and Timon Conrad.
 
 | Evidence | Scope verified | Environment |
 |---|---|---|

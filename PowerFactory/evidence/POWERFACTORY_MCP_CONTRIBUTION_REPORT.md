@@ -13,10 +13,10 @@
 
 The integration now includes active-grid diagram PDF export and a versioned
 EvEMTBench component catalog, with source attribution to the paper. Contributions
-by Aswin Krishna Poyil were carried out at the **Chair of Electrical Energy
+by Aswin Krishna Poyil were carried out at the **Institute of Electrical Energy
 Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)**, with supervision
-and the opportunity to work independently provided by **Tobias Lorz** and
-**Timon Conrad**. The paper's authors remain credited separately in the catalogs.
+and the opportunity to work independently provided by Tobias Lorz and
+Timon Conrad. The paper's authors remain credited separately in the catalogs.
 
 | Contribution | Implementation and evidence |
 |---|---|
