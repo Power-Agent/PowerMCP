@@ -218,8 +218,23 @@ class GridBootstrapTest(unittest.TestCase):
         self.assertEqual(len(grid["ElmTerm"]), 2)
         self.assertIs(grid["ElmTerm"][0], bus)
 
-        repeated = self.call(
+        # Applying the plan changes its resolved state: the previously
+        # pending MV Bus is now present, so the original token must be stale.
+        repeated_with_stale_confirmation = self.call(
             confirmation=preview["confirmation_required"],
+        )
+        self.assertFalse(repeated_with_stale_confirmation["success"])
+        self.assertIn(
+            "confirmation must exactly match",
+            repeated_with_stale_confirmation["message"],
+        )
+        self.assertEqual(len(grid["ElmTerm"]), 2)
+
+        # A fresh preview/token for the now-complete grid is valid and is a
+        # safe no-op because the grid and both requested buses already exist.
+        refreshed_preview = self.call()
+        repeated = self.call(
+            confirmation=refreshed_preview["confirmation_required"],
         )
         self.assertTrue(repeated["success"], repeated.get("message"))
         self.assertFalse(repeated["applied"])
