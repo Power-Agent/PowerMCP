@@ -769,7 +769,7 @@ Run the PowerFactory unit and catalog tests from the repository root:
 python -m pytest PowerFactory/tests -q
 ```
 
-The installed-wheel smoke test, `tests/test_evemtbench_wheel.py`, runs separately
+The installed-wheel smoke test, `tests/check_evemtbench_wheel.py`, runs separately
 in CI against an installed package outside the checkout.
 Validation records and the contribution and function-test reports are in
 [`evidence/`](evidence/README.md).

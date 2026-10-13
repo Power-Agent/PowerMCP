@@ -67,4 +67,4 @@ jobs:
       - name: Load all catalogs outside the checkout
         run: |
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" "$GITHUB_WORKSPACE/PowerFactory/tests/test_evemtbench_wheel.py"
+          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" "$GITHUB_WORKSPACE/PowerFactory/tests/check_evemtbench_wheel.py"
