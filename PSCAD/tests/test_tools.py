@@ -209,7 +209,13 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
                 ("Build", None),
                 (None, None),  # Run completed between status samples
             ]
-            mock_project.messages.return_value = []
+            stale_error = MagicMock()
+            stale_error.status = "Error"
+            stale_error.text = "error from the previous build"
+            stale_error.name = "EMTDC"
+            # The same old diagnostic remains visible after this run; it must
+            # not be attributed to the current build.
+            mock_project.messages.side_effect = [[stale_error], [stale_error]]
             self.mock_pscad.project.return_value = mock_project
             ctx = MagicMock()
             ctx.report_progress = AsyncMock()
@@ -219,6 +225,7 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
                     result = await run_project_to_completion("test", ctx)
 
         self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["errors"], [])
         self.assertIn("output file was created or updated", result["message"])
 
     async def test_run_to_completion_refuses_to_attach_to_existing_run(self):
