@@ -4206,17 +4206,6 @@ class DIgSILENTAgent:
                 "out_of_service": out_of_service,
             })
 
-        plan_digest = hashlib.sha256(json.dumps(
-            definitions,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")).hexdigest()[:12]
-        required_confirmation = (
-            f"CREATE GRID {grid_name} {frequency:g}Hz WITH "
-            f"{len(definitions)} BUSES plan={plan_digest}"
-        )
-
         try:
             app = cls._get_application(open_digsilent)
             project = app.GetActiveProject()
@@ -4292,6 +4281,27 @@ class DIgSILENTAgent:
                             f"{definition['out_of_service']}"
                         )
                     reused_buses.append(existing.GetFullName())
+
+            confirmation_plan = {
+                "project_full_name": project.GetFullName(),
+                "grid_name": grid_name,
+                "grid_full_name": grid.GetFullName() if grid is not None else None,
+                "nominal_frequency_hz": frequency,
+                "grid_will_be_created": grid is None,
+                "grid_will_be_activated": not grid_is_active,
+                "buses": definitions,
+                "buses_to_create": [
+                    definition["name"] for definition in pending_buses
+                ],
+                "reused_buses": reused_buses,
+            }
+            required_confirmation = cls._creation_confirmation_token(
+                (
+                    f"CREATE GRID {grid_name} {frequency:g}Hz WITH "
+                    f"{len(definitions)} BUSES"
+                ),
+                confirmation_plan,
+            )
 
             result = {
                 "success": True,
