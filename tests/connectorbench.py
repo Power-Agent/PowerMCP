@@ -80,15 +80,7 @@ def inspect_tool_contracts(tools: Sequence[Any]) -> dict[str, Any]:
         if not isinstance(required, list) or any(not isinstance(key, str) for key in required):
             issue(target, "invalid_schema_required", "inputSchema.required must be a list of strings.")
             required = []
-        else:
-            unknown = sorted(set(required) - set(properties))
-            if unknown:
-                issue(
-                    target,
-                    "unknown_required_property",
-                    "Required properties are not declared in properties: " + ", ".join(unknown),
-                )
-
+        # JSON Schema permits required names to be constrained through allOf,\n        # $ref, patternProperties, or additionalProperties rather than root properties.\n
         try:
             json.dumps(schema, allow_nan=False)
         except (TypeError, ValueError):
