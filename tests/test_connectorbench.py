@@ -34,13 +34,17 @@ def test_duplicate_tool_names_are_reported():
     assert all(item["schema_valid"] for item in report["tools"])
 
 
-def test_required_properties_must_be_declared():
+def test_required_properties_can_be_defined_by_composed_schema():
     report = inspect_tool_contracts([
-        _tool(schema={"type": "object", "properties": {}, "required": ["bus_id"]})
+        _tool(schema={
+            "type": "object",
+            "allOf": [{"properties": {"bus_id": {"type": "string"}}}],
+            "required": ["bus_id"],
+        })
     ])
 
-    assert report["passed"] is False
-    assert any(item["code"] == "unknown_required_property" for item in report["errors"])
+    assert report["passed"] is True
+    assert report["errors"] == []
 
 
 def test_schema_root_must_be_an_object():
