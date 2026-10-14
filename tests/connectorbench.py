@@ -60,6 +60,8 @@ def inspect_tool_contracts(tools: Sequence[Any]) -> dict[str, Any]:
                 warning=True,
             )
 
+        # Keep schema validity independent from catalog-level name errors.
+        schema_error_count = len(errors)
         schema = _field(tool, "inputSchema", _field(tool, "input_schema"))
         if not isinstance(schema, Mapping):
             issue(target, "invalid_input_schema", "Tool inputSchema must be a JSON Schema object.")
@@ -95,7 +97,7 @@ def inspect_tool_contracts(tools: Sequence[Any]) -> dict[str, Any]:
         catalog.append(
             {
                 "name": target,
-                "schema_valid": not any(error["target"] == target for error in errors),
+                "schema_valid": len(errors) == schema_error_count,
                 "property_count": len(properties),
                 "required_count": len(required),
             }
