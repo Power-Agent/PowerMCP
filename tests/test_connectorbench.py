@@ -25,6 +25,27 @@ def test_valid_catalog_passes_and_is_json_serializable():
     assert report["tools"][0]["required_count"] == 1
 
 
+def test_tool_name_at_128_character_limit_is_accepted():
+    report = inspect_tool_contracts([_tool(name="a" * 128)])
+
+    assert report["passed"] is True
+    assert report["errors"] == []
+
+
+def test_tool_name_over_128_characters_is_rejected():
+    report = inspect_tool_contracts([_tool(name="a" * 129)])
+
+    assert report["passed"] is False
+    assert any(item["code"] == "invalid_name_length" for item in report["errors"])
+
+
+def test_tool_name_with_non_ascii_or_slash_is_rejected_by_strict_policy():
+    report = inspect_tool_contracts([_tool(name="café"), _tool(name="server/tool")])
+
+    assert report["passed"] is False
+    assert sum(item["code"] == "invalid_name" for item in report["errors"]) == 2
+
+
 def test_duplicate_tool_names_are_reported():
     report = inspect_tool_contracts([_tool(), _tool()])
 
@@ -64,7 +85,7 @@ def test_missing_description_is_a_warning_not_a_failure():
 
 def test_non_json_values_are_rejected():
     report = inspect_tool_contracts([
-        _tool(schema={"type": "object", "properties": {"value": {"default": float("nan")}}})
+        _tool(schema={"type": "object", "properties": {"value": {"default": float("nan")}})
     ])
 
     assert report["passed"] is False
