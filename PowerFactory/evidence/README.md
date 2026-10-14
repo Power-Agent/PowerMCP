@@ -1,6 +1,14 @@
 # PowerFactory MCP supporting evidence
 
-These files support `POWERFACTORY_MCP_FUNCTION_TEST_REPORT.md`.
+Latest follow-up records:
+
+- [FT-25](FT-25_bootstrap_confirmation_binding_sp1.txt): bootstrap stale-token rejection after the create/reuse plan changed.
+- [FT-26](FT-26_pdf_diagram_restoration_sp1.txt): restoration of the previously active single-line diagram after successful PDF export.
+
+These are compiled contributor-supplied records, with the validation limits stated in each file.
+
+These files support the [function test report](POWERFACTORY_MCP_FUNCTION_TEST_REPORT.md).
+The [contribution report](POWERFACTORY_MCP_CONTRIBUTION_REPORT.md) records the implementation scope.
 
 - **Verbatim transcript:** copied from a complete captured MCP client transcript supplied during verification.
 - **Verbatim extract:** an unchanged operation-and-response excerpt from a complete captured transcript.

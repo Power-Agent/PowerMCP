@@ -1,0 +1,43 @@
+Evidence ID: FT-26
+Title: PDF export restores the previously active single-line diagram
+Date: 13 October 2026
+Classification: Compiled evidence record with contributor-supplied screenshots
+Revision: refactor/powerfactory-tests-layout through 971891d plus patch 0104
+
+Environment:
+PowerFactory 2026 SP1 development PC, Windows, VS Code MCP client.
+Server source: PowerMCP-tests-layout/PowerFactory/MCP_PowerFactory.py.
+Project: test. Existing study case: Case 1.
+No independent byte-for-byte source comparison was performed.
+
+Setup:
+The contributor copied the existing Grid diagram inside Network Model/Diagrams
+and named the diagram copy MCP Restore Test. This copied graphics, not ElmNet.
+Both Grid and MCP Restore Test were opened in the Graphics Board.
+The contributor supplied a screenshot showing MCP Restore Test active before export.
+
+An earlier call, while only MCP Restore Test was open, returned:
+{"success": false, "message": "Diagram not found: Grid. Available diagrams: MCP Restore Test"}
+This confirms that the current exporter searches open Graphics Board pages,
+not every stored project diagram.
+
+Export inputs:
+file_path: C:\Users\<user>\.powermcp\powerfactory\exports\diagram-restoration-20261013-test1.pdf
+diagram_name: Grid
+open_digsilent: true
+
+Response (account path anonymized):
+{"success": true, "message": "Grid diagram 'Grid' exported to C:\\Users\\<user>\\.powermcp\\powerfactory\\exports\\diagram-restoration-20261013-test1.pdf"}
+
+After export:
+The contributor supplied a screenshot showing MCP Restore Test active again,
+with Grid still open as a separate tab. This supports restoration after a
+successful export. The screenshots are described here and are not bundled
+with this text record.
+
+Conclusion and limits:
+Successful export restored the previous single-line diagram on the live SP1 PC.
+Failure-path restoration and restoration-error reporting were tested using
+fake objects only. Active plot-page restoration is not supported by this check.
+No PDF size, hash or rendered-content verification was supplied for this run.
+The temporary diagram and exported PDF were left in place.

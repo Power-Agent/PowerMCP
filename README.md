@@ -278,7 +278,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - All contributors who help make this project better
 - [The Power and AI Initiative (PAI) at Harvard SEAS](https://pai.seas.harvard.edu/)
 - PowerFactory development and validation contributions by Aswin Krishna Poyil
-  at the Chair of Electrical Energy Systems,
+  at the Institute of Electrical Energy Systems,
   Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU), with supervision
   and support from Tobias Lorz and Timon Conrad, who provided the opportunity
   to pursue this work independently

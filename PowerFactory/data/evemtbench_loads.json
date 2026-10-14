@@ -16,7 +16,7 @@
     "year": 2026,
     "tables": [5]
   },
-  "affiliation": "Chair of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
   "sampling": {
     "interval_distribution": "uniform",
     "intervals_are_closed": true,

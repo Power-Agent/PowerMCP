@@ -742,9 +742,9 @@ Return the sampled values and confirmation phrase without creating anything.
 ## Research provenance and affiliation
 
 PowerFactory development and validation contributions by Aswin Krishna Poyil
-are carried out at the **Chair of Electrical Energy Systems,
+are carried out at the **Institute of Electrical Energy Systems,
 Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)** under the
-supervision of **Tobias Lorz** and **Timon Conrad**, whose support provided the
+supervision of Tobias Lorz and Timon Conrad, whose support provided the
 opportunity to pursue this work independently.
 
 The transformer-type library generator is informed by Georg Kordowich,
@@ -760,3 +760,33 @@ the implementation notes and source links.
 ## License
 
 MIT
+
+## Automated tests and validation reports
+
+The EvEMTBench catalogs and builders are implemented in `evemtbench.py` and
+inherited by `DIgSILENTAgent`; the public MCP tool names and arguments are unchanged.
+Equipment-type rollback and confirmation hashing share helpers in that module.
+
+Grid-bootstrap confirmation is bound to the active project and study case,
+the resolved grid, and the create/reuse/activation decisions. If that state
+changes, request a fresh preview before confirming, including for repeated calls.
+
+PDF export restores a previously active single-line diagram in a `finally`
+block after success or failure. If no current diagram is reported, there is
+no diagram to restore. Restoration failure is reported as a failed export;
+the PDF may already have been written. Successful single-line restoration was
+verified live on SP1 in [FT-26](evidence/FT-26_pdf_diagram_restoration_sp1.txt).
+Failure-path restoration has automated coverage; active plot pages are not covered.
+Bootstrap stale-token rejection after creation was verified live in
+[FT-25](evidence/FT-25_bootstrap_confirmation_binding_sp1.txt).
+
+Run the PowerFactory unit and catalog tests from the repository root:
+
+```powershell
+python -m pytest PowerFactory/tests -q
+```
+
+The installed-wheel smoke test, `tests/check_evemtbench_wheel.py`, runs separately
+in CI against an installed package outside the checkout.
+Validation records and the contribution and function-test reports are in
+[`evidence/`](evidence/README.md).

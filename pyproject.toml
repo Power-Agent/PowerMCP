@@ -138,6 +138,7 @@ packages = ["powermcp"]
 "PSLF"         = "powermcp/_servers/PSLF"
 "PowerWorld"   = "powermcp/_servers/PowerWorld"
 "PowerFactory/Agent_DIgSILENT.py" = "powermcp/_servers/PowerFactory/Agent_DIgSILENT.py"
+"PowerFactory/evemtbench.py" = "powermcp/_servers/PowerFactory/evemtbench.py"
 "PowerFactory/IEEE39.pfd" = "powermcp/_servers/PowerFactory/IEEE39.pfd"
 "PowerFactory/INSTALL.txt" = "powermcp/_servers/PowerFactory/INSTALL.txt"
 "PowerFactory/MCP_PowerFactory.py" = "powermcp/_servers/PowerFactory/MCP_PowerFactory.py"
@@ -169,6 +170,6 @@ exclude = [
     "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests", "PSSE/tests",
     "PSCAD/conftest.py", "surge/conftest.py",
     "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
-    "**/PowerFactory/test_*.py",
+    "**/PowerFactory/tests",
     ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",
 ]

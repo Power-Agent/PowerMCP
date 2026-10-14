@@ -37,18 +37,7 @@ jobs:
       - name: Run tests
         run: >-
           python -m pytest tests/
-          PowerFactory/test_state_inspection.py
-          PowerFactory/test_component_creation.py
-          PowerFactory/test_grid_pdf_export.py
-          PowerFactory/test_grid_bootstrap.py
-          PowerFactory/test_transformer_type_library.py
-          PowerFactory/test_line_type_library.py
-          PowerFactory/test_cable_type_library.py
-          PowerFactory/test_external_grid_library.py
-          PowerFactory/test_load_library.py
-          PowerFactory/test_synchronous_machine_library.py
-          PowerFactory/test_evemtbench_component_factory.py
-          PowerFactory/test_evemtbench_catalog_integrity.py
+          PowerFactory/tests
           HOPE/tests
           PSCAD/tests
           PLEXOSDB/tests
@@ -78,4 +67,4 @@ jobs:
       - name: Load all catalogs outside the checkout
         run: |
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" "$GITHUB_WORKSPACE/PowerFactory/test_evemtbench_wheel.py"
+          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" "$GITHUB_WORKSPACE/PowerFactory/tests/check_evemtbench_wheel.py"

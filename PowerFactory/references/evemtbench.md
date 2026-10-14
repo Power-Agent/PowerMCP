@@ -171,7 +171,7 @@ type appear more completely paper-backed than it is.
 ## Affiliation
 
 PowerFactory development and validation contributions by Aswin Krishna Poyil
-are carried out at the **Chair of Electrical Energy Systems,
+are carried out at the **Institute of Electrical Energy Systems,
 Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)** under the
-supervision of **Tobias Lorz** and **Timon Conrad**, whose support provided the
+supervision of Tobias Lorz and Timon Conrad, whose support provided the
 opportunity to pursue this work independently.
