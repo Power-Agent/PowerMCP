@@ -13,6 +13,7 @@ from typing import Any
 
 
 _NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+_MAX_NAME_LENGTH = 128
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -44,8 +45,18 @@ def inspect_tool_contracts(tools: Sequence[Any]) -> dict[str, Any]:
 
         if not isinstance(name, str) or not name.strip():
             issue(target, "invalid_name", "Tool name must be a non-empty string.")
+        elif len(name) > _MAX_NAME_LENGTH:
+            issue(
+                target,
+                "invalid_name_length",
+                f"Tool name must be at most {_MAX_NAME_LENGTH} characters long.",
+            )
         elif not _NAME.fullmatch(name):
-            issue(target, "invalid_name", "Tool name may contain only letters, digits, '.', '_' and '-'.")
+            issue(
+                target,
+                "invalid_name",
+                "Tool name may contain only ASCII letters, digits, '.', '_' and '-'.",
+            )
         elif name in seen:
             issue(target, "duplicate_name", f"Tool name {name!r} is registered more than once.")
         else:
