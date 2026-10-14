@@ -1,4 +1,4 @@
-"""Unit tests for ConnectorBench's safe, read-only MCP catalog checks."""
+""""Unit tests for ConnectorBench's safe, read-only MCP catalog checks."""
 from __future__ import annotations
 
 from connectorbench import inspect_tool_contracts
@@ -85,7 +85,7 @@ def test_missing_description_is_a_warning_not_a_failure():
 
 def test_non_json_values_are_rejected():
     report = inspect_tool_contracts([
-        _tool(schema={"type": "object", "properties": {"value": {"default": float("nan")}})
+        _tool(schema={"type": "object", "properties": {"value": {"default": float("nan")}}})
     ])
 
     assert report["passed"] is False
