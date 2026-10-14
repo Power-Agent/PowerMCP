@@ -30,6 +30,8 @@ def test_duplicate_tool_names_are_reported():
 
     assert report["passed"] is False
     assert any(item["code"] == "duplicate_name" for item in report["errors"])
+    # Duplicate registration is a catalog error, not a schema error.
+    assert all(item["schema_valid"] for item in report["tools"])
 
 
 def test_required_properties_must_be_declared():
