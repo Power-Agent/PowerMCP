@@ -1,4 +1,4 @@
-""""Unit tests for ConnectorBench's safe, read-only MCP catalog checks."""
+"""Unit tests for ConnectorBench's safe, read-only MCP catalog checks."""
 from __future__ import annotations
 
 from connectorbench import inspect_tool_contracts
