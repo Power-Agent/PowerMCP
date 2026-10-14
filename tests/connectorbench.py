@@ -80,8 +80,8 @@ def inspect_tool_contracts(tools: Sequence[Any]) -> dict[str, Any]:
         if not isinstance(required, list) or any(not isinstance(key, str) for key in required):
             issue(target, "invalid_schema_required", "inputSchema.required must be a list of strings.")
             required = []
-        # JSON Schema permits required names to be constrained through allOf,\n        # $ref, patternProperties, or additionalProperties rather than root properties.\n
-        try:
+        # JSON Schema permits required names to be constrained through allOf,
+        # $ref, patternProperties, or additionalProperties rather than root properties.
             json.dumps(schema, allow_nan=False)
         except (TypeError, ValueError):
             issue(target, "non_json_schema", "inputSchema must be JSON-serializable without NaN or Infinity.")
