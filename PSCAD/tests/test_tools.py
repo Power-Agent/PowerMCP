@@ -228,6 +228,30 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["errors"], [])
         self.assertIn("output file was created or updated", result["message"])
 
+    async def test_run_to_completion_does_not_accept_empty_output_as_completion(self):
+        with tempfile.TemporaryDirectory() as output_dir:
+            mock_project = MagicMock()
+            mock_project.temp_folder = output_dir
+            output_file = Path(output_dir) / "empty.psout"
+            mock_project.start.side_effect = lambda: output_file.write_text("")
+            mock_project.run_status.side_effect = [
+                (None, None),  # preflight idle
+                ("Build", None),
+                ("Build", None),
+                (None, None),  # Run was not observed; empty output is insufficient evidence
+            ]
+            mock_project.messages.side_effect = [[], []]
+            self.mock_pscad.project.return_value = mock_project
+            ctx = MagicMock()
+            ctx.report_progress = AsyncMock()
+
+            with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": output_dir}):
+                with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+                    result = await run_project_to_completion("test", ctx)
+
+        self.assertEqual(result["status"], "not_completed")
+        self.assertIn("Completion cannot be confirmed", result["message"])
+
     async def test_run_to_completion_refuses_to_attach_to_existing_run(self):
         mock_project = MagicMock()
         mock_project.run_status.return_value = ("Run", 37)
