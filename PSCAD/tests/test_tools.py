@@ -4,7 +4,10 @@ from unittest.mock import MagicMock, patch
 import os
 from pathlib import Path
 import tempfile
-from pscad_mcp.tools.project_tools import register_project_tools, run_project, load_projects, find_components
+from pscad_mcp.tools.project_tools import (
+    register_project_tools, run_project, load_projects, find_components,
+    set_component_parameters, values_equivalent,
+)
 from pscad_mcp.tools.app_tools import register_app_tools, get_pscad_status, read_documentation
 from pscad_mcp.tools.data_tools import _resolve_psout
 from pscad_mcp.core.connection_manager import pscad_manager
@@ -81,6 +84,97 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         result = await run_project(project_name="test")
         self.assertFalse(result["started"])
         self.assertIn("not licensed", result["error"])
+
+
+    async def test_set_component_parameters_verifies_unit_qualified_readback(self):
+        state = {"Resistance": "50 [ohm]", "Enabled": True}
+        component = MagicMock()
+
+        def parameters(*, parameters=None):
+            if parameters is None:
+                return dict(state)
+            state.update(parameters)
+
+        component.parameters.side_effect = parameters
+        project = MagicMock()
+        project.component.return_value = component
+        self.mock_pscad.project.return_value = project
+
+        result = await set_component_parameters(
+            "test", 7, {"Resistance": 50, "Enabled": True}
+        )
+
+        self.assertIn("updated and verified", result)
+        self.assertEqual(state["Resistance"], 50)
+        self.assertTrue(values_equivalent(100, "100 [ohm]"))
+        self.assertFalse(values_equivalent("100 [ohm]", "100 [kV]"))
+        self.assertFalse(values_equivalent(True, 1))
+
+    async def test_set_component_parameters_rolls_back_silent_clamp(self):
+        state = {"Resistance": 50}
+        component = MagicMock()
+
+        def parameters(*, parameters=None):
+            if parameters is None:
+                return dict(state)
+            if "Resistance" in parameters and parameters["Resistance"] > 80:
+                state["Resistance"] = 80
+            else:
+                state.update(parameters)
+
+        component.parameters.side_effect = parameters
+        project = MagicMock()
+        project.component.return_value = component
+        self.mock_pscad.project.return_value = project
+
+        with self.assertRaisesRegex(RuntimeError, "previous values were restored"):
+            await set_component_parameters("test", 7, {"Resistance": 100})
+
+        self.assertEqual(state, {"Resistance": 50})
+        self.assertGreaterEqual(component.parameters.call_count, 4)
+
+    async def test_set_component_parameters_rolls_back_after_partial_write_exception(self):
+        state = {"Resistance": 50, "Inductance": 2}
+        component = MagicMock()
+        first_write = True
+
+        def parameters(*, parameters=None):
+            nonlocal first_write
+            if parameters is None:
+                return dict(state)
+            if first_write:
+                first_write = False
+                state.update(parameters)
+                raise RuntimeError("PSCAD connection dropped after partial write")
+            state.clear()
+            state.update(parameters)
+
+        component.parameters.side_effect = parameters
+        project = MagicMock()
+        project.component.return_value = component
+        self.mock_pscad.project.return_value = project
+
+        with self.assertRaisesRegex(RuntimeError, "previous values were restored"):
+            await set_component_parameters("test", 7, {"Resistance": 100})
+
+        self.assertEqual(state, {"Resistance": 50, "Inductance": 2})
+
+    async def test_set_component_parameters_refuses_write_without_snapshot(self):
+        component = MagicMock()
+        component.parameters.return_value = {}
+        project = MagicMock()
+        project.component.return_value = component
+        self.mock_pscad.project.return_value = project
+
+        with self.assertRaisesRegex(RuntimeError, "refusing an unverified write"):
+            await set_component_parameters("test", 7, {"Resistance": 100})
+
+        component.parameters.assert_called_once_with()
+
+    async def test_set_component_parameters_empty_change_is_noop(self):
+        result = await set_component_parameters("test", 7, {})
+        self.assertIn("No parameter changes requested", result)
+        self.mock_pscad.project.assert_not_called()
 
     async def test_find_no_components(self):
         """Edge case: Searching for components that don't exist."""
