@@ -1140,10 +1140,10 @@ def analyze_dynamic_stability(
             "outfile": os.path.abspath(outfile),
             "title": title,
             "sample_count": len(data["time"]),
-            "time_start": data["time"][0],
-            "time_end": data["time"][-1],
-            "settling_window": settling_window,
-            "default_tolerance": tolerance,
+            "time_start": float(data["time"][0]),
+            "time_end": float(data["time"][-1]),
+            "settling_window": float(settling_window),
+            "default_tolerance": float(tolerance),
             "channels": {
                 str(channel): channel_names[channel]
                 for channel in selected
