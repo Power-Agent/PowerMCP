@@ -41,6 +41,7 @@ jobs:
           HOPE/tests
           PSCAD/tests
           PLEXOSDB/tests
+          PSSE/tests
           surge/test_integration.py -q -rs
 
   powerfactory-wheel-catalogs:
