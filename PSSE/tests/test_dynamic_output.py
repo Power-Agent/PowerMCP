@@ -5,7 +5,8 @@ import pytest
 from PSSE import psse_mcp
 
 
-def test_dynamic_output_missing_file():
+def test_dynamic_output_missing_file(monkeypatch):
+    monkeypatch.setattr(psse_mcp, "checked_path", lambda path, purpose: path)
     result = psse_mcp.list_dynamic_output_channels(
         os.path.join(os.path.dirname(__file__), "does_not_exist.out")
     )
@@ -14,7 +15,8 @@ def test_dynamic_output_missing_file():
     assert "does not exist" in result["message"]
 
 
-def test_dynamic_output_read_missing_file():
+def test_dynamic_output_read_missing_file(monkeypatch):
+    monkeypatch.setattr(psse_mcp, "checked_path", lambda path, purpose: path)
     result = psse_mcp.read_dynamic_output(
         os.path.join(os.path.dirname(__file__), "does_not_exist.out")
     )
