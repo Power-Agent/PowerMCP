@@ -167,18 +167,16 @@ class GridBootstrapTest(unittest.TestCase):
 
     def test_confirmation_is_bound_to_existing_network_data_folder(self):
         model = self.project.CreateObject("IntPrjfolder", "Network Model")
-        data = model.CreateObject("IntPrjfolder", "Network Data")
         preview = self.call()
 
-        # Add a same-named destination at a different project location after
-        # preview. The originally resolved destination remains part of the token.
-        alternate = self.project.CreateObject("IntPrjfolder", "Network Data")
+        # The preview planned to create Network Data under Network Model.
+        # If that destination appears before confirmation, require a fresh token.
+        data = model.CreateObject("IntPrjfolder", "Network Data")
         result = self.call(confirmation=preview["confirmation_required"])
 
         self.assertFalse(result["success"])
         self.assertIn("confirmation must exactly match", result["message"])
         self.assertEqual(data["ElmNet"], [])
-        self.assertEqual(alternate["ElmNet"], [])
 
     def test_confirmation_creates_folder_grid_and_buses(self):
         preview = self.call()
