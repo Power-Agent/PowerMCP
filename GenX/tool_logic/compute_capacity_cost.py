@@ -129,7 +129,7 @@ def compute_capacity_cost(
             continue
         # sum_z D[t,z] * (1 + RM_z) -> reserve margin bump
         regional_demand = sum(
-            dem_in[f"Demand_MW_z{int(zlabel[1:])}"].values * (1.0 + rm_z)
+            dem_in[f"Demand_MW_z{int(zlabel)}"].values * (1.0 + rm_z)
             for zlabel, rm_z in members.items()
         )
         lambda_t    = resmar[capres_col].values
