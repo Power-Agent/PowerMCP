@@ -109,6 +109,15 @@ def compute_capacity_cost(
             return {"success": False,
                     "message": f"Invalid CapRes region(s) {unknown}. "
                                f"Available regions: {available_regions}"}
+        if not capres_regions:
+            return {"success": False,
+                    "message": "capres_regions must contain at least one region."}
+        duplicates = sorted({region for region in capres_regions
+                             if capres_regions.count(region) > 1})
+        if duplicates:
+            return {"success": False,
+                    "message": f"Duplicate CapRes region(s): {duplicates}. "
+                               "Each region must be selected only once."}
 
     total_cost = 0.0
     for capres_num in capres_regions:
@@ -120,7 +129,7 @@ def compute_capacity_cost(
             continue
         # sum_z D[t,z] * (1 + RM_z) -> reserve margin bump
         regional_demand = sum(
-            dem_in[f"Demand_MW_z{int(zlabel[1:])}"].values * (1.0 + rm_z)
+            dem_in[f"Demand_MW_z{int(zlabel)}"].values * (1.0 + rm_z)
             for zlabel, rm_z in members.items()
         )
         lambda_t    = resmar[capres_col].values
@@ -137,6 +146,14 @@ def compute_capacity_cost(
             return {"success": False,
                     "message": f"Invalid zone(s) {invalid}. "
                                f"Available zones: {available_zones}"}
+        if not zones:
+            return {"success": False,
+                    "message": "zones must contain at least one zone."}
+        duplicates = sorted({zone for zone in zones if zones.count(zone) > 1})
+        if duplicates:
+            return {"success": False,
+                    "message": f"Duplicate zone(s): {duplicates}. "
+                               "Each zone must be selected only once."}
         denom_zones = sorted(zones)
 
     peak_demand = dem_in[[f"Demand_MW_z{z}" for z in denom_zones]].sum(axis=1).values.max()
