@@ -107,7 +107,7 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         self.assertIn("updated and verified", result)
         self.assertEqual(state["Resistance"], 50)
         self.assertTrue(values_equivalent(100, "100 [ohm]"))
-        self.assertFalse(values_equivalent(100, "100 [kV]"))
+        self.assertFalse(values_equivalent("100 [ohm]", "100 [kV]"))
         self.assertFalse(values_equivalent(True, 1))
 
     async def test_set_component_parameters_rolls_back_silent_clamp(self):
