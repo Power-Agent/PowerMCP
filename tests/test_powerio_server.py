@@ -781,34 +781,34 @@ def test_gridfm_missing_dir_maps_cleanly(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# PowerWorld .pwd display files. display is provided by the canonical
-# powerio.mcp.server; these tests exercise the re-exported tool.
+# PowerWorld .pwd files are read through the canonical parse -> GeoLayer path.
+# The raw display API is being removed in PowerIO 0.12.
 # ---------------------------------------------------------------------------
 
-def test_display_decodes_pwd():
-    r = powerio_mcp.display(str(ACTIVSG200_PWD))
-    assert r["format"] == "powerworld-pwd"
-    assert r["canvas"]["width"] > 0 and r["canvas"]["height"] > 0
-    subs = r["substations"]
-    assert subs, "expected at least one substation"
-    assert all(set(s) == {"number", "name", "x", "y"} for s in subs)
-    assert any(s["name"] for s in subs)
-    assert all(
-        isinstance(s["x"], (int, float)) and isinstance(s["y"], (int, float))
-        for s in subs
-    )
+def test_parse_pwd_returns_geo_layer():
+    result = powerio_mcp.parse(path=str(ACTIVSG200_PWD))
+    assert result["value_type"] == "powerio.GeoLayer"
+    assert result["summary"]["layer"] == "GeoLayer"
+    assert result["summary"]["features"] > 0
+    assert isinstance(result["diagnostics"], list)
+
+    module = powerio.deserialize(result["powerio_ir"].encode())
+    assert isinstance(module.value, powerio.GeoLayer)
+    layer = json.loads(module.value.geojson)
+    assert layer["type"] == "FeatureCollection"
+    assert layer["features"]
 
 
-def test_read_display_missing_file_maps_cleanly(tmp_path):
+def test_parse_pwd_missing_file_maps_cleanly(tmp_path):
     with pytest.raises(ValueError):
-        powerio_mcp.display(str(tmp_path / "nope.pwd"))
+        powerio_mcp.parse(path=str(tmp_path / "nope.pwd"))
 
 
-def test_read_display_garbage_file_maps_cleanly(tmp_path):
+def test_parse_pwd_garbage_file_maps_cleanly(tmp_path):
     bad = tmp_path / "garbage.pwd"
     bad.write_bytes(b"not a real display file\x00\x01\x02")
     with pytest.raises(ValueError):
-        powerio_mcp.display(str(bad))
+        powerio_mcp.parse(path=str(bad))
 
 
 # ---------------------------------------------------------------------------
