@@ -124,6 +124,12 @@ def main(tool_name: str) -> None:
     tools = asyncio.run(server.list_tools())
     assert tools, f"{tool_name}: server registered no tools"
 
+    # Validate advertised metadata without invoking connector tools or engines.
+    from connectorbench import inspect_tool_contracts
+
+    report = inspect_tool_contracts(tools)
+    assert report["passed"], f"{tool_name}: ConnectorBench failures: {report['errors']}"
+
 
 if __name__ == "__main__":
     main(sys.argv[1])
