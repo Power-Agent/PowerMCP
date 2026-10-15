@@ -77,8 +77,82 @@ This is outside the requested PowerFactory test and is not validation evidence
 for the unified tools.
 
 Conclusion and limits:
-The supplied response verifies filtered overhead-line listing and creation-input
-discovery through the refreshed MCP interface. No PowerFactory objects were
-created or modified. No confirmed creation was retested in this run. The other
-five catalog routes were tested automatically and from the installed wheel,
-not through this captured MCP client call. No new CI result is claimed.
+The first supplied response verifies filtered overhead-line listing and
+creation-input discovery through the refreshed MCP interface. The additional
+MCP-client checks below extend coverage to all six catalog types. No
+PowerFactory objects were created or modified. Confirmed creation was not
+retested during this catalog validation.
+
+Additional MCP-client checks, 15 October 2026:
+Revision reported by contributor: 6b14337, published in PR #122.
+The following results are compiled from contributor-supplied client summaries.
+The original large responses were read through the client's file-reading tool;
+their temporary files were not supplied to the repository or independently
+parsed during preparation of this record. These are not verbatim JSON captures.
+
+For each additional call the client reported success=true, matching
+component_type, returned_count=1, and presence of catalog_id, source,
+available_filters and creation_parameters.
+
+1. transformer
+   filters: {"voltage_class": "345/25", "rated_power_mva": 800}
+   catalog_id: evemtbench-transformers-tables-10-12-v1
+   available_filters: voltage_class, rated_power_mva
+   required creation inputs: voltage_class, rated_power_mva,
+     nominal_frequency_hz, vector_group, clock_number, transformer_name,
+     type_name, high_voltage_bus_name, low_voltage_bus_name
+   Returned limitations: unmapped_source_tables=[10,12]; Table 12 saturation
+     mapping pending; Block catalog-only pending an explicit voltage rule;
+     other component families catalog-only pending validated mappings.
+   The client initially stopped on display truncation. A later read of the
+   saved response recovered the missing fields and verified the checks.
+
+2. underground_cable
+   filters: {"profile": "p50"}
+   catalog_id: evemtbench-underground-cables-tables-3-6-v1
+   available_filters: profile
+   required creation inputs: nominal_frequency_hz, rated_current_ka, profile,
+     length_km, cable_name, type_name, bus1_name, bus2_name
+   Returned limitations: geometric ULM model remains catalog-only; cable
+     ampacity is not provided and requires a validated engineering rating.
+
+3. external_grid
+   filters: {"voltage_kv": 110}
+   catalog_id: evemtbench-external-grids-table-4-v1
+   available_filters: voltage_kv
+   required creation inputs: voltage_kv, external_grid_name, bus_name
+   No catalog-only or unsupported mapping limitation was reported returned.
+   This does not establish unrestricted engineering applicability.
+
+4. load
+   filters: {"voltage_kv": 20}
+   catalog_id: evemtbench-loads-table-5-v1
+   available_filters: voltage_kv
+   required creation inputs: voltage_kv, load_name, bus_name
+   Returned limitation: load-model coefficients are stored but not written
+     pending live validation of PowerFactory ZIP attributes.
+
+5. synchronous_machine
+   filters: {"machine_type": "round_rotor"}
+   catalog_id: evemtbench-synchronous-machines-table-13-v1
+   available_filters: machine_type
+   required creation inputs: machine_type, rated_power_mva, machine_name,
+     type_name, bus_name
+   Returned status text: corrected open-circuit time-input mapping awaits a
+     creation retest; salient-pole creation disabled because xq transient data
+     is omitted by the source.
+   The creation-retest wording predates FT-23, which already records live
+   round-rotor creation and time-constant validation. This record preserves
+   the client's reported catalog text without treating it as current evidence
+   that the earlier creation validation is missing.
+
+The client reported reading saved transformer, cable and machine responses
+in sections. Other response fields and unviewed portions are not asserted here.
+The initial transformer sequence also attempted an unrelated PSCAD documentation
+call, which failed; it is excluded from PowerFactory validation.
+
+Final scope:
+All six types now have contributor-reported MCP-client catalog coverage in
+addition to automated and installed-wheel coverage. This validates catalog
+routing and parameter discovery, not physical model suitability or a fresh
+creation/calculation run. No new CI result is claimed for this evidence update.
