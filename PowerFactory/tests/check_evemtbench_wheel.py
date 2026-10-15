@@ -58,22 +58,20 @@ if agent_spec is None or agent_spec.loader is None:
 agent_module = importlib.util.module_from_spec(agent_spec)
 agent_spec.loader.exec_module(agent_module)
 agent = agent_module.DIgSILENTAgent
-listing_calls = (
-    ("transformers", agent.list_evemtbench_components),
-    ("overhead lines", agent.list_evemtbench_line_profiles),
-    ("underground cables", agent.list_evemtbench_cable_profiles),
-    ("external grids", agent.list_evemtbench_external_grid_profiles),
-    ("loads", agent.list_evemtbench_load_profiles),
-    ("synchronous machines", agent.list_evemtbench_synchronous_machine_profiles),
+component_types = (
+    "transformer", "overhead_line", "underground_cable",
+    "external_grid", "load", "synchronous_machine",
 )
-for label, listing in listing_calls:
-    result = listing()
+for label in component_types:
+    result = agent.list_evemtbench_components(label)
     if not result.get("success"):
         raise SystemExit(f"installed-wheel {label} listing failed: {result.get('message')}")
     if result.get("returned_count", 0) < 1:
         raise SystemExit(f"installed-wheel {label} listing returned no catalog entries")
+    if not result.get("creation_parameters") or "available_filters" not in result:
+        raise SystemExit(f"installed-wheel {label} listing omitted parameter discovery")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "
-    f"and {len(listing_calls)} read-only listing APIs succeeded from {catalog_root}"
+    f"and {len(component_types)} unified catalog listings succeeded from {catalog_root}"
 )
