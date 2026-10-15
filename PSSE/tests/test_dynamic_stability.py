@@ -96,7 +96,7 @@ def test_mcp_tool_returns_compact_metrics_without_raw_series(tmp_path, monkeypat
             return (
                 "test case",
                 {"time": "Time(s)", 1: "Bus voltage"},
-                {"time": [0.0, 0.5, 1.0], 1: [1.0, 0.8, 1.0]},
+                {"time": [0.0, 0.5, 1.0, 1.5, 2.0], 1: [1.0, 0.8, 1.0, 1.0, 1.0]},
             )
 
     class FakeDyntools:
@@ -110,7 +110,7 @@ def test_mcp_tool_returns_compact_metrics_without_raw_series(tmp_path, monkeypat
     )
 
     assert result["status"] == "success", result
-    assert result["sample_count"] == 3
+    assert result["sample_count"] == 5
     assert result["channels"] == {"1": "Bus voltage"}
     assert result["metrics"]["1"]["minimum"] == 0.8
     assert result["metrics"]["1"]["minimum_time"] == 0.5
