@@ -242,13 +242,6 @@ async def set_component_parameters(
 
     return f"Parameters updated and verified for component {component_id}."
 
-async def set_component_parameters(project_name: str, component_id: int, parameters: Dict[str, Any]) -> str:
-    """Set parameter values for a specific component."""
-    pscad = pscad_manager.pscad
-    project = await robust_executor.run_safe(pscad.project, project_name)
-    component = await robust_executor.run_safe(project.component, component_id)
-    await robust_executor.run_safe(component.parameters, parameters=parameters)
-    return f"Parameters updated for component {component_id}."
 
 async def validate_component_parameters(project_name: str, component_id: int, parameters: Dict[str, Any]) -> Dict[str, Any]:
     """Validate if the given parameters are within the legal range for a component."""
