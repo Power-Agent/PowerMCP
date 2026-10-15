@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import io
+import math
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer as FastMCP
@@ -1070,7 +1071,7 @@ def analyze_dynamic_stability(
         if (
             isinstance(value, bool)
             or not isinstance(value, (int, float))
-            or not __import__("math").isfinite(value)
+            or not math.isfinite(value)
             or value < 0
         ):
             return {"status": "error", "message": f"{name} must be a finite non-negative number"}
@@ -1097,7 +1098,7 @@ def analyze_dynamic_stability(
                 or not channel_id.isdecimal()
                 or isinstance(value, bool)
                 or not isinstance(value, (int, float))
-                or not __import__("math").isfinite(value)
+                or not math.isfinite(value)
                 or value < 0
             ):
                 return {
