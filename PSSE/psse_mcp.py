@@ -2,10 +2,22 @@ import sys
 import os
 import json
 import io
+import math
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer as FastMCP
 from typing import Dict, List, Optional, Any
+
+if __package__:
+    from .dynamic_stability import analyze_channel_series
+else:
+    try:
+        # Tests and embedded loaders may execute this file under a synthetic
+        # module name, where the package-relative import is unavailable.
+        from PSSE.dynamic_stability import analyze_channel_series
+    except ImportError:
+        # Preserve direct execution via `python PSSE/psse_mcp.py`.
+        from dynamic_stability import analyze_channel_series
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
@@ -1030,6 +1042,124 @@ def read_dynamic_output(
         return {
             "status": "error",
             "message": f"Failed to read dynamic output: {exc}",
+        }
+
+
+@mcp.tool()
+def analyze_dynamic_stability(
+    outfile: str,
+    channels: Optional[List[int]] = None,
+    outvrsn: int = 0,
+    tolerance: float = 0.02,
+    settling_window: float = 0.5,
+    channel_tolerances: Optional[Dict[str, float]] = None,
+) -> Dict[str, Any]:
+    """Compute compact transient-response metrics from a PSS/E output file.
+
+    Tolerances are absolute and expressed in each channel's native units.
+    The settling time is the first sample after the last excursion outside
+    the final-value tolerance band, provided the remaining simulation covers
+    settling_window seconds. This metric is descriptive, not a universal
+    pass/fail stability criterion.
+    """
+    try:
+        outfile = checked_path(outfile, purpose="dynamic output")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if not os.path.isfile(outfile):
+        return {
+            "status": "error",
+            "message": f"Dynamic output file does not exist: {os.path.abspath(outfile)}",
+        }
+
+    for name, value in (("tolerance", tolerance), ("settling_window", settling_window)):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+        ):
+            return {"status": "error", "message": f"{name} must be a finite non-negative number"}
+
+    if channels is not None:
+        if not channels:
+            return {"status": "error", "message": "channels must contain at least one channel number"}
+        if any(
+            not isinstance(channel, int)
+            or isinstance(channel, bool)
+            or channel < 1
+            for channel in channels
+        ):
+            return {"status": "error", "message": "channels must contain positive integer channel numbers"}
+        if len(set(channels)) != len(channels):
+            return {"status": "error", "message": "channels must not contain duplicates"}
+
+    if channel_tolerances is not None:
+        if not isinstance(channel_tolerances, dict):
+            return {"status": "error", "message": "channel_tolerances must be an object keyed by channel number"}
+        for channel_id, value in channel_tolerances.items():
+            if (
+                not isinstance(channel_id, str)
+                or not channel_id.isdecimal()
+                or isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                return {
+                    "status": "error",
+                    "message": "channel_tolerances must map numeric channel IDs to finite non-negative numbers",
+                }
+
+    try:
+        title, channel_names, data = _dyntools().CHNF(
+            outfile, outvrsn=outvrsn
+        ).get_data()
+        if channels is None:
+            selected = [
+                key for key in channel_names
+                if key != "time" and key in data
+            ]
+        else:
+            missing = [channel for channel in channels if channel not in channel_names]
+            if missing:
+                return {"status": "error", "message": f"Requested channel(s) not found: {missing}"}
+            selected = list(channels)
+
+        missing_data = [channel for channel in selected if channel not in data]
+        if missing_data:
+            return {
+                "status": "error",
+                "message": f"Dynamic output is missing data for channel(s): {missing_data}",
+            }
+
+        metrics = analyze_channel_series(
+            data.get("time"),
+            {channel: data[channel] for channel in selected},
+            tolerance=tolerance,
+            settling_window=settling_window,
+            channel_tolerances=channel_tolerances,
+        )
+        return {
+            "status": "success",
+            "outfile": os.path.abspath(outfile),
+            "title": title,
+            "sample_count": len(data["time"]),
+            "time_start": float(data["time"][0]),
+            "time_end": float(data["time"][-1]),
+            "settling_window": float(settling_window),
+            "default_tolerance": float(tolerance),
+            "channels": {
+                str(channel): channel_names[channel]
+                for channel in selected
+            },
+            "metrics": metrics,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to analyze dynamic stability: {exc}",
         }
 
 
