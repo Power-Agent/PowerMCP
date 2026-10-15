@@ -768,13 +768,16 @@ inherited by `DIgSILENTAgent`; the public MCP tool names and arguments are uncha
 Equipment-type rollback and confirmation hashing share helpers in that module.
 
 Grid-bootstrap confirmation is bound to the active project and study case,
-the resolved grid, and the create/reuse/activation decisions. If that state
+the resolved grid, the destination folder for a new grid, and the
+create/reuse/activation decisions. The preview returns the destination folder
+and required folder-creation decisions in `destination_plan`. If that state
 changes, request a fresh preview before confirming, including for repeated calls.
 
 PDF export restores a previously active single-line diagram in a `finally`
 block after success or failure. If no current diagram is reported, there is
-no diagram to restore. Restoration failure is reported as a failed export;
-the PDF may already have been written. Successful single-line restoration was
+no diagram to restore. Restoration failure adds a warning to the result message:
+a completed export still reports success, while a failed export retains its
+original error. Successful single-line restoration was
 verified live on SP1 in [FT-26](evidence/FT-26_pdf_diagram_restoration_sp1.txt).
 Failure-path restoration has automated coverage; active plot pages are not covered.
 Bootstrap stale-token rejection after creation was verified live in

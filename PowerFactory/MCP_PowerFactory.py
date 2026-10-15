@@ -1156,7 +1156,8 @@ def export_active_grid_pdf(
 
     The active project and study case are required. If the Graphics Board has
     more than one single-line diagram, provide its exact name. Existing files
-    are never overwritten.
+    are never overwritten. Failure to restore the previous diagram is appended
+    as a warning in the message without changing the export's success flag.
 
     Parameters
     ----------
