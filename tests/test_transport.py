@@ -22,6 +22,9 @@ from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client  # noqa: E402
 
 CASE9 = Path(__file__).resolve().parent / "data" / "case9.m"
+ACTIVSG200_PWD = (
+    Path(__file__).resolve().parent / "data" / "powerworld" / "ACTIVSg200.pwd"
+)
 
 TIMEOUT = 60.0
 
@@ -59,7 +62,6 @@ def test_launch_serves_the_canonical_tools():
         "about",
         "calc_matrix",
         "diagnostics",
-        "display",
         "emit",
         "parse",
         "summarize",
@@ -105,6 +107,19 @@ def test_the_json_transport_round_trips_over_the_transport():
         )
 
     assert _run(steps)["elements"]["buses"] == 9
+
+
+def test_powerworld_pwd_parses_to_geo_layer_over_transport():
+    async def steps(session):
+        return _payload(
+            await session.call_tool("parse", {"path": str(ACTIVSG200_PWD)})
+        )
+
+    result = _run(steps)
+    assert result["value_type"] == "powerio.GeoLayer"
+    assert result["summary"]["layer"] == "GeoLayer"
+    assert result["summary"]["features"] > 0
+    assert isinstance(result["diagnostics"], list)
 
 
 def test_ir_diagnostics_and_summary_over_the_transport():
