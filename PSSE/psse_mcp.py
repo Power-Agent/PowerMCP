@@ -11,7 +11,13 @@ from typing import Dict, List, Optional, Any
 if __package__:
     from .dynamic_stability import analyze_channel_series
 else:
-    from dynamic_stability import analyze_channel_series
+    try:
+        # Tests and embedded loaders may execute this file under a synthetic
+        # module name, where the package-relative import is unavailable.
+        from PSSE.dynamic_stability import analyze_channel_series
+    except ImportError:
+        # Preserve direct execution via `python PSSE/psse_mcp.py`.
+        from dynamic_stability import analyze_channel_series
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
