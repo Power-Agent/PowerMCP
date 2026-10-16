@@ -116,8 +116,51 @@ async def find_components(
     """Find components matching criteria in a project."""
     pscad = pscad_manager.pscad
     project = await robust_executor.run_safe(pscad.project, project_name)
-    components = await robust_executor.run_safe(project.find_all, definition=definition, name=name)
-    return [{"id": c.id, "name": c.name, "definition": c.definition} for c in components]
+    # components = await robust_executor.run_safe(project.find_all, definition=definition, name=name)
+    # return [{"id": c.id, "name": c.name, "definition": c.definition} for c in components]
+    ####### Code is modified
+    criteria = []
+
+    if definition:
+        criteria.append(definition)
+
+    if name:
+        criteria.append(name)
+
+    if not criteria:
+        raise ValueError(
+            "At least one of 'definition' or 'name' must be provided."
+        )
+
+    components = await robust_executor.run_safe(
+        project.find_all,
+        *criteria,
+    )
+
+    results = []
+
+    for component in components:
+        parameters = await robust_executor.run_safe(
+            component.parameters
+        )
+
+        component_name = (
+            parameters.get("Name")
+            or parameters.get("name")
+            or parameters.get("NAME")
+            or ""
+        )
+
+        results.append(
+            {
+                "id": component.iid,
+                "name": component_name,
+                "definition": component.defn_name,
+            }
+        )
+
+    return results
+     ########
 
 async def get_component_parameters(project_name: str, component_id: int) -> Dict[str, Any]:
     """Get all parameter values for a specific component by its ID."""
