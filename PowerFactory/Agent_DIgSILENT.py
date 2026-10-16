@@ -931,6 +931,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
         open_digsilent: bool = True,
     ) -> tuple[bool, str]:
         """Export one single-line diagram from the active project as PDF."""
+        restore_warning = ""
         try:
             file_path = checked_path(
                 file_path,
@@ -1025,19 +1026,23 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                     )
             finally:
                 if previous_diagram is not None:
-                    restore_code = graphics_board.Show(previous_diagram)
-                    if restore_code not in (None, 0):
-                        raise RuntimeError(
-                            f"Could not restore previous diagram: {restore_code}"
+                    try:
+                        restore_code = graphics_board.Show(previous_diagram)
+                        if restore_code not in (None, 0):
+                            raise RuntimeError(f"error code {restore_code}")
+                    except Exception as restore_exc:
+                        restore_warning = (
+                            f" Warning: could not restore previous diagram: {restore_exc}"
                         )
 
             log.ok(f"Grid diagram exported to PDF → {file_path}")
             return True, (
                 f"Grid diagram '{selected_name}' exported to {file_path}"
+                + restore_warning
             )
         except Exception as exc:
             log.error(f"Grid PDF export failed: {exc}")
-            return False, str(exc)
+            return False, str(exc) + restore_warning
 
     @classmethod
     def import_project(cls, file_path: str, open_digsilent: bool = True) -> tuple[bool, str]:
@@ -1371,6 +1376,36 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                         )
                     reused_buses.append(existing.GetFullName())
 
+            data_folder = None
+            model_folder = None
+            destination_plan = None
+            if grid is None:
+                data_folders = cls._find_named_contents(
+                    project, "Network Data", "IntPrjfolder",
+                )
+                if len(data_folders) > 1:
+                    raise RuntimeError("Multiple Network Data folders were found")
+                data_folder = data_folders[0] if data_folders else None
+                if data_folder is None:
+                    model_folders = cls._find_named_contents(
+                        project, "Network Model", "IntPrjfolder",
+                    )
+                    if len(model_folders) > 1:
+                        raise RuntimeError("Multiple Network Model folders were found")
+                    model_folder = model_folders[0] if model_folders else None
+                destination_plan = {
+                    "data_folder": (
+                        data_folder.GetFullName() if data_folder is not None else None
+                    ),
+                    "parent": (
+                        data_folder.GetFullName() if data_folder is not None
+                        else model_folder.GetFullName() if model_folder is not None
+                        else project.GetFullName()
+                    ),
+                    "create_network_model": data_folder is None and model_folder is None,
+                    "create_network_data": data_folder is None,
+                }
+
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
@@ -1384,6 +1419,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                     "grid_will_be_activated": not grid_is_active,
                     "buses_to_create": pending_buses,
                     "reused_buses": reused_buses,
+                    "destination_plan": destination_plan,
                 },
             )
 
@@ -1403,6 +1439,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                     definition["name"] for definition in pending_buses
                 ],
                 "reused_buses": reused_buses,
+                "destination_plan": destination_plan,
                 "confirmation_required": required_confirmation,
                 "message": (
                     "Preview only; no grid, folder, or bus was created."
@@ -1422,27 +1459,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                 return result
 
             if grid is None:
-                data_folders = cls._find_named_contents(
-                    project,
-                    "Network Data",
-                    "IntPrjfolder",
-                )
-                if len(data_folders) > 1:
-                    raise RuntimeError("Multiple Network Data folders were found")
-                data_folder = data_folders[0] if data_folders else None
                 if data_folder is None:
-                    model_folders = cls._find_named_contents(
-                        project,
-                        "Network Model",
-                        "IntPrjfolder",
-                    )
-                    if len(model_folders) > 1:
-                        raise RuntimeError(
-                            "Multiple Network Model folders were found"
-                        )
-                    model_folder = (
-                        model_folders[0] if model_folders else None
-                    )
                     if model_folder is None:
                         model_folder = project.CreateObject(
                             "IntPrjfolder",

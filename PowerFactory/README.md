@@ -6,21 +6,31 @@ A Model Context Protocol (MCP) server that exposes DIgSILENT PowerFactory simula
 
 ## Architecture
 
-```
+```text
 Claude / AI assistant
-        │  MCP protocol
+        │ MCP protocol
         ▼
-MCP_PowerFactory.py   ← MCP Python SDK 2 server
-        │  Python calls 
+MCP_PowerFactory.py                    MCP Python SDK 2 server
+        │ Python calls
         ▼
-Agent_DIgSILENT.py    ← Simulation engine
-        │  
+Agent_DIgSILENT.py                     Simulation and shared PowerFactory helpers
+        │
+        ├── Inherits EvEMTBenchMixin from evemtbench.py
+        │       ├── Reads data/evemtbench_*.json
+        │       ├── Lists catalogs, filters and creation parameters
+        │       └── Plans, creates, verifies and rolls back equipment
+        │
+        │ Simulation, inspection, export and equipment-creation calls
         ▼
-DIgSILENT PowerFactory 
+DIgSILENT PowerFactory
         │
         ▼
-Output folder:  CSV results, PNG plots, optional .pfd export
+Outputs: CSV results, PNG plots, diagram PDF, optional .pfd export
 ```
+
+`evemtbench.py` is part of the agent layer, not a separate MCP server.
+Catalog listing returns JSON data without opening PowerFactory. Equipment
+creation and simulation require a PowerFactory connection.
 
 ## Features
 
@@ -64,18 +74,7 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `remove_contingency_result_variables` | Removes variables from matching AC or DC result recording selections without running a calculation. |
 | `export_active_grid_pdf` | Exports one active-project single-line diagram to a new PDF file. |
 | `create_evemtbench_component` | Routes one nested parameter object to any validated EvEMTBench component creator. |
-| `list_evemtbench_components` | Reads the versioned EvEMTBench transformer database without opening PowerFactory. |
-| `create_evemtbench_transformer` | Previews or creates a new database-backed `TypTr2` and connected `ElmTr2` without a template. |
-| `list_evemtbench_line_profiles` | Reads the versioned 20/110/345 kV overhead-line sequence profiles without opening PowerFactory. |
-| `create_evemtbench_line` | Previews or creates a new profile-backed `TypLne` and connected `ElmLne` without a template. |
-| `list_evemtbench_cable_profiles` | Reads the versioned 20 kV underground-cable sequence profiles without opening PowerFactory. |
-| `create_evemtbench_cable` | Previews or creates a new Table 6 cable-equivalent `TypLne` and connected `ElmLne`. |
-| `list_evemtbench_external_grid_profiles` | Reads the versioned EvEMTBench Table 4 external-grid ranges without opening PowerFactory. |
-| `create_evemtbench_external_grid` | Previews or creates a seeded Table 4 `ElmXnet` on an existing bus. |
-| `list_evemtbench_load_profiles` | Reads the versioned EvEMTBench Table 5 load-power ranges without opening PowerFactory. |
-| `create_evemtbench_load` | Previews or creates a seeded Table 5 `ElmLod` on an existing bus. |
-| `list_evemtbench_synchronous_machine_profiles` | Reads the versioned EvEMTBench Table 13 synchronous-machine ranges without opening PowerFactory. |
-| `create_evemtbench_synchronous_machine` | Previews or creates a seeded round-rotor `TypSym` and connected `ElmSym`. |
+| `list_evemtbench_components` | Lists any of six EvEMTBench catalogs, filters and required creation parameters without opening PowerFactory. |
 | `create_grid_with_buses` | Previews or bootstraps an `ElmNet` and initial `ElmTerm` objects in the active project. |
 | `import_project` | Imports a `.pfd` project file and activates it. |
 | `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
@@ -153,7 +152,8 @@ Its Python Reference, section 5.6.26, documents `IntMon.RemoveVar` return codes:
 | `DIgSILENTAgent.export_results_to_csv` | Exports the RMS result object to CSV via ComRes. |
 | `DIgSILENTAgent.export_active_grid_pdf` | Exports a selected Graphics Board single-line diagram to PDF via ComWr. |
 | `DIgSILENTAgent.create_evemtbench_component` | Validates and routes a unified request to an existing specialized component creator. |
-| `DIgSILENTAgent.list_evemtbench_components` | Validates and filters the versioned transformer database. |
+| `DIgSILENTAgent.list_evemtbench_components` | Routes catalog requests for all six types and returns parameter metadata. |
+| `DIgSILENTAgent.list_evemtbench_transformer_profiles` | Internal transformer catalog implementation. |
 | `DIgSILENTAgent.create_evemtbench_transformer` | Samples, previews, creates, connects, verifies, and rolls back a new transformer type and element. |
 | `DIgSILENTAgent.list_evemtbench_line_profiles` | Validates and filters the versioned overhead-line sequence profiles. |
 | `DIgSILENTAgent.create_evemtbench_line` | Previews, creates, connects, verifies, and rolls back a new overhead-line type and element. |
@@ -299,7 +299,8 @@ some graphical or cubicle cleanup failed; do not retry the component deletion.
 `create_evemtbench_component` is the common write entry point for the six
 validated component families: `transformer`, `overhead_line`,
 `underground_cable`, `external_grid`, `load`, and `synchronous_machine`.
-Supply the selected specialized creator's arguments inside `parameters`:
+Use the creation inputs returned by `list_evemtbench_components` inside
+`parameters`:
 
 ```python
 create_evemtbench_component(
@@ -321,8 +322,39 @@ An empty `confirmation` keeps the request in preview mode. Repeat the same
 request with the exact returned `confirmation_required` value to apply it.
 The unified tool delegates validation, seeded sampling, creation, retained-value
 checks, and rollback to the existing specialized creator without changing its
-behavior. The specialized tools remain available for backward compatibility
-and for clients that benefit from their explicit per-component schemas.
+behavior. Only the unified create and list tools are exposed through MCP.
+Specialized methods remain internal Python implementation details.
+
+### Catalog discovery and migration
+
+Call `list_evemtbench_components(component_type, filters)` before creating equipment.
+Omit `filters` to inspect the complete selected catalog. The response includes
+`available_filters` and `creation_parameters`, with names, types, required flags,
+and defaults. Catalog-only data and mapping limits remain in the response.
+
+| component_type | Optional filters |
+|---|---|
+| `transformer` | `voltage_class`, `rated_power_mva` (requires voltage_class) |
+| `overhead_line` | `voltage_kv`, `profile` |
+| `underground_cable` | `profile` |
+| `external_grid` | `voltage_kv` |
+| `load` | `voltage_kv` |
+| `synchronous_machine` | `machine_type` |
+
+```python
+list_evemtbench_components(
+    component_type="overhead_line",
+    filters={"voltage_kv": 110, "profile": "p50"},
+)
+```
+
+This intentionally changes the MCP interface. Replace previous specialized
+create calls with `create_evemtbench_component` and place their arguments inside
+`parameters`. Replace specialized list calls with `list_evemtbench_components`
+and place their filters inside `filters`. The old transformer-only listing now
+requires `component_type="transformer"`; move voltage_class/rated_power_mva into
+`filters`. Restart the server and refresh the client's tool list after updating.
+The examples below use the new public interface.
 
 ---
 
@@ -334,7 +366,7 @@ stores the fixed-voltage transformer classes from EvEMTBench Tables 10-12.
 Use `list_evemtbench_components` to inspect classes, ratings, ranges, vector
 groups, zero-sequence rules, and saturation data without opening PowerFactory.
 
-`create_evemtbench_transformer` creates a new `TypTr2` directly; it does not
+`create_evemtbench_component(component_type="transformer", parameters=...)` creates a new `TypTr2` directly; it does not
 copy or require an existing transformer. It also creates an `ElmTr2`, two
 cubicles, and closed circuit breakers between existing buses. The type is
 stored in the project library's `Transformer Types` folder; a confirmed call
@@ -342,19 +374,22 @@ creates that folder when it is absent from a greenfield project. The first
 call is a read-only preview when `confirmation` is empty:
 
 ```text
-create_evemtbench_transformer(
-    voltage_class="110/20",
-    rated_power_mva=20,
-    nominal_frequency_hz=60,
-    vector_group="YNd",
-    clock_number=11,
-    transformer_name="Research Transformer",
-    type_name="Research Transformer Type",
-    high_voltage_bus_name="HV Bus",
-    low_voltage_bus_name="LV Bus",
-    seed=42,
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="transformer",
+    parameters={
+        "voltage_class": "110/20",
+        "rated_power_mva": 20,
+        "nominal_frequency_hz": 60,
+        "vector_group": "YNd",
+        "clock_number": 11,
+        "transformer_name": "Research Transformer",
+        "type_name": "Research Transformer Type",
+        "high_voltage_bus_name": "HV Bus",
+        "low_voltage_bus_name": "LV Bus",
+        "seed": 42,
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -390,27 +425,30 @@ and limitations.
 [`data/evemtbench_overhead_lines.json`](data/evemtbench_overhead_lines.json)
 stores the published 5th, 50th and 95th percentile sequence parameters from
 Table 7 for 20, 110 and 345 kV overhead lines, together with the corresponding
-Table 3 length ranges. `list_evemtbench_line_profiles` inspects this catalog
+Table 3 length ranges. `list_evemtbench_components(component_type="overhead_line")` inspects this catalog
 without opening PowerFactory.
 
-`create_evemtbench_line` creates a new `TypLne` directly and connects a new
+`create_evemtbench_component(component_type="overhead_line", parameters=...)` creates a new `TypLne` directly and connects a new
 `ElmLne` between two existing equal-voltage buses. The caller selects `p05`,
 `p50` or `p95`, supplies the actual current rating, and chooses 50 or 60 Hz.
 The first call is a read-only preview:
 
 ```text
-create_evemtbench_line(
-    voltage_kv=110,
-    nominal_frequency_hz=50,
-    rated_current_ka=1,
-    profile="p50",
-    length_km=10,
-    line_name="Research Line",
-    type_name="Research Line Type",
-    bus1_name="Bus A",
-    bus2_name="Bus B",
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="overhead_line",
+    parameters={
+        "voltage_kv": 110,
+        "nominal_frequency_hz": 50,
+        "rated_current_ka": 1,
+        "profile": "p50",
+        "length_km": 10,
+        "line_name": "Research Line",
+        "type_name": "Research Line Type",
+        "bus1_name": "Bus A",
+        "bus2_name": "Bus B",
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -434,28 +472,31 @@ sampling distribution. Tower and conductor geometry remains catalog-only.
 [`data/evemtbench_underground_cables.json`](data/evemtbench_underground_cables.json)
 stores Table 6's published 5th, 50th and 95th percentile sequence parameters
 for 20 kV underground cables and Table 3's 0.5 to 3.75 km length range.
-`list_evemtbench_cable_profiles` returns those profiles plus the paper's
+`list_evemtbench_components(component_type="underground_cable")` returns those profiles plus the paper's
 construction and installation data without opening PowerFactory.
 
-`create_evemtbench_cable` creates a new `TypLne` sequence equivalent and
+`create_evemtbench_component(component_type="underground_cable", parameters=...)` creates a new `TypLne` sequence equivalent and
 connects a new `ElmLne` between two existing 20 kV buses. The caller chooses a
 published percentile, 50 or 60 Hz, and an engineering current rating because
 Table 6 does not publish cable ampacity. The first call is a read-only preview:
 
 ```text
-create_evemtbench_cable(
-    nominal_frequency_hz=50,
-    rated_current_ka=0.4,
-    profile="p50",
-    length_km=2,
-    cable_name="Research Cable",
-    type_name="Research Cable Type",
-    bus1_name="MV Bus A",
-    bus2_name="MV Bus B",
-    grid_name="Research Grid",
-    out_of_service=true,
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="underground_cable",
+    parameters={
+        "nominal_frequency_hz": 50,
+        "rated_current_ka": 0.4,
+        "profile": "p50",
+        "length_km": 2,
+        "cable_name": "Research Cable",
+        "type_name": "Research Cable Type",
+        "bus1_name": "MV Bus A",
+        "bus2_name": "MV Bus B",
+        "grid_name": "Research Grid",
+        "out_of_service": True,
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -476,23 +517,26 @@ spacing, and earth-resistivity data for a future geometric implementation.
 
 [`data/evemtbench_external_grids.json`](data/evemtbench_external_grids.json)
 stores the Table 4 ranges for 110 kV and combined 380/345 kV external-grid
-equivalents. `list_evemtbench_external_grid_profiles` inspects the ranges
+equivalents. `list_evemtbench_components(component_type="external_grid")` inspects the ranges
 without opening PowerFactory.
 
-`create_evemtbench_external_grid` uses a supplied seed to sample every Table 4
+`create_evemtbench_component(component_type="external_grid", parameters=...)` uses a supplied seed to sample every Table 4
 interval uniformly and connects a new slack `ElmXnet` to an existing bus. The
 bus must be exactly 110, 345, or 380 kV. The first call is a read-only preview:
 
 ```text
-create_evemtbench_external_grid(
-    voltage_kv=110,
-    external_grid_name="Research External Grid",
-    bus_name="HV Bus",
-    grid_name="Research Grid",
-    seed=42,
-    out_of_service=true,
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="external_grid",
+    parameters={
+        "voltage_kv": 110,
+        "external_grid_name": "Research External Grid",
+        "bus_name": "HV Bus",
+        "grid_name": "Research Grid",
+        "seed": 42,
+        "out_of_service": True,
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -510,24 +554,27 @@ PowerFactory 2026 SP1; SP4 validation remains pending.
 
 [`data/evemtbench_loads.json`](data/evemtbench_loads.json) stores the Table 5
 load-power ranges for 20, 110, and 345 kV systems. The read-only
-`list_evemtbench_load_profiles` tool returns these ranges without opening
+`list_evemtbench_components(component_type="load")` tool returns these ranges without opening
 PowerFactory.
 
-`create_evemtbench_load` samples active and reactive power directly at 110 and
+`create_evemtbench_component(component_type="load", parameters=...)` samples active and reactive power directly at 110 and
 345 kV. At 20 kV it samples apparent power and a reactive-power angle between
 the published 0.95 capacitive and 0.8 inductive limits, then calculates P and
 Q. The first call is a read-only preview:
 
 ```text
-create_evemtbench_load(
-    voltage_kv=20,
-    load_name="Research Load",
-    bus_name="MV Bus",
-    grid_name="Research Grid",
-    seed=42,
-    out_of_service=true,
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="load",
+    parameters={
+        "voltage_kv": 20,
+        "load_name": "Research Load",
+        "bus_name": "MV Bus",
+        "grid_name": "Research Grid",
+        "seed": 42,
+        "out_of_service": True,
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -544,10 +591,10 @@ until their PowerFactory attribute mapping is live-validated.
 [`data/evemtbench_synchronous_machines.json`](data/evemtbench_synchronous_machines.json)
 stores the salient-pole and round-rotor ranges from Table 13, including the
 rated-voltage selection rule and parameter dependencies. Use
-`list_evemtbench_synchronous_machine_profiles` to inspect both profiles or to
+`list_evemtbench_components(component_type="synchronous_machine")` to inspect both profiles or to
 filter by `salient_pole` or `round_rotor`.
 
-`create_evemtbench_synchronous_machine` supports the round-rotor profile. The
+`create_evemtbench_component(component_type="synchronous_machine", parameters=...)` supports the round-rotor profile. The
 caller selects a rating from 25 to 1200 MVA and an existing bus. The tool
 derives the rated voltage using Table 13 (6.3, 10.5, 21, or 27 kV), samples the
 remaining ranges reproducibly from `seed`, and validates all published
@@ -555,19 +602,22 @@ reactance and saturation dependencies. The requested P/Q operating point must
 fit the MVA rating and the paper's reactive-power limits.
 
 ```python
-create_evemtbench_synchronous_machine(
-    machine_type="round_rotor",
-    rated_power_mva=100,
-    machine_name="Research Generator",
-    type_name="Research Generator Type",
-    bus_name="Generator Bus 10.5",
-    grid_name="Research Grid",
-    seed=42,
-    active_power_mw=60,
-    reactive_power_mvar=5,
-    out_of_service=true,
-    confirmation="",
-    open_digsilent=true
+create_evemtbench_component(
+    component_type="synchronous_machine",
+    parameters={
+        "machine_type": "round_rotor",
+        "rated_power_mva": 100,
+        "machine_name": "Research Generator",
+        "type_name": "Research Generator Type",
+        "bus_name": "Generator Bus 10.5",
+        "grid_name": "Research Grid",
+        "seed": 42,
+        "active_power_mw": 60,
+        "reactive_power_mvar": 5,
+        "out_of_service": True,
+        "confirmation": "",
+        "open_digsilent": True,
+    },
 )
 ```
 
@@ -768,13 +818,16 @@ inherited by `DIgSILENTAgent`; the public MCP tool names and arguments are uncha
 Equipment-type rollback and confirmation hashing share helpers in that module.
 
 Grid-bootstrap confirmation is bound to the active project and study case,
-the resolved grid, and the create/reuse/activation decisions. If that state
+the resolved grid, the destination folder for a new grid, and the
+create/reuse/activation decisions. The preview returns the destination folder
+and required folder-creation decisions in `destination_plan`. If that state
 changes, request a fresh preview before confirming, including for repeated calls.
 
 PDF export restores a previously active single-line diagram in a `finally`
 block after success or failure. If no current diagram is reported, there is
-no diagram to restore. Restoration failure is reported as a failed export;
-the PDF may already have been written. Successful single-line restoration was
+no diagram to restore. Restoration failure adds a warning to the result message:
+a completed export still reports success, while a failed export retains its
+original error. Successful single-line restoration was
 verified live on SP1 in [FT-26](evidence/FT-26_pdf_diagram_restoration_sp1.txt).
 Failure-path restoration has automated coverage; active plot pages are not covered.
 Bootstrap stale-token rejection after creation was verified live in

@@ -149,6 +149,48 @@ class GridBootstrapTest(unittest.TestCase):
         self.assertIn("confirmation must exactly match", result["message"])
         self.assertEqual(len(grid["ElmTerm"]), 1)
 
+    def test_confirmation_rejects_changed_destination_folder_plan(self):
+        for existing_model, add_data_folder in ((False, False), (False, True), (True, True)):
+            with self.subTest(existing_model=existing_model, add_data_folder=add_data_folder):
+                self.setUp()
+                model = None
+                if existing_model:
+                    model = self.project.CreateObject("IntPrjfolder", "Network Model")
+                preview = self.call()
+                self.assertTrue(preview["success"], preview.get("message"))
+                if model is None:
+                    model = self.project.CreateObject("IntPrjfolder", "Network Model")
+                if add_data_folder:
+                    model.CreateObject("IntPrjfolder", "Network Data")
+
+                rejected = self.call(confirmation=preview["confirmation_required"])
+                self.assertFalse(rejected["success"])
+                self.assertIn("confirmation must exactly match", rejected["message"])
+                self.assertEqual(self.project.GetContents("*.ElmNet", 1), [])
+                fresh_preview = self.call()
+                applied = self.call(confirmation=fresh_preview["confirmation_required"])
+                self.assertTrue(applied["success"], applied.get("message"))
+                self.assertEqual(len(model["IntPrjfolder"][0]["ElmNet"]), 1)
+
+    def test_confirmation_rejects_relocated_destination_folder(self):
+        model = self.project.CreateObject("IntPrjfolder", "Network Model")
+        model.CreateObject("IntPrjfolder", "Network Data")
+        preview = self.call()
+        model.SetAttribute("loc_name", "Renamed Model")
+        rejected = self.call(confirmation=preview["confirmation_required"])
+        self.assertFalse(rejected["success"])
+        self.assertIn("confirmation must exactly match", rejected["message"])
+        self.assertEqual(self.project.GetContents("*.ElmNet", 1), [])
+
+    def test_ambiguous_destination_fails_during_preview_without_creating_objects(self):
+        for name in ("First", "Second"):
+            parent = self.project.CreateObject("IntPrjfolder", name)
+            parent.CreateObject("IntPrjfolder", "Network Data")
+        preview = self.call()
+        self.assertFalse(preview["success"])
+        self.assertIn("Multiple Network Data folders", preview["message"])
+        self.assertEqual(self.project.GetContents("*.ElmNet", 1), [])
+
     def test_confirmation_creates_folder_grid_and_buses(self):
         preview = self.call()
 

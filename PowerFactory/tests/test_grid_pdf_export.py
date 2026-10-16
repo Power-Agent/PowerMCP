@@ -146,13 +146,26 @@ class GridPdfExportTest(unittest.TestCase):
 
     def test_reports_restoration_failure(self):
         selected = FakePage("Export Grid")
-        app = FakeApplication([selected])
-        app.current_diagram = FakePage("Previously open diagram")
-        with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as directory:
-            with patch.object(app.board, "Show", side_effect=[0, 1]):
-                success, message = self.run_export(app, os.path.join(directory, "grid.pdf"))
-        self.assertFalse(success)
-        self.assertIn("restore previous diagram", message)
+        for export_fails in (False, True):
+            for restore_failure in (1, RuntimeError("restore raised")):
+                with self.subTest(export_fails=export_fails, restore=restore_failure):
+                    app = FakeApplication([selected])
+                    app.current_diagram = FakePage("Previously open diagram")
+                    with tempfile.TemporaryDirectory(dir=os.path.dirname(__file__)) as directory:
+                        output = os.path.join(directory, "grid.pdf")
+                        with patch.object(app.board, "Show", side_effect=[0, restore_failure]):
+                            if export_fails:
+                                with patch.object(app.command, "Execute", side_effect=RuntimeError("original export failure")):
+                                    success, message = self.run_export(app, output)
+                            else:
+                                success, message = self.run_export(app, output)
+                        self.assertEqual(os.path.isfile(output), not export_fails)
+                    self.assertEqual(success, not export_fails, message)
+                    self.assertIn("Warning: could not restore previous diagram", message)
+                    if export_fails:
+                        self.assertTrue(message.startswith("original export failure"), message)
+                    else:
+                        self.assertTrue(message.startswith("Grid diagram 'Export Grid' exported"), message)
 
     def test_requires_name_when_multiple_diagrams_are_available(self):
         app = FakeApplication([FakePage("Overview"), FakePage("Summary Grid")])
