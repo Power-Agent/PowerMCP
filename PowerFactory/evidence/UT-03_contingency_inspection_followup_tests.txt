@@ -1,0 +1,54 @@
+Evidence ID: UT-03
+Title: Contingency inspection follow-up automated validation
+Date: 7 October 2026
+Classification: Compiled evidence record with captured output extracts
+Source revision: Working tree on PR #95 commit ea5da60 plus follow-up changes
+
+Provenance:
+Commands and output extracts were supplied by the contributor from the
+PowerFactory development PC. The tested working tree had not yet been committed;
+no independent byte-for-byte revision comparison was performed. Machine-local
+paths are omitted. Python 3.10 and Windows were visible in the captured output.
+
+PowerFactory automated suite:
+----------------------------
+Command: python -m pytest PowerFactory -q
+
+Captured summary:
+61 passed, 31 subtests passed in 0.86s
+
+The added tests cover:
+- EvtShc discovery and fault metadata in list_contingencies.
+- Existing-only ComSimoutage lookup without GetFromStudyCase creation.
+- Filtered result-column resolution through class-level IntMon selections and
+  FindColumn against an 838-column fake result.
+- Bulk GetColumnValues reads and temporary IntVec cleanup.
+- Accurate study-case creation messaging.
+- Placement of a 39-series voltage legend outside the plot axes.
+
+Repository automated suite:
+--------------------------
+Command: python -m pytest -q
+
+The initial run passed every test except two GenX shell-syntax checks because
+bash.exe was not on PATH. Both failed with FileNotFoundError [WinError 2]; no
+product assertion failed.
+
+Initial captured summary:
+2 failed, 2313 passed, 27 skipped, 1 warning, 32 subtests passed in 147.44s
+
+Git Bash's bin directory was added to PATH. The two affected tests then passed:
+2 passed in 0.24s
+
+The complete suite was rerun with Git Bash on PATH.
+
+Final captured summary:
+2315 passed, 27 skipped, 1 warning, 32 subtests passed in 135.87s
+
+Retained warning:
+tests/test_powerio_server.py::test_pypsa_interchange_accepts_module
+RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility.
+Expected 16 from C header, got 96 from PyObject
+
+Result: PASS. The warning predates this work and is not claimed as repaired.
+Skipped tests and external CI are not claimed as validated by this record.

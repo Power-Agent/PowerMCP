@@ -1,5 +1,6 @@
 # PyPSA MCP Server Dependencies
-pypsa>=0.25.0
+pypsa>=0.35.2,<2
 numpy>=1.24.0
 pandas>=2.0.0
-mcp>=1.0.0
+mcp>=2,<3
+powerio[mcp,matrix]>=0.11.2,<0.12

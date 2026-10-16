@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-external-grids-table-4-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [4]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "sampling": {
+    "interval_distribution": "uniform",
+    "intervals_are_closed": true,
+    "seeded": true
+  },
+  "powerfactory": {
+    "element_class": "ElmXnet",
+    "model": "balanced external-grid equivalent",
+    "mapped_attributes": {
+      "slack_bus_type": "bustp",
+      "short_circuit_power_mva": "snss",
+      "positive_sequence_r_x": "rntxn",
+      "x0_x1": "x0tx1",
+      "zero_sequence_r_x": "r0tx0",
+      "voltage_setpoint_pu": "usetp",
+      "initial_phase_angle_deg": "phiini"
+    }
+  },
+  "classes": {
+    "110": {
+      "nominal_voltages_kv": [110.0],
+      "short_circuit_power_mva": {"min": 800.0, "max": 8000.0},
+      "positive_sequence_r_x": {"min": 0.1, "max": 0.2},
+      "x0_x1": {"min": 2.0, "max": 4.0},
+      "zero_sequence_r_x": {"min": 0.1, "max": 0.2},
+      "voltage_setpoint_pu": {"min": 0.98, "max": 1.02},
+      "initial_phase_angle_deg": {"min": -180.0, "max": 180.0}
+    },
+    "380/345": {
+      "nominal_voltages_kv": [345.0, 380.0],
+      "short_circuit_power_mva": {"min": 10000.0, "max": 53000.0},
+      "positive_sequence_r_x": {"min": 0.1, "max": 0.2},
+      "x0_x1": {"min": 2.0, "max": 4.0},
+      "zero_sequence_r_x": {"min": 0.1, "max": 0.2},
+      "voltage_setpoint_pu": {"min": 0.98, "max": 1.02},
+      "initial_phase_angle_deg": {"min": -180.0, "max": 180.0}
+    }
+  }
+}

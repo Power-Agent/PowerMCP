@@ -1,0 +1,318 @@
+Evidence ID: FT-12
+Title: Contingency recording lifecycle and class-selection protection
+Date: 7 October 2026
+Classification: Compiled evidence record
+Source revision: PR #95 commit 04c1cbb (reported by contributor after validation)
+
+Provenance:
+The lifecycle transcript below was supplied by the contributor from the live
+MCP client. The separate class-protection response and GUI observations were
+supplied in subsequent messages. This is not a continuous terminal capture.
+The tested working-tree changes were subsequently committed as 04c1cbb;
+no independent byte-for-byte revision comparison was performed.
+PowerFactory account identifiers are replaced with <user>.
+The raw client transcript includes duplicate serialized result wrappers.
+Explicit arguments below come from the requested sequence; the client display
+shows the routing envelope rather than expanding those arguments.
+
+Live context:
+Project: test
+Study case: Case 1
+Result file: Contingency Analysis AC.ElmRes
+Object query: Bus 08.ElmTerm
+Calculation method: ac
+Object limit: 10
+Transport: stdio
+
+Requested sequence:
+1. create_study_case:
+   case_name="Case 1", base_study_case="0. Base", open_digsilent=true
+   cfg_path=<user-profile>/.powermcp/powerfactory/simulation_config.json
+2. add_contingency_result_variables: variables=["m:u", "m:phiu"]
+3. remove_contingency_result_variables: variables=["m:phiu"]
+4. Repeat step 3.
+5. add_contingency_result_variables: variables=["m:phiu"]
+
+Captured lifecycle transcript (account identifier redacted):
+----------------------------------------------------------
+create_study_case
+Completed with input: {"serverName":"powerFactoryUnified","toolName":"powerFactoryUnified-create_study_case"}
+
+add_contingency_result_variables
+Completed with input: {"serverName":"powerFactoryUnified","toolName":"powerFactoryUnified-add_contingency_result_variables"}
+
+remove_contingency_result_variables
+Completed with input: {"serverName":"powerFactoryUnified","toolName":"powerFactoryUnified-remove_contingency_result_variables"}
+
+remove_contingency_result_variables
+Completed with input: {"serverName":"powerFactoryUnified","toolName":"powerFactoryUnified-remove_contingency_result_variables"}
+
+add_contingency_result_variables
+Completed with input: {"serverName":"powerFactoryUnified","toolName":"powerFactoryUnified-add_contingency_result_variables"}
+
+1. {"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+{"result":"{\"success\": true, \"message\": \"Study case already existed and was activated: Case 1\"}"}
+
+2. {
+  "success": true,
+  "calculation_method": "ac",
+  "result_file": {
+    "name": "Contingency Analysis AC",
+    "class_name": "ElmRes",
+    "full_name": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\Contingency Analysis AC.ElmRes"
+  },
+  "query": "Bus 08.ElmTerm",
+  "variables": [
+    "m:u",
+    "m:phiu"
+  ],
+  "total_objects": 1,
+  "configured_objects": 1,
+  "configured_variables": 2,
+  "added_variables": 0,
+  "already_recorded_variables": 2,
+  "failed_variables": 0,
+  "truncated": false,
+  "results": [
+    {
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variables": [
+        "m:u",
+        "m:phiu"
+      ],
+      "added": [],
+      "already_recorded": [
+        "m:u",
+        "m:phiu"
+      ],
+      "failed": []
+    }
+  ],
+  "message": "All requested variables were already recorded; no change"
+}
+
+{"result":"{\n  \"success\": true,\n  \"calculation_method\": \"ac\",\n  \"result_file\": {\n    \"name\": \"Contingency Analysis AC\",\n    \"class_name\": \"ElmRes\",\n    \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\\\\Contingency Analysis AC.ElmRes\"\n  },\n  \"query\": \"Bus 08.ElmTerm\",\n  \"variables\": [\n    \"m:u\",\n    \"m:phiu\"\n  ],\n  \"total_objects\": 1,\n  \"configured_objects\": 1,\n  \"configured_variables\": 2,\n  \"added_variables\": 0,\n  \"already_recorded_variables\": 2,\n  \"failed_variables\": 0,\n  \"truncated\": false,\n  \"results\": [\n    {\n      \"object\": {\n        \"name\": \"Bus 08\",\n        \"class_name\": \"ElmTerm\",\n        \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\"\n      },\n      \"variables\": [\n        \"m:u\",\n        \"m:phiu\"\n      ],\n      \"added\": [],\n      \"already_recorded\": [\n        \"m:u\",\n        \"m:phiu\"\n      ],\n      \"failed\": []\n    }\n  ],\n  \"message\": \"All requested variables were already recorded; no change\"\n}"}
+
+3. {
+  "success": true,
+  "calculation_method": "ac",
+  "result_file": {
+    "name": "Contingency Analysis AC",
+    "class_name": "ElmRes",
+    "full_name": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\Contingency Analysis AC.ElmRes"
+  },
+  "query": "Bus 08.ElmTerm",
+  "variables": [
+    "m:phiu"
+  ],
+  "total_objects": 1,
+  "configured_objects": 1,
+  "objects_without_selection": 0,
+  "removed_variables": 1,
+  "already_absent_variables": 0,
+  "failed_variables": 0,
+  "truncated": false,
+  "results": [
+    {
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variables": [
+        "m:phiu"
+      ],
+      "removed": [
+        "m:phiu"
+      ],
+      "already_absent": [],
+      "failed": [],
+      "has_selection": true,
+      "selection_unknown": false
+    }
+  ],
+  "message": "Result recording selection updated; rerun contingency analysis to rebuild the result file"
+}
+
+{"result":"{\n  \"success\": true,\n  \"calculation_method\": \"ac\",\n  \"result_file\": {\n    \"name\": \"Contingency Analysis AC\",\n    \"class_name\": \"ElmRes\",\n    \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\\\\Contingency Analysis AC.ElmRes\"\n  },\n  \"query\": \"Bus 08.ElmTerm\",\n  \"variables\": [\n    \"m:phiu\"\n  ],\n  \"total_objects\": 1,\n  \"configured_objects\": 1,\n  \"objects_without_selection\": 0,\n  \"removed_variables\": 1,\n  \"already_absent_variables\": 0,\n  \"failed_variables\": 0,\n  \"truncated\": false,\n  \"results\": [\n    {\n      \"object\": {\n        \"name\": \"Bus 08\",\n        \"class_name\": \"ElmTerm\",\n        \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\"\n      },\n      \"variables\": [\n        \"m:phiu\"\n      ],\n      \"removed\": [\n        \"m:phiu\"\n      ],\n      \"already_absent\": [],\n      \"failed\": [],\n      \"has_selection\": true,\n      \"selection_unknown\": false\n    }\n  ],\n  \"message\": \"Result recording selection updated; rerun contingency analysis to rebuild the result file\"\n}"}
+
+4. {
+  "success": true,
+  "calculation_method": "ac",
+  "result_file": {
+    "name": "Contingency Analysis AC",
+    "class_name": "ElmRes",
+    "full_name": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\Contingency Analysis AC.ElmRes"
+  },
+  "query": "Bus 08.ElmTerm",
+  "variables": [
+    "m:phiu"
+  ],
+  "total_objects": 1,
+  "configured_objects": 1,
+  "objects_without_selection": 0,
+  "removed_variables": 0,
+  "already_absent_variables": 1,
+  "failed_variables": 0,
+  "truncated": false,
+  "results": [
+    {
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variables": [
+        "m:phiu"
+      ],
+      "removed": [],
+      "already_absent": [
+        "m:phiu"
+      ],
+      "failed": [],
+      "has_selection": true,
+      "selection_unknown": false
+    }
+  ],
+  "message": "All requested variables were already absent; no change"
+}
+
+{"result":"{\n  \"success\": true,\n  \"calculation_method\": \"ac\",\n  \"result_file\": {\n    \"name\": \"Contingency Analysis AC\",\n    \"class_name\": \"ElmRes\",\n    \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\\\\Contingency Analysis AC.ElmRes\"\n  },\n  \"query\": \"Bus 08.ElmTerm\",\n  \"variables\": [\n    \"m:phiu\"\n  ],\n  \"total_objects\": 1,\n  \"configured_objects\": 1,\n  \"objects_without_selection\": 0,\n  \"removed_variables\": 0,\n  \"already_absent_variables\": 1,\n  \"failed_variables\": 0,\n  \"truncated\": false,\n  \"results\": [\n    {\n      \"object\": {\n        \"name\": \"Bus 08\",\n        \"class_name\": \"ElmTerm\",\n        \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\"\n      },\n      \"variables\": [\n        \"m:phiu\"\n      ],\n      \"removed\": [],\n      \"already_absent\": [\n        \"m:phiu\"\n      ],\n      \"failed\": [],\n      \"has_selection\": true,\n      \"selection_unknown\": false\n    }\n  ],\n  \"message\": \"All requested variables were already absent; no change\"\n}"}
+
+5. {
+  "success": true,
+  "calculation_method": "ac",
+  "result_file": {
+    "name": "Contingency Analysis AC",
+    "class_name": "ElmRes",
+    "full_name": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\Contingency Analysis AC.ElmRes"
+  },
+  "query": "Bus 08.ElmTerm",
+  "variables": [
+    "m:phiu"
+  ],
+  "total_objects": 1,
+  "configured_objects": 1,
+  "configured_variables": 1,
+  "added_variables": 1,
+  "already_recorded_variables": 0,
+  "failed_variables": 0,
+  "truncated": false,
+  "results": [
+    {
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variables": [
+        "m:phiu"
+      ],
+      "added": [
+        "m:phiu"
+      ],
+      "already_recorded": [],
+      "failed": []
+    }
+  ],
+  "message": "Result recording selection updated; rerun contingency analysis to populate the added variables"
+}
+
+{"result":"{\n  \"success\": true,\n  \"calculation_method\": \"ac\",\n  \"result_file\": {\n    \"name\": \"Contingency Analysis AC\",\n    \"class_name\": \"ElmRes\",\n    \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Study Cases.IntPrjfolder\\\\Case 1.IntCase\\\\Contingency Analysis AC.ElmRes\"\n  },\n  \"query\": \"Bus 08.ElmTerm\",\n  \"variables\": [\n    \"m:phiu\"\n  ],\n  \"total_objects\": 1,\n  \"configured_objects\": 1,\n  \"configured_variables\": 1,\n  \"added_variables\": 1,\n  \"already_recorded_variables\": 0,\n  \"failed_variables\": 0,\n  \"truncated\": false,\n  \"results\": [\n    {\n      \"object\": {\n        \"name\": \"Bus 08\",\n        \"class_name\": \"ElmTerm\",\n        \"full_name\": \"\\\\<user>.IntUser\\\\test.IntPrj\\\\Network Model.IntPrjfolder\\\\Network Data.IntPrjfolder\\\\Grid.ElmNet\\\\Bus 08.ElmTerm\"\n      },\n      \"variables\": [\n        \"m:phiu\"\n      ],\n      \"added\": [\n        \"m:phiu\"\n      ],\n      \"already_recorded\": [],\n      \"failed\": []\n    }\n  ],\n  \"message\": \"Result recording selection updated; rerun contingency analysis to populate the added variables\"\n}"}
+
+Separate class-protection check:
+-------------------------------
+Requested remove_contingency_result_variables with:
+{"object_query":"Bus 08.ElmTerm","variables":["m:u"],"calculation_method":"ac","max_objects":10}
+
+Response supplied by contributor (JSON reformatted; account redacted):
+{
+  "success": false,
+  "calculation_method": "ac",
+  "result_file": {
+    "name": "Contingency Analysis AC",
+    "class_name": "ElmRes",
+    "full_name": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\Contingency Analysis AC.ElmRes"
+  },
+  "query": "Bus 08.ElmTerm",
+  "variables": [
+    "m:u"
+  ],
+  "total_objects": 1,
+  "configured_objects": 1,
+  "objects_without_selection": 0,
+  "removed_variables": 0,
+  "already_absent_variables": 0,
+  "failed_variables": 1,
+  "truncated": false,
+  "results": [
+    {
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variables": [
+        "m:u"
+      ],
+      "removed": [],
+      "already_absent": [],
+      "failed": [
+        "m:u"
+      ],
+      "has_selection": true,
+      "selection_unknown": false
+    }
+  ],
+  "message": "Some result variables could not be removed; no result variables were removed",
+  "errors": [
+    {
+      "object_index": 0,
+      "object": {
+        "name": "Bus 08",
+        "class_name": "ElmTerm",
+        "full_name": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet\\Bus 08.ElmTerm"
+      },
+      "variable": "m:u",
+      "message": "Variable is recorded by class-level ElmTerm selection; object-specific removal cannot exclude this object. Class and object selections were left unchanged."
+    }
+  ]
+}
+
+GUI observations supplied as screenshots:
+----------------------------------------
+- The AC result file contained eight IntMon entries. Bus 08 had an object
+  target; the other seven displayed blank Object fields.
+- Terminal.IntMon's Selection page showed class ElmTerm. Its field tooltip
+  identified the API attribute as className (case-sensitive).
+- Its Editor page identified the selected-variable attribute as vars and
+  displayed m:u, m:max_v, m:max_v_Cntcy, m:max_v_Cntcy_TP, m:min_v,
+  m:min_v_Cntcy, and m:min_v_Cntcy_TP.
+These observations are transcribed from supplied images; image files are not
+included in this record.
+
+Interpretation:
+---------------
+All five lifecycle calls returned success=true.
+Initial add: 0 added, 2 already recorded, 0 failed.
+First removal: 1 removed, 0 already absent, 0 failed.
+Repeated removal: 0 removed, 1 already absent, 0 failed.
+Restoration: 1 added, 0 already recorded, 0 failed.
+The separate class-recorded m:u removal returned the expected success=false:
+0 removed, 0 already absent, 1 failed, with both selections left unchanged.
+
+Result: PASS for the recording lifecycle and expected class-removal rejection.
+
+Scope and retained state:
+------------------------
+m:phiu was restored to the object-specific recording selection.
+The class-removal response reports no changes to class or object selections.
+No calculation was requested or recorded in this sequence. These checks verify
+selection configuration, not newly calculated results or column population.
+This record does not claim screening-threshold validation, arbitrary group
+selection support, or live simulation of unreadable-monitor failures.

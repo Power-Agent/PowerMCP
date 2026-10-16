@@ -1,0 +1,592 @@
+# PowerMCP PowerFactory Tooling Contribution Report
+
+**Report updated:** 13 October 2026
+**Publication:** PR #108 and PR #109 merged on 12 October 2026. The organization and maintainer follow-up changes are prepared on a separate branch.
+**Reviewed quality-gate revision:** `9c6eb37` (PR #109)
+**Live evidence:** PowerFactory 2026 SP1 development PC; SP4 contingency follow-up only.
+
+> **Historical scope:** The metadata and live PowerFactory results in this report describe the original 1 September 2026 verification. Section 6 and UT-01 were refreshed on 19 September 2026 against PR #77 commit `2aeb38b`; that refresh used mocked PowerFactory objects and did not re-run the live FT scenarios.
+
+## 1. Executive summary
+
+### October 2026 contribution update
+
+The maintainer follow-up renames the installed-wheel check to avoid pytest
+collection, extracts EvEMTBench code into its own module with shared confirmation
+and type-rollback helpers, and binds bootstrap tokens to project and resolved
+create/reuse decisions. [FT-25](FT-25_bootstrap_confirmation_binding_sp1.txt)
+records live rejection of a stale creation token. [FT-26](FT-26_pdf_diagram_restoration_sp1.txt)
+records live restoration of the previous single-line diagram after PDF export.
+Development-PC automated verification passed 158 tests and 62 subtests.
+Local wheel build and six installed listing APIs passed; no new CI run is claimed.
+
+The integration now includes active-grid diagram PDF export and a versioned
+EvEMTBench component catalog, with source attribution to the paper. Contributions
+by Aswin Krishna Poyil were carried out at the **Institute of Electrical Energy
+Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)**, with supervision
+and the opportunity to work independently provided by Tobias Lorz and
+Timon Conrad. The paper's authors remain credited separately in the catalogs.
+
+| Contribution | Implementation and evidence |
+|---|---|
+| Contingency inspection and bounded result reads | Follow-up merged through PR #95; SP1 FT-13 and SP4 [FT-14](FT-14_contingency_inspection_sp4.txt). |
+| Active-grid PDF export | Exports an existing diagram from an active project; [FT-15](FT-15_active_grid_pdf_export_sp1.txt). This is a diagram PDF, not a project archive or a complete parameter report. |
+| Transformer catalog and creator | Tables 10–12 catalog; new TypTr2 and connected ElmTr2 without a template; [FT-16](FT-16_evemtbench_transformer_creation_sp1.txt) and [FT-19](FT-19_greenfield_bootstrap_transformer_sp1.txt). |
+| Overhead-line catalog and creator | Tables 3, 7 and 9; new TypLne and ElmLne; [FT-17](FT-17_evemtbench_overhead_line_creation_sp1.txt). |
+| Grid and bus bootstrap | Creates and activates ElmNet with caller-selected bus voltages; [FT-18](FT-18_greenfield_grid_bootstrap_sp1.txt). An existing active project and study case are still prerequisites. |
+| External-grid creator | Table 4 catalog and connected ElmXnet; [FT-20](FT-20_evemtbench_external_grid_creation_sp1.txt). |
+| Load creator | Table 5 catalog and connected ElmLod; [FT-21](FT-21_evemtbench_load_creation_sp1.txt). |
+| Underground-cable creator | Tables 3 and 6 catalog, new TypLne and ElmLne; [FT-22](FT-22_evemtbench_underground_cable_creation_sp1.txt). |
+| Synchronous-machine catalog and creator | Table 13, round-rotor TypSym and connected ElmSym, with time-constant conversion and retained-value checks; [FT-23](FT-23_evemtbench_synchronous_machine_creation_sp1.txt). |
+| Unified component creator | One entry point dispatches all six equipment kinds to their guarded creators; live round-rotor route in [FT-24](FT-24_unified_evemtbench_component_creation_sp1.txt). |
+
+Each equipment creator previews its plan, requires exact confirmation, verifies
+retained attributes, and attempts rollback on failure. PR #109 binds confirmation
+to canonical JSON hashed with SHA-256, including resolved grid/bus paths and
+catalog values. It adds catalog mutation tests and an isolated installed-wheel
+smoke test. CI passed for reviewed revision `9c6eb37`; this is automated
+verification and does not replace live PowerFactory testing of that revision.
+
+The completed scope is a component-building foundation, not reproduction of the
+paper's complete simulation dataset. Transformer zero-sequence and saturation
+tables remain catalog metadata pending validated attribute mappings. Salient-pole
+machines remain catalog-only. Automated project creation, full network assembly,
+controls/protection, event generation and dataset production remain outside
+the validated builder scope. The newer equipment was tested out of service;
+energization, load-flow, short-circuit and dynamic performance remain unverified.
+
+Automated tests now reside in `PowerFactory/tests/`; reports and live validation
+records reside in `PowerFactory/evidence/`. The sections below preserve the
+original September contribution and its verification history.
+
+This work extends the PowerFactory integration in PowerMCP with a coherent set of read-only discovery tools and guarded model-editing tools. The contribution enables an AI client to inspect the active PowerFactory context, discover objects, read selected parameters, create supported network components with optional single-line diagram synchronization and circuit breakers, and safely preview or perform exact-name deletion.
+
+Eight MCP tools were created:
+
+1. `get_active_project`
+2. `get_active_study_case`
+3. `get_parameters`
+4. `list_objects`
+5. `list_components`
+6. `list_study_cases`
+7. `add_component`
+8. `delete_component`
+
+The implementation was verified with automated tests and live calls from the VS Code AI chat client against a running PowerFactory project. Live verification included in-service component creation, graphical insertion and deletion, automatic circuit-breaker creation, parameter inspection, load-flow calculations, short-circuit calculations, guarded deletion, hierarchical cleanup, absence checks, and post-cleanup calculations.
+
+This paragraph's original September scope is historical; current publication
+and verification status is recorded in the October update above.
+
+## 2. Baseline and scope
+
+The comparison baseline was the online `main` branch of `Power-Agent/PowerMCP`, specifically:
+
+- [PowerFactory/MCP_PowerFactory.py](https://github.com/Power-Agent/PowerMCP/blob/main/PowerFactory/MCP_PowerFactory.py)
+- [PowerFactory/Agent_DIgSILENT.py](https://github.com/Power-Agent/PowerMCP/blob/main/PowerFactory/Agent_DIgSILENT.py)
+
+The online baseline already provided connectivity, configuration, project import, study-case creation, parameter modification, load flow, short-circuit calculation, RMS simulation, custom-case execution, and result-file reading. It did not provide the final eight inspection, discovery, creation, and deletion tools listed above.
+
+The supported component scope was intentionally limited to classes available in the test grid:
+
+| Friendly type | PowerFactory class |
+|---|---|
+| Bus | `ElmTerm` |
+| Load | `ElmLod` |
+| Generator | `ElmSym` |
+| Line | `ElmLne` |
+| Two-winding transformer | `ElmTr2` |
+
+Support for shunts, batteries, static generators, three-winding transformers, and other classes was not added without a representative test object and a verified PowerFactory data model.
+
+## 3. Contributed MCP tools
+
+### 3.1 `get_active_project`
+
+Returns the active PowerFactory project's name and full object path.
+
+Key behavior:
+
+- Uses the MCP process's existing PowerFactory application handle.
+- Returns a clear failure when PowerFactory is not connected.
+- Returns a clear failure when no project is active.
+- Does not activate or modify a project.
+
+Typical result:
+
+```json
+{
+  "success": true,
+  "name": "test",
+  "full_name": "\\<user>.IntUser\\test.IntPrj"
+}
+```
+
+### 3.2 `get_active_study_case`
+
+Returns the active study case's name and full object path.
+
+This tool is useful before mutations or calculations because it allows the AI client to confirm the current study context without changing it.
+
+### 3.3 `get_parameters`
+
+Reads multiple PowerFactory attributes from objects selected with a PowerFactory object query.
+
+Signature:
+
+```text
+get_parameters(object_query, variables, max_results=100)
+```
+
+Key behavior:
+
+- Requires at least one non-empty variable.
+- Removes duplicate variable names while preserving order.
+- Uses `GetCalcRelevantObjects` for object selection.
+- Limits results to between 1 and 1,000 objects.
+- Returns total and returned object counts.
+- Captures unsupported-attribute errors per object rather than failing the entire request.
+- Converts non-JSON-native PowerFactory values to strings.
+
+Example:
+
+```text
+object_query="Bus 01.ElmTerm"
+variables=["uknom", "outserv"]
+max_results=5
+```
+
+### 3.4 `list_objects`
+
+Lists calculation-relevant objects using a raw PowerFactory query.
+
+Example:
+
+```text
+list_objects(object_query="*.ElmTerm", max_results=3)
+```
+
+The response includes object name, class, full path, total count, and returned count. This is the expert-level discovery interface for callers that already know PowerFactory class names.
+
+### 3.5 `list_components`
+
+Lists objects using friendly equipment categories instead of raw class queries.
+
+Supported categories include:
+
+- `all`
+- `buses`
+- `lines`
+- `branches`
+- `transformers`
+- `loads`
+- `generators`
+- `synchronous_generators`
+- `static_generators`
+- `pv_systems`
+- `storage`
+- `external_grids`
+- `switches`
+
+One category can map to multiple PowerFactory classes. Results are deduplicated by full object path and include the out-of-service state when available.
+
+### 3.6 `list_study_cases`
+
+Lists study cases in the active project's study-case folder and marks the active case with `is_active=true`.
+
+The tool returns a controlled result count and fails clearly if PowerFactory is disconnected or the study-case folder cannot be found.
+
+### 3.7 `add_component`
+
+Provides one public creation interface for all five supported component types.
+
+Signature:
+
+```text
+add_component(
+    component_type,
+    component_name,
+    parameters,
+    grid_name="",
+    out_of_service=false,
+    open_digsilent=true,
+    update_graphics=false
+)
+```
+
+Required parameters by type:
+
+| Type | Required `parameters` entries | Optional entries |
+|---|---|---|
+| Bus | `nominal_voltage_kv` | — |
+| Load | `bus_name`, `active_power_mw` | `reactive_power_mvar` |
+| Generator | `bus_name`, `template_generator`, `active_power_mw` | `reactive_power_mvar` |
+| Line | `bus1_name`, `bus2_name`, `template_line`, `length_km` | — |
+| Transformer | `high_voltage_bus_name`, `low_voltage_bus_name`, `template_transformer` | — |
+
+Safety and validation include:
+
+- Supported-type allowlist.
+- Required-parameter validation.
+- Finite and range-checked numeric inputs.
+- Distinct terminal buses for lines and transformers.
+- Explicit grid selection when multiple grids are active.
+- Exact duplicate-name protection within the selected grid.
+- Exact bus and template lookup.
+- Template-type reuse for typed equipment.
+- Cubicle creation and terminal connection.
+- Post-write attribute verification.
+- Rollback of the new element and its cubicles when setup or verification fails.
+
+### 3.8 `delete_component`
+
+Provides guarded deletion for the same five component types.
+
+Signature:
+
+```text
+delete_component(
+    component_type,
+    component_name,
+    grid_name="",
+    confirmation="",
+    open_digsilent=true,
+    update_graphics=false
+)
+```
+
+Safety behavior:
+
+- Uses a supported-type allowlist.
+- Selects one grid explicitly when necessary.
+- Uses exact component-name matching.
+- Defaults to preview-only behavior.
+- Returns the exact confirmation phrase required for deletion.
+- Requires confirmation in the form `DELETE <type> <exact name>`.
+- Prevents deletion of a bus that still has connected cubicles.
+- Removes associated cubicles for connected equipment.
+- Verifies that the component and its created connections are absent afterward.
+
+Deletion is deliberately more guarded than creation because it permanently removes project data and may affect references, calculations, events, scripts, and diagrams.
+
+## 4. Internal architecture added
+
+The public tools reuse a small group of internal helpers:
+
+| Helper | Responsibility |
+|---|---|
+| `_select_grid` | Resolve one active grid or require an explicit grid name |
+| `_select_bus` | Resolve an exact bus within the selected grid |
+| `_get_application` | Reuse the shared PowerFactory application handle |
+| `_get_template_type` | Find and validate the type of template equipment |
+| `_set_and_verify_attributes` | Write and confirm retained PowerFactory attributes |
+| `_rollback_connected_element` | Remove a failed element and its cubicles |
+| `_create_connected_element` | Create elements, cubicles, terminal assignments, and verified attributes |
+| `_agent_result` | Keep MCP wrappers thin and route calls through the dedicated PowerFactory thread |
+
+All PowerFactory calls continue to use the existing single-thread executor because the PowerFactory API requires consistent thread affinity.
+
+## 5. Development and simplification history
+
+The functionality was developed incrementally and then consolidated.
+
+### State inspection and discovery
+
+- `c117064` — Add PowerFactory state inspection MCP tools
+- `63e0d8f` — Add PowerFactory component discovery MCP tool
+
+### Component creation and safety
+
+Initial specialized creation functions were implemented and tested for buses, loads, generators, lines, and transformers. Shared application, connection, template, verification, and rollback logic was then consolidated.
+
+Important commits include:
+
+- `ad29fde` — Add safe PowerFactory bus creation MCP tool
+- `160a67b` — Add safe PowerFactory load creation MCP tool
+- `194f50d` — Add safe PowerFactory generator creation MCP tool
+- `63b77c9` — Add safe PowerFactory line creation MCP tool
+- `d398b30` — Add safe PowerFactory transformer creation MCP tool
+- `8e5f8aa` — Consolidate PowerFactory component connection helpers
+- `dd6e464` — Share PowerFactory component template lookup
+- `ff1323a` — Share PowerFactory component attribute verification
+- `a508f40` — Centralize PowerFactory component verification and rollback
+
+### Generic creation and deletion
+
+- `9a94a13` — Add guarded PowerFactory component deletion MCP tool
+- `d57fe29` — Add generic PowerFactory component creation MCP tool
+- `003fa6e` — Consolidate PowerFactory component creation
+
+The five specialized public creation functions were removed after their behavior was incorporated directly into `add_component`.
+
+### Final integration
+
+- `eb3da8b` — Consolidate PowerFactory MCP tools
+
+This merge combines the state-inspection branch and the component-management branch into `feat/powerfactory-tools`. Both source branches were retained as local backups.
+
+### Graphical synchronization and switchgear
+
+- `d8510c7` — Synchronize PowerFactory component diagram updates
+- `0db824b` — Add circuit breakers to PowerFactory component connections
+- `8521cb6` — Insert PowerFactory components using diagram layout tool
+
+These commits extend `add_component` and `delete_component`; they do not expose separate graphical or switchgear MCP tools. Graphical synchronization is requested with `update_graphics=true`. Every generated connection cubicle receives one closed `StaSwitch` circuit breaker.
+
+## 6. Automated verification
+
+The automated suite was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. Compilation succeeded and pytest reported:
+
+```text
+29 passed, 3 subtests passed in 0.87s
+```
+
+Representative coverage includes:
+
+1. Bus creation, validation, duplicate protection, grid selection, and rollback.
+2. Load creation, bus lookup, numeric validation, duplicate protection, and rollback.
+3. Generator creation, template lookup, duplicate protection, and rollback.
+4. Line creation, distinct buses, template lookup, duplicate protection, and rollback.
+5. Transformer creation, distinct buses, template lookup, duplicate protection, and rollback.
+6. Generic component-type and parameter validation.
+7. Guarded deletion, confirmation validation, bus-connection protection, cubicle cleanup, and absence verification.
+8. Requested graphical insertion, graphical-object deletion, and application rebuild.
+9. Closed circuit-breaker creation in each generated connection cubicle.
+10. Friendly component discovery.
+11. Active project, active study case, multi-parameter reading, raw object discovery, and study-case discovery.
+12. Automatic diagram insertion without K-neighbourhood relayout, desktop restoration, and rebuild.
+13. Exact, case-insensitive named-object lookup despite PowerFactory's case-sensitive query behavior.
+
+These are automated fake/mock-object tests; the live PowerFactory evidence remains in the FT records. The complete command, environment, test list, and captured output are preserved in [UT-01](UT-01_automated_tests.txt).
+
+## 7. Live PowerFactory verification
+
+### 7.1 Discovery and inspection
+
+All consolidated read-only tools were called successfully through the VS Code AI chat client.
+
+Verified observations included:
+
+- Active project: `test`
+- Active study case: `Case 1`
+- `Bus 01.ElmTerm`: `uknom=345.0`, `outserv=0`
+- Bus discovery: 39 total `ElmTerm` objects
+- Study-case discovery: 7 study cases, with `Case 1` correctly marked active
+- Raw object discovery and friendly bus discovery returned consistent object identities
+
+### 7.2 Bus, line, and load creation
+
+The AI client created an in-service temporary bus, line, and load using `add_component`. The line connected `Bus 01` to the new bus, and the load connected to the new bus. Load flow returned:
+
+```json
+{"success": true, "message": "Load flow OK"}
+```
+
+Duplicate-name checks were also exercised successfully. The temporary objects were subsequently deleted in dependency-safe order.
+
+### 7.3 Generator and transformer creation
+
+An in-service generator was created as:
+
+```text
+MCP Verification Generator 20260822A.ElmSym
+```
+
+Verified retained state:
+
+- `pgini=1.0`
+- `qgini=0.0`
+- `outserv=0`
+- Connected to the new cubicle at `Bus 01`
+- Reused `Type Gen 01.TypSym`
+
+An in-service transformer was created as:
+
+```text
+MCP Verification Transformer 20260822A.ElmTr2
+```
+
+Verified retained state:
+
+- `outserv=0`
+- High-voltage cubicle connected at `Bus 02`
+- Low-voltage cubicle connected at `Bus 30`
+- Reused `Trf Type 02 - 30 YNy0.TypTr2`
+
+### 7.4 Electrical calculations
+
+The following calculations succeeded:
+
+1. Load flow with the temporary generator in service.
+2. Short-circuit calculation with the temporary generator in service.
+3. Load flow with the temporary generator and transformer in service.
+4. Short-circuit calculation with the temporary generator and transformer in service.
+5. Load flow after deleting both temporary components.
+6. Short-circuit calculation after deleting both temporary components.
+
+Successful messages were:
+
+```json
+{"success": true, "message": "Load flow OK"}
+```
+
+```json
+{"success": true, "message": "Short-circuit calculation OK"}
+```
+
+### 7.5 Deletion and cleanup
+
+Guarded deletion was exercised live for buses, loads, generators, lines, and transformers. Preview-only responses returned the exact required confirmation phrase. Incorrect confirmation was rejected. Confirmed deletion removed the target object and associated cubicles.
+
+Final exact-name absence checks for the in-service generator and transformer returned:
+
+```json
+{
+  "success": true,
+  "total_count": 0,
+  "returned_count": 0,
+  "results": []
+}
+```
+
+The PowerFactory model remained calculation-ready after cleanup.
+
+### 7.6 Graphical synchronization and circuit breakers
+
+With `update_graphics=true`, a temporary out-of-service load was inserted into the active single-line diagram. Confirmed deletion removed its `IntGrf` object and rebuilt the application view, after which live visual inspection confirmed that the symbol disappeared.
+
+A second temporary load verified generated switchgear. Its Bus 01 connection referenced a generated `StaCubic`, whose child `StaSwitch` retained:
+
+```text
+aUsage = cbk
+on_off = 1
+```
+
+The load retained `outserv=1`, showing that component service state and breaker state are independent. After confirmed deletion, the exact load query returned no object, the project-wide switch count returned from 122 to its baseline of 121, and load flow still succeeded.
+
+Expanded verification created an in-service bus, line, load, generator, and
+transformer. The switch count rose from the 121 baseline to 127, with exactly
+six matching closed circuit breakers: two for the line, one for the load, one
+for the generator, and two for the transformer. All five objects were then
+deleted with graphical updates enabled. Each exact object query returned zero,
+the switch count returned to 121, and both load flow and short-circuit
+calculation succeeded after cleanup.
+
+The graphical test also identified an automatic-layout limitation: direct
+insertion of an isolated bus can position it far from the existing network.
+Creating the bus without graphics and inserting it together with its first
+connecting line produced a correctly anchored graphical result.
+
+## 8. Credibility assessment
+
+### Read-only tools
+
+The six discovery and inspection tools are credible low-risk interfaces for controlled PowerMCP use. They expose state without modifying it, bound result sizes, and return explicit disconnected or missing-object failures.
+
+### `add_component`
+
+`add_component` is credible for controlled local use because all supported component types were created live, connections, circuit breakers, retained attributes, and requested graphical insertion were verified, calculations succeeded with components in service, and rollback paths were unit-tested.
+
+### `delete_component`
+
+`delete_component` is credible for controlled local use with stronger operational caution. Its preview, exact confirmation, bus protection, graphical cleanup, cubicle and switchgear cleanup, and absence verification materially reduce risk, but confirmed deletion remains inherently destructive.
+
+## 9. Known limitations and boundaries
+
+1. **Opt-in diagram synchronization:** Diagram insertion and deletion require `update_graphics=true`; the default is `false`.
+2. **No multi-call transaction:** A sequence of separate MCP calls is not atomic. Earlier successful calls remain if a later call fails.
+3. **Template dependency:** Generator, line, and transformer creation requires valid existing template equipment and types.
+4. **Runtime generic schema:** Type-specific `parameters` are validated at runtime because `add_component` uses one generic dictionary.
+5. **Destructive deletion:** Confirmed deletion has no MCP-level undo.
+6. **Project-wide effects:** Network-model changes may affect more than the active study case. A study-case switch does not necessarily restore deleted network data.
+7. **Supported-class boundary:** Creation and deletion are limited to `ElmTerm`, `ElmLod`, `ElmSym`, `ElmLne`, and `ElmTr2`.
+8. **PowerFactory attribute knowledge:** `get_parameters` requires valid PowerFactory attribute names. Measurement attributes may require a completed calculation.
+9. **Complex reference formatting:** PowerFactory object references are returned as string representations when they are not JSON-native values.
+10. **Protection-device boundary:** Generated cubicles currently receive a circuit breaker only. Relay, CT, and VT creation is outside the implemented scope.
+11. **Isolated-bus placement:** Direct graphical insertion of an unconnected bus can place it far from the existing network and expand the fitted viewport. Inserting it with its first connecting line provides a better anchor.
+
+## 10. Example workflow
+
+### Discover context
+
+```text
+ping
+create_study_case(case_name="Case 1", base_study_case="0. Base")
+get_active_project()
+get_active_study_case()
+list_components(component_type="buses", max_results=10)
+```
+
+### Create and inspect a bus
+
+```json
+{
+  "component_type": "bus",
+  "component_name": "Example MCP Bus",
+  "parameters": {
+    "nominal_voltage_kv": 110.0
+  },
+  "grid_name": "Grid",
+  "out_of_service": true,
+  "open_digsilent": true,
+  "update_graphics": true
+}
+```
+
+```text
+get_parameters(
+    object_query="Example MCP Bus.ElmTerm",
+    variables=["uknom", "outserv"],
+    max_results=5
+)
+```
+
+### Preview and confirm deletion
+
+Preview:
+
+```text
+delete_component(
+    component_type="bus",
+    component_name="Example MCP Bus",
+    grid_name="Grid"
+)
+```
+
+Confirmed deletion:
+
+```text
+delete_component(
+    component_type="bus",
+    component_name="Example MCP Bus",
+    grid_name="Grid",
+    confirmation="DELETE bus Example MCP Bus",
+    update_graphics=true
+)
+```
+
+## 11. Files affected
+
+The final contribution modifies or adds:
+
+- `PowerFactory/Agent_DIgSILENT.py`
+- `PowerFactory/MCP_PowerFactory.py`
+- `PowerFactory/tests/test_component_creation.py`
+- `PowerFactory/tests/test_state_inspection.py`
+
+This report is intended to be added as:
+
+- `PowerFactory/evidence/POWERFACTORY_MCP_CONTRIBUTION_REPORT.md`
+
+## 12. Recommended next actions
+
+The implementation and verification are complete. If the contribution is prepared for upstream review, the remaining non-code work is:
+
+1. Review this report.
+2. Add concise user documentation for the eight tools to the repository README or PowerFactory documentation.
+3. Rebase the local integration branch on the latest online `main` branch.
+4. Re-run the current automated suite and one live smoke test after rebasing.
+5. Push only when the contribution is intentionally ready for review.
+
+## 13. Conclusion
+
+AI clients can now establish their active context, discover available objects, inspect selected attributes, safely create supported network equipment, execute calculations against the modified model, and remove temporary equipment through a guarded workflow.

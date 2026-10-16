@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer as FastMCP
 from pscad_mcp.core.connection_manager import pscad_manager
 from pscad_mcp.core.executor import robust_executor
 

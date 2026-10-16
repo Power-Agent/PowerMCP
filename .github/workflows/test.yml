@@ -1,0 +1,70 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # floor of requires-python, and every version the classifiers claim
+        python-version: ["3.10", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          # [pscad] is psutil, which PSCAD/tests import. [surge] is surge-py,
+          # whose marker (>=3.12,<3.15) leaves it uninstalled on 3.10, where the
+          # suite skips itself.
+          python -m pip install -e ".[pscad,surge]" pytest
+
+      - name: Run tests
+        run: >-
+          python -m pytest tests/
+          PowerFactory/tests
+          HOPE/tests
+          PSCAD/tests
+          PLEXOSDB/tests
+          surge/test_integration.py -q -rs
+
+  powerfactory-wheel-catalogs:
+    name: PowerFactory catalog wheel smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Install wheel in an isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/powermcp-wheel-venv"
+          WHEEL=$(echo "$GITHUB_WORKSPACE"/dist/*.whl)
+          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" -m pip install "${WHEEL}[powerfactory]"
+
+      - name: Load all catalogs outside the checkout
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/powermcp-wheel-venv/bin/python" "$GITHUB_WORKSPACE/PowerFactory/tests/check_evemtbench_wheel.py"

@@ -1,5 +1,6 @@
 # Environments
 .venv/
+.venv-*/
 env/
 venv/
 ENV/
@@ -96,7 +97,9 @@ eig_*/
 
 # PowerWorld
 *.pwd
-# Note: .pwb files might be case files you want to keep (like IEEE 39 bus.pwb), 
+# ...but keep the vendored .pwd display fixture the powerio tests decode.
+!tests/data/powerworld/ACTIVSg200.pwd
+# Note: .pwb files might be case files you want to keep (like IEEE 39 bus.pwb),
 # so we don't ignore them globally.
 
 # Testing
@@ -104,6 +107,16 @@ eig_*/
 .coverage
 htmlcov/
 
+# Type checkers, linters, and tool caches
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+
 # PSCAD generated docs (can be re-synced)
-PSCAD/docs/md/*.md
-PSCAD/docs/raw/*.txt
+PSCAD/docs/
+
+# GenX run artifacts, when a case or log dir is kept inside the checkout
+GenX/run_logs/
+GenX/plots/

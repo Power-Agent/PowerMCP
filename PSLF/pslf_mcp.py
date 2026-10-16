@@ -1,16 +1,75 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pandas as pd
 import subprocess
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer as FastMCP
 from typing import Dict, List, Optional, Tuple, Any, Union
+
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_repo_root_added = _repo_root not in sys.path
+if _repo_root_added:
+    sys.path.insert(0, _repo_root)
+try:
+    from powermcp.sandbox import PathNotAllowed, checked_path
+finally:
+    if _repo_root_added:
+        sys.path.remove(_repo_root)
+del _repo_root, _repo_root_added
 
 # Initialize MCP server
 mcp = FastMCP("PSLF Positive Sequence Load Flow Program")
 
-from PSLF_PYTHON import *
-init_pslf(silent=False, working_directory=os.getcwd())
+# ---------------------------------------------------------------------------
+# Lazy, memoized PSLF engine initialization.
+#
+# `from PSLF_PYTHON import *` and init_pslf() used to run at import time, which
+# crashed this module on any machine without PSLF and blocked packaging. The
+# PSLF_PYTHON module is vendor-supplied (not on PyPI); its directory comes from
+# ~/.powermcp/config.toml (key pslf.python_lib) when powermcp is installed and
+# is added to sys.path before the import. The wildcard names (Pslf,
+# CaseParameters, Bus, Flox, ...) are published into this module's globals on
+# first use, so the tool functions below keep referencing them unchanged.
+# ---------------------------------------------------------------------------
+_pslf_ready = False
+
+
+def _generated_file(name: str) -> str:
+    """Preflight a fixed PSLF output in the server working directory."""
+    return checked_path(
+        os.path.abspath(name),
+        purpose=f"generated PSLF output {name}",
+        for_write=True,
+    )
+
+
+def _resolve_pslf_lib():
+    try:
+        from powermcp.config import get_path
+        return get_path("pslf", "python_lib", must_exist=False)
+    except Exception:
+        return None
+
+
+def _ensure_pslf():
+    """Inject the PSLF_PYTHON dir, import it, and call init_pslf() exactly once."""
+    global _pslf_ready
+    if _pslf_ready:
+        return
+    lib = _resolve_pslf_lib()
+    if lib and lib not in sys.path:
+        sys.path.insert(0, lib)
+    try:
+        import PSLF_PYTHON
+    except Exception as e:
+        raise RuntimeError(
+            "Could not import PSLF_PYTHON. Install PSLF and configure its path: "
+            "`powermcp config set pslf.python_lib <dir containing PSLF_PYTHON>`. "
+            "Original error: " + repr(e)
+        )
+    # Publish the wildcard names (Pslf, CaseParameters, Bus, Flox, init_pslf, ...).
+    globals().update({k: getattr(PSLF_PYTHON, k) for k in dir(PSLF_PYTHON) if not k.startswith("_")})
+    PSLF_PYTHON.init_pslf(silent=False, working_directory=os.getcwd())
+    _pslf_ready = True
 
 @mcp.tool()
 def open_case(case: str) -> Dict[str, Any]:
@@ -24,8 +83,13 @@ def open_case(case: str) -> Dict[str, Any]:
         Dict with status and case information
     """
     try:
-        
-        iret = Pslf.load_case(os.getcwd() + "\\" + case)
+        case = checked_path(case, purpose="case")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+    try:
+        _ensure_pslf()
+        case_path = os.path.abspath(case)
+        iret = Pslf.load_case(case_path)
         cp = CaseParameters()
         
         # Get basic case information
@@ -39,7 +103,7 @@ def open_case(case: str) -> Dict[str, Any]:
             return {
                 'status': 'success',
                 'case_info': {
-                    'path': os.getcwd() + "\\" + case,
+                    'path': case_path,
                     'num_buses': bus_data if bus_data is not None else 0,
                     'num_branches': branch_data if branch_data is not None else 0,
                     'num_generators': gen_data if gen_data is not None else 0,
@@ -66,8 +130,9 @@ def save_case() -> Dict[str, Any]:
         Dict with status and case information
     """
     try:
-        
-        iret = Pslf.save_case(os.getcwd() + "\\temp.sav")
+        output_path = _generated_file("temp.sav")
+        _ensure_pslf()
+        iret = Pslf.save_case(output_path)
         
         if (iret == 0):
             return {
@@ -93,6 +158,7 @@ def solve_case() -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.solve_case()
         if (iret == 0):
             return {
@@ -151,6 +217,7 @@ def add_bus(busnum: int, busname: str, nominalkv: float, type: int = 1) -> Dict[
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 0, busnum, 'type basekv busnam', str(type) + " " + str(nominalkv) + " " + busname)
         cp = CaseParameters()
         
@@ -253,6 +320,7 @@ def add_branch(frombus: int, tobus: int, reactance: float, circuit: str = "1 ", 
     """
     try:
         
+        _ensure_pslf()
         # determine if it is a transformer or transmission line
         index = Pslf.bus_internal_index(frombus)
         if (index < 0):
@@ -375,6 +443,7 @@ def add_generator(bus: int, power_scheduled_mw: float, genid: str = "1 ", power_
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 3, str(bus) + " " + str(genid), "st mbase pgen pmax qmax qmin", "1 100 " + str(power_scheduled_mw) + " " + str(power_max) + " " + str(reactive_power_max) + " " + str(reactive_power_min))
         
         cp = CaseParameters()
@@ -452,6 +521,7 @@ def add_load(bus: int, real_power: float, reactive_power: float, loadid: str = "
     """
     try:
         
+        _ensure_pslf()
         iret = Pslf.add_record(1, 4, str(bus) + " " + loadid, "st p q", "1 " + str(real_power) + " " + str(reactive_power))
         
         cp = CaseParameters()
@@ -530,6 +600,7 @@ def add_shunt(bus: int, reactive_power: float, variable_flag: int = 0, reactive_
         Dict with status
     """
     try:
+        _ensure_pslf()
         if (variable_flag == 0):
             # Fixed shunt
             iret = Pslf.add_record(1, 5, str(bus) + " " + shuntid, "st b", "1 " + str(reactive_power / 100.0)) # Divide by system base MVA to get in per unit
@@ -610,8 +681,9 @@ def get_voltage(bus: int) -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         index = Pslf.bus_internal_index(bus)
-        
+
         if (index < 0):
             return {
                 'status': 'error bus not found'
@@ -648,6 +720,7 @@ def get_voltage_violations(overvoltage_threshold: float = 1.05, undervoltage_thr
     """
     try:
         
+        _ensure_pslf()
         bus_count = CaseParameters().Nbus
         
         overvoltage = {}
@@ -699,6 +772,7 @@ def get_overload_violations(overload_threshold: float = 1.0) -> Dict[str, Any]:
     """
     try:
         
+        _ensure_pslf()
         branch_count = CaseParameters().Nbrsec
         if (branch_count <= 0):
             return {
@@ -740,9 +814,27 @@ def run_contingency_analysis() -> Dict[str, Any]:
         Dict with status
     """
     
+    try:
+        generated = {
+            name: _generated_file(name)
+            for name in (
+                "sstools.sav",
+                "cont.otg",
+                "control.cntl",
+                "runs.cases",
+                "output.crf",
+                "template.ctab",
+                "run.bat",
+                "output.xlsx",
+            )
+        }
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
     # Save the case into a temporary file
     try:
-        iret = Pslf.save_case(os.getcwd() + "\\sstools.sav")
+        _ensure_pslf()
+        iret = Pslf.save_case(generated["sstools.sav"])
     except Exception as e:
         return {
             'status': 'error unknown',
@@ -751,13 +843,14 @@ def run_contingency_analysis() -> Dict[str, Any]:
     
     # Generate a list of N-1 contingencies based on the case stored in the temporary file
     try:
-        iret = Pslf.run_epcl(os.getcwd() + "\\PSLF\generate-otg.p")
+        script_path = os.path.join(os.path.dirname(__file__), "generate-otg.p")
+        iret = Pslf.run_epcl(script_path)
     except Exception as e:
         return {"status": "error generate-otg.p not found", "message": str(e)}
     
     # Generate a list of default criteria to evaluate the case with.
     try:
-        with open("control.cntl", 'w') as f:
+        with open(generated["control.cntl"], 'w') as f:
             f.write("rating  1 2\n")
             f.write("monitor voltage   area      1   999    1  999  0.95 1.05    0.90  1.10   0.07  0.0     0.0\n")
             f.write("monitor flows     area      1   999    1  999   0.0	   30.0		100.0		1	2\n")
@@ -778,7 +871,7 @@ def run_contingency_analysis() -> Dict[str, Any]:
     
     # Generate the batch contingency run.
     try:
-        with open("runs.cases", 'w') as f:
+        with open(generated["runs.cases"], 'w') as f:
             f.write('CASE "output" 0\n')
             f.write('{\n')
             f.write('SAV "sstools.sav"\n')
@@ -793,19 +886,19 @@ def run_contingency_analysis() -> Dict[str, Any]:
         
     # Run the batch of contingencies
     try:
-        iret = Pslf.run_sstools("runs.cases")
+        iret = Pslf.run_sstools(generated["runs.cases"])
         
     except Exception as e:
         return {"status": "error running SSTOOLS", "message": str(e)}
         
     # Generate the ProvisoHD batch data file
     try:
-        with open("template.ctab", 'w') as f:
+        with open(generated["template.ctab"], 'w') as f:
             f.write('runtype "cont-process"\n')
             f.write('report 1\n')
             f.write('postproc 2\n')
             f.write('ratingunits 0\n')
-            f.write('"' + os.getcwd() + '\\output.crf" "' + os.getcwd() + '\\output.xlsx"\n')
+            f.write(f'"{generated["output.crf"]}" "{generated["output.xlsx"]}"\n')
             f.write('end\n')
         
     except Exception as e:
@@ -814,7 +907,7 @@ def run_contingency_analysis() -> Dict[str, Any]:
         
     # Generate a ProvisoHD call
     try:
-        with open(os.getcwd()+"\\run.bat", 'w') as f:
+        with open(generated["run.bat"], 'w') as f:
             f.write('@SET ctab=%cd%\\template.ctab\n')
             f.write('cd "C:\\Program Files (x86)\\ProvisoHD\\Release"\n')
             f.write('@SET CURRENTDIR=C:\\Program Files (x86)\\ProvisoHD\\Release\n')
@@ -827,14 +920,26 @@ def run_contingency_analysis() -> Dict[str, Any]:
         
     # Generate a system call to run ProvisoHD
     try:
-        iret = subprocess.run(os.getcwd()+"\\run.bat", capture_output=True, text=True, check=True, shell=True)
+        iret = subprocess.run(
+            generated["run.bat"],
+            capture_output=True,
+            text=True,
+            check=True,
+            shell=True,
+        )
     except Exception as e:
         return {"status": "error running ProvisoHD", "message": str(e)}
         
     # Return the contingency analysis results.
-    VoltageViolations = pd.read_excel("Output.xlsx", sheet_name="VoltageViolations").to_dict(orient='dict')
-    PerUnitFlowViolations = pd.read_excel("Output.xlsx", sheet_name="PerUnitFlowViolations").to_dict(orient='dict')
-    UnsolvedContingencies = pd.read_excel("Output.xlsx", sheet_name="UnsolvedDescriptor").to_dict(orient='dict')
+    VoltageViolations = pd.read_excel(
+        generated["output.xlsx"], sheet_name="VoltageViolations"
+    ).to_dict(orient='dict')
+    PerUnitFlowViolations = pd.read_excel(
+        generated["output.xlsx"], sheet_name="PerUnitFlowViolations"
+    ).to_dict(orient='dict')
+    UnsolvedContingencies = pd.read_excel(
+        generated["output.xlsx"], sheet_name="UnsolvedDescriptor"
+    ).to_dict(orient='dict')
     return {
         'status': 'success',
         'VoltageViolations': VoltageViolations,

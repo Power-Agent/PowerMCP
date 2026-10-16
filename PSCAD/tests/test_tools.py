@@ -2,10 +2,14 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 import os
+from pathlib import Path
+import tempfile
 from pscad_mcp.tools.project_tools import register_project_tools, run_project, load_projects, find_components
-from pscad_mcp.tools.app_tools import register_app_tools, get_pscad_status
+from pscad_mcp.tools.app_tools import register_app_tools, get_pscad_status, read_documentation
+from pscad_mcp.tools.data_tools import _resolve_psout
 from pscad_mcp.core.connection_manager import pscad_manager
-from mcp.server.fastmcp import FastMCP
+from pscad_mcp.utils.doc_manager import DocumentationManager
+from mcp.server.mcpserver import MCPServer as FastMCP
 
 class TestAllTools(unittest.IsolatedAsyncioTestCase):
     """
@@ -36,6 +40,33 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         result = await get_pscad_status()
         self.assertEqual(result["connected"], False)
 
+    async def test_documentation_name_is_not_a_path(self):
+        result = await read_documentation("/tmp/secret")
+        self.assertIn("dotted ASCII Python module name", result)
+
+    async def test_documentation_manager_does_not_write_at_import(self):
+        with self.subTest("constructor is read-only"):
+            manager = DocumentationManager("missing/docs")
+            self.assertFalse(os.path.exists(manager.base_dir))
+
+    @unittest.skipIf(os.name == "nt", "POSIX symlink semantics")
+    async def test_out_sibling_psout_is_checked_after_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allowed = root / "allowed"
+            allowed.mkdir()
+            legacy = allowed / "run.out"
+            legacy.write_text("legacy")
+            outside = root / "outside.psout"
+            outside.write_text("output")
+            (allowed / "run.psout").symlink_to(outside)
+
+            with patch.dict(
+                os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": str(allowed)}, clear=False
+            ):
+                with self.assertRaisesRegex(ValueError, "outside allowed MCP roots"):
+                    await _resolve_psout(str(legacy))
+
     # --- Project Tools ---
 
     async def test_load_nonexistent_project(self):
@@ -48,7 +79,8 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         """Edge case: Attempting simulation without a valid license."""
         self.mock_pscad.licensed.return_value = False
         result = await run_project(project_name="test")
-        self.assertIn("not licensed", result)
+        self.assertFalse(result["started"])
+        self.assertIn("not licensed", result["error"])
 
     async def test_find_no_components(self):
         """Edge case: Searching for components that don't exist."""

@@ -96,12 +96,12 @@ class TestEnhancedPSCADTools(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_project_settings(self):
         """Test retrieving project settings."""
-        self.mock_project.settings.return_value = {"Duration": "0.5", "TimeStep": "50"}
-        
+        self.mock_project.parameters.return_value = {"Duration": "0.5", "TimeStep": "50"}
+
         result = await get_project_settings("TestProj")
-        
+
         self.assertEqual(result["Duration"], "0.5")
-        self.mock_project.settings.assert_called_once()
+        self.mock_project.parameters.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

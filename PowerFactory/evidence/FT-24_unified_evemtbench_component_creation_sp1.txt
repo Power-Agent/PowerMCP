@@ -1,0 +1,144 @@
+Evidence ID: FT-24
+Title: Unified EvEMTBench component creation
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0099
+
+Provenance:
+The contributor supplied MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The confirmed
+creation response exceeded the client's inline display limit, so its available
+success header is combined with independent type and element readback. The
+tested working tree had not yet been committed, and no independent
+byte-for-byte revision comparison was performed. The PowerFactory account
+identifier is replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Grid: MCP Round Rotor Grid 20261011
+- Bus: MCP Round Rotor Bus 10.5 20261011, 10.5 kV
+- Requested machine state: out of service
+
+Automated regression validation:
+- 131 PowerFactory unit tests passed
+- The unified routing tests covered all six supported component types,
+  rejection of unknown and private parameters, invalid parameter reporting,
+  and preservation of the caller's parameter object
+- The MCP wrapper test required structured result serialization
+- git diff --check completed without whitespace errors
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Unified preview:
+create_evemtbench_component was called with component_type set to
+synchronous_machine and these nested parameters:
+- machine_type: round_rotor
+- rated_power_mva: 100
+- machine_name: MCP Unified Round Rotor Gen R7
+- type_name: MCP Unified Round Rotor Type R7
+- bus_name: MCP Round Rotor Bus 10.5 20261011
+- grid_name: MCP Round Rotor Grid 20261011
+- seed: 43
+- active_power_mw: 60
+- reactive_power_mvar: 5
+- out_of_service: true
+- confirmation: empty
+- open_digsilent: true
+
+The preview returned success=true, applied=false, type_created=false,
+machine_created=false, and component_type=synchronous_machine. It returned
+this exact confirmation phrase:
+CREATE MCP Unified Round Rotor Gen R7 WITH MCP Unified Round Rotor Type R7 round_rotor 100MVA 10.5kV seed=43
+
+The preview identified catalog
+evemtbench-synchronous-machines-table-13-v1, attributed the values to Table 13,
+and included the Chair of Electrical Energy Systems, FAU affiliation. Selected
+sampled values were:
+- rated power and voltage: 100.0 MVA, 10.5 kV
+- rated power factor: 0.865166
+- xd/xq: 2.474635 / 2.423398 p.u.
+- xds/xqs: 0.170226 / 0.161077 p.u.
+- xdss/xqss: 0.095012 / 0.101627 p.u.
+- derived tds/tqs: 1.182889 / 0.643935 s
+- derived tdss/tqss: 0.033022 / 0.014405 s
+
+Confirmed unified creation:
+The unified tool was called again with the same component type and nested
+parameters and the exact returned confirmation phrase. The available response
+header reported:
+- success: true
+- applied: true
+- type_created: true
+- machine_created: true
+- machine_type: round_rotor
+- seed: 43
+
+The complete confirmed response was saved by the MCP client because it
+exceeded the inline display limit. It was not read as part of this record.
+Persistence was instead checked through the two read-only calls below.
+
+Independent type readback:
+get_parameters returned exactly one object for
+MCP Unified Round Rotor Type R7.TypSym at:
+\<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type
+Library.IntPrjfolder\Generator Types.IntPrjfolder\MCP Unified Round Rotor Type
+R7.TypSym
+
+It returned these retained values:
+- iturbo: 1
+- sgn: 100.0 MVA
+- ugn: 10.5 kV
+- xd: 2.474634885787964 p.u.
+- xq: 2.423398017883301 p.u.
+- xds: 0.17022599279880524 p.u.
+- xqs: 0.16107699275016785 p.u.
+- xdss: 0.09501200169324875 p.u.
+- xqss: 0.10162699967622757 p.u.
+- tds: 1.1828889846801758 s
+- tqs: 0.6439350247383118 s
+- tdss: 0.03302200138568878 s
+- tqss: 0.01440500095486641 s
+
+Independent machine readback:
+get_parameters returned exactly one object for
+MCP Unified Round Rotor Gen R7.ElmSym at:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network
+Data.IntPrjfolder\MCP Round Rotor Grid 20261011.ElmNet\MCP Unified Round Rotor
+Gen R7.ElmSym
+
+It retained:
+- typ_id: MCP Unified Round Rotor Type R7.TypSym
+- bus1: a StaCubic below MCP Round Rotor Bus 10.5 20261011
+- pgini: 60.0 MW
+- qgini: 5.0 MVAr
+- outserv: 1
+
+The final ping returned pong, confirming that the MCP server remained healthy
+after unified routing, object creation, serialization, and readback.
+
+Incidental request:
+Before the requested PowerFactory sequence, the MCP client attempted one
+PowerMCP-PSCAD build_project call. The permission request was rejected, the
+tool failed, and no PSCAD operation ran.
+
+Conclusion and limits:
+This run validates that create_evemtbench_component accepts a nested parameter
+object, routes synchronous_machine to the validated specialized creator,
+preserves read-only preview and exact-confirmation semantics, returns the
+normalized component_type, creates the expected TypSym and ElmSym, and leaves
+the PowerFactory MCP server healthy. Independent readback confirms the sampled
+electrical values, type assignment, terminal connection, operating point, and
+safe out-of-service state.
+
+The test exercises one of the six live routing branches; all six branches are
+covered by automated routing tests, while their specialized creators have
+separate live evidence. No in-service energization, load flow, short-circuit
+calculation, dynamic simulation, graphical-layout update, PowerFactory 2026
+SP4 validation, complete confirmed-response recovery, or independent revision
+verification was performed.

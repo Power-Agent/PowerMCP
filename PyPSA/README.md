@@ -4,9 +4,9 @@ A comprehensive Model Context Protocol (MCP) server for PyPSA (Python for Power 
 
 ## Requirements
 
-- [PyPSA](https://pypsa.org/) >= 0.25.0
+- [PyPSA](https://pypsa.org/) >= 0.35.2 and < 2
 - Python 3.10 or higher
-- MCP and FastMCP packages
+- MCP Python SDK 2.x
 - At least one LP solver supported by PyPSA:
   - **Open Source**: HiGHS (recommended), CBC, GLPK
   - **Commercial**: Gurobi (Acadenic License available)
@@ -54,6 +54,9 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - [x] `optimize_investment` - Run capacity expansion optimization
 - [x] `import_from_csv_folder` - Import network from CSV files
 - [x] `export_to_csv_folder` - Export network to CSV format
+- [x] `import_case_from_any` - Import any PowerIO-readable case, or one selected entry of a PowerIO IR collection, to NetCDF
+- [x] `import_case_from_json` - Import serialized PowerIO IR, or one selected entry of it, to NetCDF
+- [x] `run_contingency_analysis` - N-1 contingency analysis
 
 # Future functionalities
 - [ ] `calculate_statistics` - Calculate capacity factors, line loading, and curtailment
@@ -64,7 +67,6 @@ Configure in your MCP client (e.g., Cursor, Claude Desktop):
 - [ ] `add_emission_limit` - Add CO2 emission constraints
 - [ ] `remove_component` - Remove components from network
 - [ ] `modify_component` - Update component parameters
-- [ ] `run_contingency_analysis` - N-1 contingency analysis
 - [ ] `calculate_ptdf` - Power Transfer Distribution Factors
 - [ ] `calculate_lodf` - Line Outage Distribution Factors
 - [ ] `check_network_consistency` - Validate network connectivity

@@ -1,9 +1,10 @@
 import logging
 import sys
 import os
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer as FastMCP
 
-# Add the parent directory to sys.path to allow absolute imports when run as a script
+# Add the PSCAD project directory to sys.path to allow package imports when run
+# directly as a script.  The installed console entry point needs no adjustment.
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
 if parent_dir not in sys.path:

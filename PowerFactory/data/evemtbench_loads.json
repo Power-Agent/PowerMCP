@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [5]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "sampling": {
+    "interval_distribution": "uniform",
+    "intervals_are_closed": true,
+    "seeded": true,
+    "twenty_kv_rule": "sample apparent power and reactive-power angle uniformly between 0.95 capacitive and 0.8 inductive"
+  },
+  "powerfactory": {
+    "element_class": "ElmLod",
+    "model": "balanced constant-power load",
+    "mapped_attributes": {
+      "active_power_mw": "plini",
+      "reactive_power_mvar": "qlini"
+    }
+  },
+  "twenty_kv_power_factor": {
+    "inductive_min": 0.8,
+    "capacitive_min": 0.95,
+    "positive_reactive_power": "inductive",
+    "negative_reactive_power": "capacitive"
+  },
+  "classes": {
+    "20": {
+      "nominal_voltage_kv": 20.0,
+      "apparent_power_mva": {"min": 0.1, "max": 1.6}
+    },
+    "110": {
+      "nominal_voltage_kv": 110.0,
+      "active_power_mw": {"min": 0.0, "max": 31.0},
+      "reactive_power_mvar": {"min": 0.0, "max": 12.5}
+    },
+    "345": {
+      "nominal_voltage_kv": 345.0,
+      "active_power_mw": {"min": 9.0, "max": 326.0},
+      "reactive_power_mvar": {"min": 3.6, "max": 116.0}
+    }
+  },
+  "catalog_only": {
+    "load_model_coefficients": {
+      "kP_Z": {"min": 0.2, "max": 1.31},
+      "kP_I": {"min": -1.14, "max": 0.5},
+      "kP_P": {"min": 0.14, "max": 0.83},
+      "kQ_Z": {"min": 0.43, "max": 4.74},
+      "kQ_I": {"min": -6.19, "max": 0.71},
+      "kQ_P": {"min": -0.14, "max": 2.45},
+      "constraints": [
+        "kP_Z + kP_I + kP_P = 1",
+        "kQ_Z + kQ_I + kQ_P = 1"
+      ],
+      "status": "stored but not written until PowerFactory ZIP attributes are live-validated"
+    }
+  }
+}

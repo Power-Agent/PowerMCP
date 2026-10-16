@@ -1,0 +1,135 @@
+Evidence ID: FT-11
+Title: Automatic circuit-breaker creation and cleanup
+Date: 1 September 2026
+Classification: Compiled evidence record
+
+Objective:
+
+Verify that add_component creates one closed circuit breaker in every generated connection cubicle and that delete_component removes the generated cubicle and child switch.
+
+Live test object:
+
+component_type: load
+component_name: Circuit Breaker Test Load 20260901B
+parameters:
+  bus_name: Bus 01
+  active_power_mw: 1.0
+  reactive_power_mvar: 0.25
+grid_name: Grid
+out_of_service: true
+open_digsilent: true
+update_graphics: true
+
+Retained load parameters:
+
+{
+  "name": "Circuit Breaker Test Load 20260901B",
+  "class_name": "ElmLod",
+  "values": {
+    "outserv": 1,
+    "bus1": "...Bus 01.ElmTerm\\Circuit Breaker Test Load 20260901B Cubi.StaCubic"
+  }
+}
+
+Matching child switch:
+
+{
+  "name": "Switch",
+  "class_name": "StaSwitch",
+  "full_name": "...Bus 01.ElmTerm\\Circuit Breaker Test Load 20260901B Cubi.StaCubic\\Switch.StaSwitch",
+  "values": {
+    "aUsage": "cbk",
+    "on_off": 1
+  }
+}
+
+Interpretation of retained state:
+
+- aUsage="cbk" identifies the StaSwitch as a circuit breaker.
+- on_off=1 verifies that the breaker is closed.
+- outserv=1 verifies that the load itself is out of service.
+- The breaker state and component service state are independent.
+
+Automated structural verification:
+
+The line-creation test inspected both endpoint cubicles. Each cubicle contained exactly one StaSwitch with:
+
+aUsage = cbk
+on_off = 1
+
+Cleanup verification:
+
+1. The load was deleted using the exact confirmation token.
+2. The exact ElmLod absence query returned total_count=0.
+3. The project-wide StaSwitch count returned from 122 to the pre-test baseline of 121.
+4. The post-cleanup load flow returned success=true and "Load flow OK".
+
+Result: PASS
+
+Scope note:
+
+Current automatic cubicle provisioning covers a circuit breaker only. Relay, CT, and VT creation is deferred and was not claimed or tested.
+
+Expanded full-coverage creation verification (20260901F):
+
+The following exact objects each returned total_count=1 and outserv=0:
+
+- Full Coverage Bus 20260901F.ElmTerm
+- Full Coverage Line 20260901F.ElmLne
+- Full Coverage Load 20260901F.ElmLod
+- Full Coverage Generator 20260901F.ElmSym
+- Full Coverage Transformer 20260901F.ElmTr2
+
+Switch-count verification:
+
+- Pre-test project baseline: 121 StaSwitch objects
+- Full-coverage retained state: 127 StaSwitch objects
+- Difference attributable to the test components: 6 StaSwitch objects
+
+Matching switch distribution:
+
+- Line: 2 circuit breakers
+  - Bus 01 / Full Coverage Line 20260901F Cubicle 1
+  - Full Coverage Bus 20260901F / Full Coverage Line 20260901F Cubicle 2
+- Load: 1 circuit breaker
+  - Full Coverage Bus 20260901F / Full Coverage Load 20260901F Cubicle
+- Generator: 1 circuit breaker
+  - Bus 01 / Full Coverage Generator 20260901F Cubicle
+- Transformer: 2 circuit breakers
+  - Bus 02 / Full Coverage Transformer 20260901F Cubicle
+  - Bus 30 / Full Coverage Transformer 20260901F Cubicle
+- Bus: 0 circuit breakers
+
+Every matching switch returned:
+
+aUsage = cbk
+on_off = 1
+
+The observed total and distribution exactly matched the expected connection
+topology: one breaker for every generated connection cubicle. The final
+retained-state load flow returned success=true and "Load flow OK".
+
+Expanded cleanup verification:
+
+All five Full Coverage 20260901F objects were previewed and deleted in
+dependency-safe order: load, generator, transformer, line, then bus. Every
+preview returned the exact required confirmation token, and every confirmed
+deletion returned success=true and deleted=true.
+
+Post-cleanup results:
+
+- Full Coverage Load 20260901F.ElmLod: total_count=0
+- Full Coverage Generator 20260901F.ElmSym: total_count=0
+- Full Coverage Transformer 20260901F.ElmTr2: total_count=0
+- Full Coverage Line 20260901F.ElmLne: total_count=0
+- Full Coverage Bus 20260901F.ElmTerm: total_count=0
+- Matching Full Coverage 20260901F switches: 0
+- Project-wide StaSwitch count: 121
+- Load flow: success=true, "Load flow OK"
+- Short circuit: success=true, "Short-circuit calculation OK"
+
+The project-wide switch count therefore completed the expected lifecycle:
+
+121 baseline -> 127 after creation -> 121 after cleanup
+
+Expanded result: PASS

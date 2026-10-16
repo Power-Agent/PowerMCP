@@ -1,0 +1,1269 @@
+{
+  "schema": 1,
+  "commands": {
+    "accc": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_multiple_merge": {
+      "accfile": "paths",
+      "acfiles": "paths"
+    },
+    "accc_multiple_run_report": {
+      "acfiles": "paths"
+    },
+    "accc_multiple_run_report_2": {
+      "acfiles": "paths"
+    },
+    "accc_parallel": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_parallel_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "zipfile": "paths"
+    },
+    "accc_ras": {
+      "accfile": "paths"
+    },
+    "accc_ras_2": {
+      "accfile": "paths",
+      "xmlfile": "paths"
+    },
+    "accc_single_run_report": {
+      "rfile": "paths"
+    },
+    "accc_single_run_report_2": {
+      "rfile": "paths"
+    },
+    "accc_single_run_report_3": {
+      "rfile": "paths"
+    },
+    "accc_single_run_report_4": {
+      "rfile": "paths"
+    },
+    "accc_single_run_report_5": {
+      "rfile": "paths"
+    },
+    "accc_single_run_report_6": {
+      "rfile": "paths"
+    },
+    "accc_trip_cor": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accc_trip_cor_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accc_trip_cor_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accc_with_cor": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_with_cor_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_with_cor_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_with_dsp": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_with_dsp_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "accc_with_dsp_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "zipfile": "paths"
+    },
+    "accc_with_trip": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accc_with_trip_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accc_with_trip_parallel": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "accor": {
+      "dfxfile": "paths"
+    },
+    "accor_2": {
+      "dfxfile": "paths"
+    },
+    "accor_3": {
+      "dfxfile": "paths"
+    },
+    "addconditionelement": {
+      "elmtkey": "path-index-2"
+    },
+    "addcontingencyelement": {
+      "elmtkey": "path-index-2"
+    },
+    "addpythonconditionelement": {
+      "path": "path"
+    },
+    "addpythoncontingencyelement": {
+      "path": "path"
+    },
+    "addpythonremedialactionelement": {
+      "path": "path"
+    },
+    "addremedialactionelement": {
+      "elmtkey": "path-index-2"
+    },
+    "alert_output": {
+      "filarg": "paths"
+    },
+    "ansi": {
+      "filarg": "paths"
+    },
+    "ansi_2": {
+      "filarg": "paths"
+    },
+    "ansi_3": {
+      "filarg": "paths"
+    },
+    "append_accc": {
+      "accfile": "paths",
+      "basfile": "paths",
+      "cntfile": "paths",
+      "dfxfile": "paths"
+    },
+    "append_ras": {
+      "ifile": "paths"
+    },
+    "appendrecording": {
+      "string": "path"
+    },
+    "ascc": {
+      "fcdfile": "paths",
+      "relfile": "paths"
+    },
+    "ascc_1a": {
+      "fcdfile": "paths",
+      "relfile": "paths"
+    },
+    "ascc_2": {
+      "fcdfile": "paths",
+      "relfile": "paths",
+      "scfile": "paths"
+    },
+    "ascc_3": {
+      "fcdfile": "paths",
+      "relfile": "paths",
+      "scfile": "paths"
+    },
+    "ascc_scfile": {
+      "scfile": "paths"
+    },
+    "astr": {
+      "outfile": "paths"
+    },
+    "bkdy": {
+      "bfile": "paths",
+      "ffile": "paths"
+    },
+    "bsnm": {
+      "ofile": "paths",
+      "tfile": "paths"
+    },
+    "bsysmem": {
+      "sfile": "paths"
+    },
+    "bsysrcl": {
+      "sfile": "paths"
+    },
+    "case": {
+      "sfile": "paths"
+    },
+    "change_channel_out_file": {
+      "outfile": "paths"
+    },
+    "chkcntduplicon": {
+      "confile": "paths"
+    },
+    "chkcntduplidfx": {
+      "dfxfile": "paths"
+    },
+    "cmpr": {
+      "cfile": "paths"
+    },
+    "csv_to_rawx": {
+      "sfile": "paths"
+    },
+    "csv_to_rawx_with_metamodel": {
+      "domainname": "path",
+      "elementname": "path",
+      "infile": "paths",
+      "outfile": "paths"
+    },
+    "dccc": {
+      "dfxfile": "paths"
+    },
+    "dccc_2": {
+      "dfxfile": "paths"
+    },
+    "dccor": {
+      "dfxfile": "paths"
+    },
+    "dccor_2": {
+      "dfxfile": "paths"
+    },
+    "dcpscopf": {
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "dfax": {
+      "confile": "paths",
+      "dfxfile": "paths",
+      "monfile": "paths",
+      "subfile": "paths"
+    },
+    "dfax_2": {
+      "confile": "paths",
+      "dfxfile": "paths",
+      "monfile": "paths",
+      "subfile": "paths"
+    },
+    "dfax_contingency": {
+      "confile": "paths",
+      "dfxfile": "paths"
+    },
+    "dfti": {
+      "cfile": "paths"
+    },
+    "diff": {
+      "cfile": "paths"
+    },
+    "dmpc": {
+      "ofile": "paths"
+    },
+    "dyda": {
+      "ofile": "paths"
+    },
+    "dynamics_solution_params": {
+      "outfile": "paths"
+    },
+    "dynexportcsv": {
+      "csvfilename": "path"
+    },
+    "dyre_add": {
+      "conecfile": "paths",
+      "conetfile": "paths",
+      "dyrefile": "paths"
+    },
+    "dyre_new": {
+      "compilfil": "path",
+      "conecfile": "paths",
+      "conetfile": "paths",
+      "dyrefile": "paths"
+    },
+    "ecdi": {
+      "cfile": "paths"
+    },
+    "echo": {
+      "idvfil": "path"
+    },
+    "estr_open_circuit_test": {
+      "outfile": "paths"
+    },
+    "estr_response_ratio_test": {
+      "outfile": "paths"
+    },
+    "exportbuslocfile": {
+      "buslocfile": "paths"
+    },
+    "exportbuslocfile_2": {
+      "buslocfile": "paths"
+    },
+    "exportimagefile": {
+      "imagefile": "paths"
+    },
+    "exportimagefile_2": {
+      "imagefile": "paths"
+    },
+    "gcap": {
+      "gfile": "paths"
+    },
+    "gdif": {
+      "filarg": "paths"
+    },
+    "gendsp": {
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "gendsp_2": {
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "getcontingencysavedcase": {
+      "isvfile": "paths",
+      "pathzip": "paths"
+    },
+    "gic": {
+      "gicaddfil": "path",
+      "gicdatafil": "path",
+      "gicpurgfil": "path",
+      "gicrnwkfil": "path"
+    },
+    "gic_efield_waveshape": {
+      "efldfile": "paths"
+    },
+    "gic_pf": {
+      "addfile": "paths"
+    },
+    "gic_read": {
+      "rfile": "paths"
+    },
+    "gic_read_efield_grid": {
+      "fnam": "path"
+    },
+    "gic_thermal_impact": {
+      "gictfarg": "path"
+    },
+    "gic_thermal_impact_1": {
+      "gictfarg": "path"
+    },
+    "gic_write": {
+      "rfile": "paths"
+    },
+    "gic_write_stn": {
+      "rfile": "paths"
+    },
+    "grpg": {
+      "dumfile": "paths",
+      "imagefile": "paths"
+    },
+    "gstr": {
+      "outfile": "paths"
+    },
+    "har_analysis": {
+      "filear": "paths"
+    },
+    "har_analysis_2": {
+      "filear": "paths"
+    },
+    "har_create_pfcase": {
+      "savoutfile": "paths"
+    },
+    "har_export_dstn": {
+      "csvname": "paths"
+    },
+    "har_export_fscan": {
+      "csvname": "paths"
+    },
+    "iecs": {
+      "fcdfile": "paths",
+      "iecfile": "paths"
+    },
+    "iecs_2": {
+      "fcdfile": "paths",
+      "iecfile": "paths",
+      "scfile": "paths"
+    },
+    "iecs_3": {
+      "fcdfile": "paths",
+      "iecfile": "paths",
+      "scfile": "paths"
+    },
+    "iecs_4": {
+      "fcdfile": "paths",
+      "iecfile": "paths",
+      "scfile": "paths"
+    },
+    "iecs_scfile": {
+      "scfile": "paths"
+    },
+    "impc": {
+      "atcfile": "paths",
+      "dfxfile": "paths"
+    },
+    "implement_transfer": {
+      "dfxfile": "paths",
+      "ecdfile": "paths"
+    },
+    "implement_transfer_2": {
+      "dfxfile": "paths",
+      "ecdfile": "paths"
+    },
+    "import_ecdi": {
+      "file": "paths"
+    },
+    "importdrawfile": {
+      "drawfile": "paths"
+    },
+    "importimagefile": {
+      "imagefile": "paths"
+    },
+    "imposeprofile": {
+      "dfaxfile": "paths",
+      "infile": "paths"
+    },
+    "inlf": {
+      "ifile": "paths"
+    },
+    "inlf_2": {
+      "ifile": "paths"
+    },
+    "listcontingencysavedcases": {
+      "pathzip": "paths"
+    },
+    "llrf": {
+      "dfxfile": "paths"
+    },
+    "maccc": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_parallel": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_parallel_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_trip_cor": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_trip_cor_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_trip_cor_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_trip_cor_4": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_with_cor": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_with_cor_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_with_cor_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_with_cor_4": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "maccc_with_trip": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_with_trip_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_with_trip_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_with_trip_parallel": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "maccc_with_trip_parallel_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "trpfile": "paths"
+    },
+    "mcre": {
+      "ifile": "paths"
+    },
+    "mstr": {
+      "outfile": "paths"
+    },
+    "mwmi": {
+      "inpfile": "paths",
+      "outfile": "paths",
+      "trnfile": "paths"
+    },
+    "n11_accc": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_2": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_3": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_parallel": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_parallel_2": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_pscopf": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_pscopf_2": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "n11_accc_pscopf_3": {
+      "accfile": "paths",
+      "confile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "newscenariofile": {
+      "sfile": "paths"
+    },
+    "openaccfile": {
+      "szfilename": "path"
+    },
+    "openaccfile_2": {
+      "szfilename": "path"
+    },
+    "openbuslocfile": {
+      "buslocfile": "paths"
+    },
+    "opendiagfile": {
+      "sfile": "paths"
+    },
+    "openeventstudyfile": {
+      "sfile": "paths"
+    },
+    "openscenariofile": {
+      "sfile": "paths"
+    },
+    "opto": {
+      "opfile": "paths",
+      "rcfile": "paths"
+    },
+    "otdf": {
+      "dfxfile": "paths"
+    },
+    "output_y_matrix": {
+      "ofile": "paths"
+    },
+    "path": {
+      "pathname": "paths"
+    },
+    "poly": {
+      "dfxfile": "paths",
+      "resfile": "paths"
+    },
+    "poly_print": {
+      "resfile": "paths"
+    },
+    "pp_accc": {
+      "accfile": "paths"
+    },
+    "pp_accc_multi_case": {
+      "accfiles": "paths"
+    },
+    "printdiagfile_2": {
+      "filename": "paths"
+    },
+    "produce_opf_log_file": {
+      "ofile": "paths"
+    },
+    "progress_output": {
+      "filarg": "paths"
+    },
+    "prompt_output": {
+      "filarg": "paths"
+    },
+    "psas": {
+      "inpfile": "paths",
+      "outfile": "paths"
+    },
+    "pscopf": {
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "pscopf_2": {
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "pseb": {
+      "inpfile": "paths",
+      "outfile": "paths"
+    },
+    "pv_engine": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_1a": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_4": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_5": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "pv_engine_6": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "ecdfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "zipfile": "paths"
+    },
+    "pv_print": {
+      "resfile": "paths"
+    },
+    "qv_engine": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "thrfile": "paths"
+    },
+    "qv_engine_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "thrfile": "paths"
+    },
+    "qv_engine_3": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths"
+    },
+    "qv_engine_4": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "thrfile": "paths",
+      "zipfile": "paths"
+    },
+    "qv_print": {
+      "resfile": "paths"
+    },
+    "rank": {
+      "accfile": "paths",
+      "mnfile": "paths",
+      "ssfile": "paths"
+    },
+    "rank_brn_and_mac": {
+      "accfile": "paths",
+      "mnfile": "paths",
+      "ssfile": "paths"
+    },
+    "rawd": {
+      "ofile": "paths"
+    },
+    "rawd_2": {
+      "ofile": "paths"
+    },
+    "rawdx": {
+      "ofile": "paths"
+    },
+    "rawx_to_csv": {
+      "ofile": "paths"
+    },
+    "rdch": {
+      "ifile": "paths"
+    },
+    "rdchrawversion": {
+      "ifile": "paths"
+    },
+    "read": {
+      "ifile": "paths"
+    },
+    "read_ras": {
+      "ifile": "paths"
+    },
+    "readcapcurves": {
+      "file": "paths"
+    },
+    "readrawversion": {
+      "ifile": "paths"
+    },
+    "readrawx": {
+      "sfile": "paths"
+    },
+    "readsub": {
+      "ifile": "paths"
+    },
+    "readsubrawversion": {
+      "ifile": "paths"
+    },
+    "readx": {
+      "sfile": "paths"
+    },
+    "relind": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "prbfile": "paths",
+      "stsfile": "paths"
+    },
+    "relind_2": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "prbfile": "paths",
+      "stsfile": "paths"
+    },
+    "remm": {
+      "ifile": "paths"
+    },
+    "renumdiagfile": {
+      "trnfile": "paths"
+    },
+    "report_output": {
+      "filarg": "paths"
+    },
+    "resq": {
+      "ifile": "paths"
+    },
+    "resqversion": {
+      "ifile": "paths"
+    },
+    "reti": {
+      "ifile": "paths"
+    },
+    "rnfi": {
+      "inpfile": "paths",
+      "outfile": "paths",
+      "trnfile": "paths"
+    },
+    "ropf": {
+      "rfile": "paths"
+    },
+    "rstr": {
+      "sfile": "paths"
+    },
+    "runiplanfile": {
+      "iplname": "path"
+    },
+    "runrspnsfile": {
+      "rspname": "path"
+    },
+    "rwcm": {
+      "ofile": "paths"
+    },
+    "rwdy": {
+      "ofile": "paths"
+    },
+    "rwma": {
+      "ofile": "paths"
+    },
+    "rwmm": {
+      "ofile": "paths"
+    },
+    "rwop": {
+      "ofile": "paths"
+    },
+    "rwsq": {
+      "ofile": "paths"
+    },
+    "rwsq_2": {
+      "ofile": "paths"
+    },
+    "save": {
+      "sfile": "paths"
+    },
+    "savediagfile": {
+      "sfile": "paths"
+    },
+    "saveeventstudyfile": {
+      "sfile": "paths"
+    },
+    "savescenariofile": {
+      "sfile": "paths"
+    },
+    "scenariocopyfile": {
+      "sfile": "paths"
+    },
+    "scenariofileadd": {
+      "sfile": "paths"
+    },
+    "scenariofilegetattrs": {
+      "sfile": "paths"
+    },
+    "scenariofilegetcomments": {
+      "sfile": "paths"
+    },
+    "scenariofilelengthcomments": {
+      "sfile": "paths"
+    },
+    "scenariofileremove": {
+      "sfile": "paths"
+    },
+    "scenariofilerename": {
+      "sfile": "paths",
+      "snewname": "path"
+    },
+    "scenariofilesetattrs": {
+      "sfile": "paths"
+    },
+    "scenariofilesetcomments": {
+      "sfile": "paths"
+    },
+    "scenariomovefile": {
+      "sfile": "paths"
+    },
+    "scenarionew": {
+      "sfile": "paths"
+    },
+    "scenarioopen": {
+      "sfile": "paths"
+    },
+    "scenariosave": {
+      "sfile": "paths"
+    },
+    "scenariosetattrs": {
+      "rootpath": "path"
+    },
+    "scenariounzip": {
+      "sfile": "paths"
+    },
+    "scenariounzipsolutions": {
+      "paths": "paths"
+    },
+    "scenariozip": {
+      "sfile": "paths"
+    },
+    "scenariozipopen": {
+      "sfile": "paths"
+    },
+    "scenariozipsave": {
+      "sfile": "paths"
+    },
+    "sceq": {
+      "rfile": "paths",
+      "sfile": "paths"
+    },
+    "sensitivity_flow": {
+      "dfxfile": "paths"
+    },
+    "sensitivity_flows": {
+      "dfxfile": "paths"
+    },
+    "sensitivity_interface": {
+      "dfxfile": "paths"
+    },
+    "sensitivity_voltage": {
+      "dfxfile": "paths"
+    },
+    "sensitivity_voltages": {
+      "dfxfile": "paths"
+    },
+    "set_input_dev": {
+      "idvfil": "path"
+    },
+    "setactiveeventstudy": {
+      "sfile": "paths"
+    },
+    "setdiagautofile": {
+      "autoname": "path"
+    },
+    "setdiagprop": {
+      "imgdir": "path"
+    },
+    "setdiagprop_2": {
+      "imgdir": "path"
+    },
+    "setdiagprop_3": {
+      "imgdir": "path"
+    },
+    "setdiagprop_4": {
+      "imgdir": "path"
+    },
+    "setdiagprop_5": {
+      "imgdir": "path"
+    },
+    "setdiagresaccc": {
+      "file": "paths"
+    },
+    "setdiagrestypegdif": {
+      "sfile": "paths"
+    },
+    "sethomepath": {
+      "sfile": "paths"
+    },
+    "show": {
+      "sfile": "paths"
+    },
+    "snap": {
+      "sfile": "paths"
+    },
+    "spil": {
+      "dfxfile": "paths",
+      "prtfile": "paths"
+    },
+    "sraind": {
+      "dfxfile": "paths",
+      "prbfile": "paths"
+    },
+    "startrecording": {
+      "string": "path"
+    },
+    "strt": {
+      "outfile": "paths"
+    },
+    "strt_2": {
+      "outfile": "paths"
+    },
+    "t_alert_output": {
+      "filarg": "paths"
+    },
+    "t_progress_output": {
+      "filarg": "paths"
+    },
+    "t_prompt_output": {
+      "filarg": "paths"
+    },
+    "t_report_output": {
+      "filarg": "paths"
+    },
+    "tltg": {
+      "dfxfile": "paths"
+    },
+    "tspf": {
+      "accfile": "paths",
+      "dfxfile": "paths",
+      "inlfile": "paths",
+      "zipfile": "paths"
+    },
+    "write_ras": {
+      "ifile": "paths"
+    },
+    "writecapcurves": {
+      "ofile": "paths"
+    },
+    "writerawversion": {
+      "ofile": "paths"
+    },
+    "writerawx": {
+      "sfile": "paths"
+    },
+    "writerawxsubsys": {
+      "sfile": "paths"
+    },
+    "writeseqversion": {
+      "ofile": "paths"
+    },
+    "writeseqversion_2": {
+      "ofile": "paths"
+    }
+  },
+  "reviewed_non_paths": {
+    "accc_multiple_merge": [
+      "nfiles"
+    ],
+    "accc_multiple_run_report": [
+      "nfiles"
+    ],
+    "accc_multiple_run_report_2": [
+      "nfiles"
+    ],
+    "add_details_to_opf_log": [
+      "ival"
+    ],
+    "erun": [
+      "nplt"
+    ],
+    "filein": [
+      "lunit"
+    ],
+    "gic_2": [
+      "fileoptns"
+    ],
+    "gic_3": [
+      "fileoptns"
+    ],
+    "gic_4": [
+      "fileoptns"
+    ],
+    "gic_5": [
+      "fileoptns"
+    ],
+    "gic_6": [
+      "fileoptns"
+    ],
+    "gic_7": [
+      "fileoptns"
+    ],
+    "gic_8": [
+      "fileoptns"
+    ],
+    "gic_read_efield_grid": [
+      "ftyp"
+    ],
+    "gne_chng": [
+      "model"
+    ],
+    "gne_data": [
+      "model"
+    ],
+    "grun": [
+      "nplt"
+    ],
+    "imposeprofile": [
+      "profilename"
+    ],
+    "mrun": [
+      "nplt"
+    ],
+    "pp_accc_multi_case": [
+      "nfiles"
+    ],
+    "produce_opf_log_file": [
+      "ival"
+    ],
+    "rnfi": [
+      "ftype"
+    ],
+    "run": [
+      "nplt"
+    ],
+    "rxpath": [
+      "tdim"
+    ],
+    "scenariocopyfile": [
+      "srcgroup",
+      "dstgroup"
+    ],
+    "scenariofileadd": [
+      "sgroup",
+      "stype",
+      "load",
+      "sargs"
+    ],
+    "scenariofilecount": [
+      "sgroup"
+    ],
+    "scenariofilegetattrs": [
+      "sgroup"
+    ],
+    "scenariofilegetcomments": [
+      "sgroup"
+    ],
+    "scenariofilelengthcomments": [
+      "sgroup"
+    ],
+    "scenariofilelist": [
+      "sgroup"
+    ],
+    "scenariofileremove": [
+      "sgroup"
+    ],
+    "scenariofilerename": [
+      "sgroup"
+    ],
+    "scenariofilesetattrs": [
+      "sgroup",
+      "stype",
+      "load",
+      "sargs"
+    ],
+    "scenariofilesetcomments": [
+      "sgroup",
+      "comments"
+    ],
+    "scenariomovefile": [
+      "srcgroup",
+      "dstgroup"
+    ],
+    "scenariosetopt": [
+      "trackopt",
+      "uziprootopt",
+      "uziplclpcopt",
+      "uziplclopt",
+      "uziprmtpcopt",
+      "uziprmtopt"
+    ],
+    "scenariotrackfileadd": [
+      "sgroup",
+      "nfiles"
+    ],
+    "scenariounzipsolutions": [
+      "solutions"
+    ],
+    "setdiagresrel": [
+      "voltrec"
+    ],
+    "setdiagresrel_2": [
+      "voltrec"
+    ],
+    "setdiagresrel_3": [
+      "voltrec"
+    ],
+    "snap": [
+      "status"
+    ],
+    "tspf": [
+      "profile"
+    ],
+    "tspf_output_pmatrix": [
+      "profile"
+    ],
+    "tspf_output_pmatrix_2": [
+      "profile"
+    ]
+  }
+}

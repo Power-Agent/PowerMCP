@@ -1,0 +1,104 @@
+DIgSILENT PowerFactory MCP Functions Overview
+=============================================
+
+This project exposes DIgSILENT PowerFactory simulation capabilities through an MCP server and a simulation agent.
+
+Main entry points
+-----------------
+- MCP_PowerFactory.py: MCP server entry point.
+- Agent_DIgSILENT.py: PowerFactory simulation engine.
+- simulation_config.json: active runtime configuration.
+- simulation_config.example.json: example configuration for new users.
+
+Implemented MCP tools
+---------------------
+- ping: connectivity check that returns pong.
+- close_digsilent: closes the PowerFactory session.
+- get_config: returns the active configuration file.
+- export_active_grid_pdf: exports one active-project single-line diagram to a new PDF file.
+- create_evemtbench_component: routes a component type and parameter object to any validated EvEMTBench creator while preserving preview, confirmation, verification, and rollback behavior.
+- list_evemtbench_components: validates and filters the versioned EvEMTBench transformer database without opening PowerFactory.
+- create_evemtbench_transformer: previews or creates a new database-backed TypTr2 and connected ElmTr2 without an existing template.
+- list_evemtbench_line_profiles: validates and filters the versioned 20/110/345 kV overhead-line sequence profiles without opening PowerFactory.
+- create_evemtbench_line: previews or creates a new profile-backed TypLne and connected ElmLne without an existing template.
+- list_evemtbench_cable_profiles: validates and filters the versioned 20 kV underground-cable sequence profiles without opening PowerFactory.
+- create_evemtbench_cable: previews or creates a Table 6 cable-equivalent TypLne and connected ElmLne without an existing template.
+- list_evemtbench_external_grid_profiles: validates and filters the versioned Table 4 external-grid ranges without opening PowerFactory.
+- create_evemtbench_external_grid: previews or creates a seeded Table 4 ElmXnet on an existing 110, 345, or 380 kV bus.
+- list_evemtbench_load_profiles: validates and filters the versioned Table 5 load-power ranges without opening PowerFactory.
+- create_evemtbench_load: previews or creates a seeded Table 5 ElmLod on an existing 20, 110, or 345 kV bus.
+- list_evemtbench_synchronous_machine_profiles: validates and filters the versioned Table 13 salient-pole and round-rotor ranges without opening PowerFactory.
+- create_evemtbench_synchronous_machine: previews or creates a seeded round-rotor TypSym and connected ElmSym without an existing template.
+- create_grid_with_buses: previews or bootstraps and activates an ElmNet with one to 100 initial ElmTerm objects in the active project and study case.
+- import_project: imports a .pfd project and activates it.
+- create_study_case: creates or activates a study case with optional idempotency support.
+- modify_parameter: updates one PowerFactory attribute across matching objects.
+- run_loadflow: runs ComLdf on the active study case.
+- run_short_circuit: runs ComShc on the active study case.
+- run_simulation: executes the configured load flow, RMS simulation, CSV export, plotting, and optional PFD export pipeline.
+- run_custom_case: runs one fault scenario supplied at call time.
+- read_results_csv: returns the latest RMS CSV or a specific file.
+- get_active_project: returns the active PowerFactory project.
+- get_active_study_case: returns the active study case.
+- get_parameters: reads selected attributes, optional metadata, and opt-in non-calculation-relevant project objects.
+- list_objects: lists objects using a PowerFactory object query.
+- list_components: lists objects using friendly equipment categories.
+- list_study_cases: lists study cases and identifies the active case.
+- list_contingencies: lists configured fault-library cases and their EvtOutage, EvtSwitch, and EvtShc events.
+- get_contingency_configuration: reads the active ComSimoutage settings without running a calculation.
+- configure_contingency_screening: persists selected ComSimoutage screening criteria without running a calculation.
+- create_contingency: creates or reuses an idempotent switch-based contingency definition.
+- run_contingency_analysis: runs ComSimoutage in its configured or an explicit supported calculation mode.
+- get_contingency_results: reads a bounded, optionally variable-filtered AC or DC result slice using IntMon/FindColumn metadata and bulk/sparse values.
+- add_contingency_result_variables: adds missing object-variable pairs to the AC or DC result recording selection without running a calculation.
+- remove_contingency_result_variables: removes object-variable pairs from the AC or DC result recording selection without running a calculation.
+- get_contingency_summary: reports affected elements, convergence, overloads, and voltage violations from existing results.
+- add_component: creates a bus, load, generator, line, or transformer; connected equipment receives generated cubicle(s) and closed circuit breaker(s), and update_graphics can synchronize the active diagram.
+- delete_component: previews or confirms exact-name component deletion, including generated cubicle, switchgear, and requested graphical cleanup.
+
+Implemented simulation engine behavior
+--------------------------------------
+- SimulationConfig.from_json: loads known JSON keys into the dataclass.
+- Logger.info / Logger.ok / Logger.warn / Logger.error / Logger.section: console logging helpers.
+- DIgSILENTAgent.connect: connects to PowerFactory and activates the configured project.
+- DIgSILENTAgent.activate_study_case: activates or copies the configured study case and reports which action occurred.
+- DIgSILENTAgent.run_loadflow: runs ComLdf.
+- DIgSILENTAgent.run_contingency_analysis: executes ComSimoutage and optionally selects a validated calculation mode.
+- DIgSILENTAgent.run_rms_simulation: builds the event sequence and runs ComInc / ComSim.
+- DIgSILENTAgent._apply_fault_event: supports bus faults, line faults, and generator switch events.
+- DIgSILENTAgent.addSwitchEvent: creates PowerFactory EvtSwitch events.
+- DIgSILENTAgent.export_results_to_csv: exports the RMS results to CSV via ComRes.
+- DIgSILENTAgent.export_active_grid_pdf: exports a selected Graphics Board single-line diagram to PDF via ComWr.
+- DIgSILENTAgent.create_evemtbench_component: validates and routes unified component requests to the existing specialized creator.
+- DIgSILENTAgent.list_evemtbench_components: validates and filters the transformer catalog.
+- DIgSILENTAgent.create_evemtbench_transformer: samples, previews, creates, connects, verifies, and rolls back a transformer type and element.
+- DIgSILENTAgent.list_evemtbench_line_profiles: validates and filters the overhead-line profile catalog.
+- DIgSILENTAgent.create_evemtbench_line: previews, creates, connects, verifies, and rolls back an overhead-line type and element.
+- DIgSILENTAgent.list_evemtbench_cable_profiles: validates and filters the underground-cable profile catalog.
+- DIgSILENTAgent.create_evemtbench_cable: previews, creates, connects, verifies, and rolls back a cable type and element.
+- DIgSILENTAgent.list_evemtbench_external_grid_profiles: validates and filters the external-grid catalog.
+- DIgSILENTAgent.create_evemtbench_external_grid: samples, previews, creates, connects, verifies, and rolls back an external grid.
+- DIgSILENTAgent.create_grid_with_buses: previews, creates or reuses, activates, verifies, and rolls back a grid and its initial buses.
+- DIgSILENTAgent.export_project_to_pfd: exports the active project to .pfd via ComPfdexport.
+- DIgSILENTAgent.generate_standard_plots: creates voltage and generator speed plots, placing large voltage legends below the axes.
+- DIgSILENTAgent.import_project: imports a .pfd project file.
+- DIgSILENTAgent.create_study_case: creates or reuses study cases with exact-name matching.
+- DIgSILENTAgent.modify_parameter: writes attributes through SetAttribute with type coercion.
+- DIgSILENTAgent.short_circuit: runs ComShc.
+- DIgSILENTAgent.run_pipeline: orchestrates the full workflow and returns a structured report.
+- DIgSILENTAgent.close: closes PowerFactory and clears shared handles.
+- DIgSILENTAgent.add_component: validates, creates, connects, verifies, and rolls back supported network components.
+- DIgSILENTAgent.delete_component: performs guarded exact-name deletion and verifies connection and optional graphical cleanup.
+
+Path handling
+-------------
+- PowerFactory Python path: set POWERFACTORY_PYTHON_PATH or PYTHONPATH.
+- Project and output folders: define them in simulation_config.json.
+- Example config: use simulation_config.example.json as the template and keep the real config out of Git.
+
+Internal helper functions
+-------------------------
+- Agent_DIgSILENT.py: _find_study_case_exact, _list_study_case_names, _prune_create_case_request_cache, _apply_show_preference, _ensure_run_output_dir
+- MCP_PowerFactory.py: _stderr_print, _pf, _load_modules, _to_json
+
+
