@@ -6,21 +6,31 @@ A Model Context Protocol (MCP) server that exposes DIgSILENT PowerFactory simula
 
 ## Architecture
 
-```
+```text
 Claude / AI assistant
-        │  MCP protocol
+        │ MCP protocol
         ▼
-MCP_PowerFactory.py   ← MCP Python SDK 2 server
-        │  Python calls 
+MCP_PowerFactory.py                    MCP Python SDK 2 server
+        │ Python calls
         ▼
-Agent_DIgSILENT.py    ← Simulation engine
-        │  
+Agent_DIgSILENT.py                     Simulation and shared PowerFactory helpers
+        │
+        ├── Inherits EvEMTBenchMixin from evemtbench.py
+        │       ├── Reads data/evemtbench_*.json
+        │       ├── Lists catalogs, filters and creation parameters
+        │       └── Plans, creates, verifies and rolls back equipment
+        │
+        │ Simulation, inspection, export and equipment-creation calls
         ▼
-DIgSILENT PowerFactory 
+DIgSILENT PowerFactory
         │
         ▼
-Output folder:  CSV results, PNG plots, optional .pfd export
+Outputs: CSV results, PNG plots, diagram PDF, optional .pfd export
 ```
+
+`evemtbench.py` is part of the agent layer, not a separate MCP server.
+Catalog listing returns JSON data without opening PowerFactory. Equipment
+creation and simulation require a PowerFactory connection.
 
 ## Features
 
