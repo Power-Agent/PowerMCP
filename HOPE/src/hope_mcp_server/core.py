@@ -383,7 +383,12 @@ def looks_like_applocker_block(stdout: str, stderr: str) -> bool:
 
 
 def julia_string_literal(value: str | Path) -> str:
-    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    escaped = (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("$", "\\$")
+        .replace('"', '\\"')
+    )
     return f'"{escaped}"'
 
 
@@ -396,8 +401,13 @@ def build_project_julia_command(repo_root: Path, julia_bin: str) -> list[str]:
 
 
 def build_run_command(repo_root: Path, julia_bin: str, case_path: Path) -> list[str]:
-    julia_script = f"using HOPE; HOPE.run_hope({julia_string_literal(case_path)})"
-    return [*build_project_julia_command(repo_root, julia_bin), "-e", julia_script]
+    julia_script = "using HOPE; HOPE.run_hope(ARGS[1])"
+    return [
+        *build_project_julia_command(repo_root, julia_bin),
+        "-e",
+        julia_script,
+        str(case_path),
+    ]
 
 
 def build_debug_solver_environment_command(
@@ -421,8 +431,8 @@ def build_debug_solver_environment_command(
             "emit(\"STEP=using_HOPE_done\"); "
             "using JuMP; "
             "emit(\"STEP=using_JuMP_done\"); "
-            f"case = {julia_string_literal(case_path)}; "
-            f"solver = {julia_string_literal(solver)}; "
+            "case = ARGS[1]; "
+            "solver = ARGS[2]; "
             "emit(\"HOPE_PATH=\" * string(pathof(HOPE))); "
             "emit(\"STEP=initiate_solver_start\"); "
             "opt = HOPE.initiate_solver(case, solver); "
@@ -436,6 +446,8 @@ def build_debug_solver_environment_command(
             "emit(\"MODEL_TYPE=\" * string(typeof(model))); "
             "emit(\"PROBE_STATUS=ok\")"
         ),
+        str(case_path),
+        solver,
     ]
 
 
@@ -815,7 +827,16 @@ def hope_debug_solver_environment(
         return julia_error
 
     settings = read_yaml(settings_path_for_case(case_path))
-    selected_solver = solver or str(settings.get("solver", "highs"))
+    selected_solver = str(
+        solver if solver is not None else settings.get("solver", "highs")
+    ).strip().lower()
+    if selected_solver not in _SOLVER_OPTIONS:
+        return error_result(
+            "invalid_solver",
+            f"Unsupported solver '{selected_solver}'.",
+            solver=selected_solver,
+            allowed_solvers=list(_SOLVER_OPTIONS),
+        )
     command = build_debug_solver_environment_command(
         repo_root,
         julia_bin,
@@ -902,7 +923,16 @@ def hope_debug_solver_environment_async(
         return julia_error
 
     settings = read_yaml(settings_path_for_case(case_path))
-    selected_solver = solver or str(settings.get("solver", "highs"))
+    selected_solver = str(
+        solver if solver is not None else settings.get("solver", "highs")
+    ).strip().lower()
+    if selected_solver not in _SOLVER_OPTIONS:
+        return error_result(
+            "invalid_solver",
+            f"Unsupported solver '{selected_solver}'.",
+            solver=selected_solver,
+            allowed_solvers=list(_SOLVER_OPTIONS),
+        )
     command = build_debug_solver_environment_command(
         repo_root,
         julia_bin,
@@ -1501,12 +1531,14 @@ def hope_run_holistic(
     if julia_error is not None:
         return julia_error
 
-    julia_script = (
-        "using HOPE; "
-        f"HOPE.run_hope_holistic({julia_string_literal(gtep_path)}, "
-        f"{julia_string_literal(pcm_path)})"
-    )
-    command = [*build_project_julia_command(repo_root, julia_bin), "-e", julia_script]
+    julia_script = "using HOPE; HOPE.run_hope_holistic(ARGS[1], ARGS[2])"
+    command = [
+        *build_project_julia_command(repo_root, julia_bin),
+        "-e",
+        julia_script,
+        str(gtep_path),
+        str(pcm_path),
+    ]
 
     # Tag job with both case IDs
     job_id = _launch_job(
@@ -1579,9 +1611,14 @@ def hope_run_erec(
 
     julia_script = (
         "using HOPE; "
-        f"HOPE.calculate_erec({julia_string_literal(case_path)}, overrides={overrides_str})"
+        f"HOPE.calculate_erec(ARGS[1], overrides={overrides_str})"
     )
-    command = [*build_project_julia_command(repo_root, julia_bin), "-e", julia_script]
+    command = [
+        *build_project_julia_command(repo_root, julia_bin),
+        "-e",
+        julia_script,
+        str(case_path),
+    ]
 
     job_id = _launch_job(
         command,
