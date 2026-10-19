@@ -20,11 +20,10 @@ from utils.responses import _err, _ok
 def compile_opendss_file(dss_file: str, force_recompile: bool = False) -> Dict[str, Any]:
     """Compile a master DSS file and verify the resulting circuit is usable.
 
-    A successful return from the engine's compile command is not sufficient:
-    OpenDSS can report redirect errors but leave a partial/empty circuit.
-    The readiness payload is checked for explicit unsuccessful states and the
-    active circuit is checked for a non-zero bus count when that count is
-    exposed by the toolkit.
+    OpenDSS may report a failed Redirect/Compile in diagnostics yet leave a
+    partial circuit. A successful return from the wrapper therefore must also
+    pass readiness and model-integrity checks before this session marks the
+    circuit as loaded.
     """
     try:
         dss_file = checked_path(dss_file, purpose="dss_file")
@@ -89,7 +88,7 @@ def compile_opendss_file(dss_file: str, force_recompile: bool = False) -> Dict[s
 
 
 def _validate_compiled_circuit(readiness: Any) -> str | None:
-    """Return an error when readiness explicitly says compile is unsuccessful."""
+    """Return an error when engine readiness or model counts reject the circuit."""
     if isinstance(readiness, dict):
         for key in ("success", "ready", "is_ready", "circuit_ready", "converged"):
             value = readiness.get(key)
@@ -99,21 +98,23 @@ def _validate_compiled_circuit(readiness: Any) -> str | None:
             value = readiness.get(key)
             if value:
                 return f"OpenDSS circuit readiness reports {key}: {value}"
-    # The compile operation can succeed while leaving an empty circuit. Use
-    # the engine's bus count when the current toolkit version exposes it.
+
+    # The 13-bus failure mode leaves a compile command without the expected
+    # model. Inspect summary records only when this toolkit version exposes a
+    # bus count, keeping compatibility with versions that return other shapes.
     try:
-        bus_count = dss_tools.model._summary_model_records
-        if callable(bus_count):
-            bus_count = bus_count()
-        if isinstance(bus_count, dict):
-            counts = bus_count.get("counts", bus_count)
+        summary = dss_tools.model._summary_model_records
+        if callable(summary):
+            summary = summary()
+        if isinstance(summary, dict):
+            counts = summary.get("counts", summary)
             if isinstance(counts, dict):
                 buses = counts.get("buses", counts.get("bus_count"))
                 if isinstance(buses, (int, float)) and buses <= 0:
-                    return "OpenDSS compiled no buses; check Redirect/Compile paths and messages."
+                    return "OpenDSS compiled no buses; check Redirect/Compile paths and engine diagnostics."
     except (AttributeError, TypeError, ValueError):
-        # Not all py-dss-toolkit versions expose this metadata consistently;
-        # do not fail a compile merely because optional metadata is unavailable.
+        # Optional metadata varies by toolkit version; don't reject a circuit
+        # solely because this extra diagnostic is unavailable.
         pass
     return None
 
@@ -125,7 +126,7 @@ def _reset_compile_state() -> None:
 
 
 def clear_all_opendss_memory() -> Dict[str, Any]:
-    """Clear OpenDSS engine memory (ClearAll); resets circuit state."""
+    """Clear OpenDSS engine memory and reset circuit state."""
     try:
         engine.ensure_engine().text("ClearAll")
         _reset_compile_state()
