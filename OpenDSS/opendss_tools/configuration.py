@@ -112,6 +112,14 @@ def _validate_compiled_circuit(readiness: Any) -> str | None:
                 buses = counts.get("buses", counts.get("bus_count"))
                 if isinstance(buses, (int, float)) and buses <= 0:
                     return "OpenDSS compiled no buses; check Redirect/Compile paths and engine diagnostics."
+            elif isinstance(counts, (list, tuple)) and counts:
+                # Some toolkit versions expose summary records as a column
+                # mapping, others as a sequence of rows with a bus count.
+                for row in counts:
+                    if isinstance(row, dict):
+                        buses = row.get("buses", row.get("bus_count"))
+                        if isinstance(buses, (int, float)) and buses <= 0:
+                            return "OpenDSS compiled no buses; check Redirect/Compile paths and engine diagnostics."
     except (AttributeError, TypeError, ValueError):
         # Optional metadata varies by toolkit version; don't reject a circuit
         # solely because this extra diagnostic is unavailable.
