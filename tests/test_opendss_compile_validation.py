@@ -30,16 +30,12 @@ def configuration_module(monkeypatch):
     monkeypatch.setitem(
         sys.modules, "py_dss_toolkit", types.SimpleNamespace(dss_tools=fake_tools)
     )
-    monkeypatch.setitem(
-        sys.modules,
-        "powermcp.sandbox",
-        types.SimpleNamespace(
-            PathNotAllowed=type("PathNotAllowed", (Exception,), {}),
-            allowed_roots=lambda: [],
-            checked_path=lambda value, **_kwargs: str(value),
-            checked_read_tree=lambda *_args, **_kwargs: None,
-        ),
-    )
+    sandbox = types.ModuleType("powermcp.sandbox")
+    sandbox.PathNotAllowed = type("PathNotAllowed", (Exception,), {})
+    sandbox.allowed_roots = lambda: []
+    sandbox.checked_path = lambda value, **_kwargs: str(value)
+    sandbox.checked_read_tree = lambda *_args, **_kwargs: None
+    monkeypatch.setitem(sys.modules, "powermcp.sandbox", sandbox)
 
     for name in (
         "core", "core.state", "core.engine", "opendss_tools",
@@ -47,19 +43,31 @@ def configuration_module(monkeypatch):
     ):
         monkeypatch.delitem(sys.modules, name, raising=False)
 
+    core = types.ModuleType("core")
+    core.__path__ = []
+    monkeypatch.setitem(sys.modules, "core", core)
+
     state = types.ModuleType("core.state")
     state.circuit_loaded = False
     state.solution_available = False
     state.last_compiled_dss_file = None
     monkeypatch.setitem(sys.modules, "core.state", state)
+    core.state = state
 
     engine = types.ModuleType("core.engine")
     engine.ensure_engine = lambda: types.SimpleNamespace(text=lambda _cmd: None)
     monkeypatch.setitem(sys.modules, "core.engine", engine)
+    core.engine = engine
 
+    utils = types.ModuleType("utils")
+    utils.__path__ = []
+    monkeypatch.setitem(sys.modules, "utils", utils)
     responses = types.ModuleType("utils.responses")
     responses._err = lambda message: {"success": False, "error": message}
-    responses._ok = lambda payload=None: {"success": True, **({"payload": payload} if payload is not None else {})}
+    responses._ok = lambda payload=None: {
+        "success": True,
+        **({"payload": payload} if payload is not None else {}),
+    }
     monkeypatch.setitem(sys.modules, "utils.responses", responses)
 
     module = importlib.import_module("opendss_tools.configuration")
