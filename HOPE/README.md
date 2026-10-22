@@ -29,6 +29,7 @@ Claude/local full-access server:
 - `hope_nodal_prices`
 - `hope_compare_cases`
 - `hope_run_holistic`
+- `hope_holistic_status`
 - `hope_run_erec`
 - `hope_rep_day_audit`
 - `hope_aggregation_audit`
@@ -138,6 +139,29 @@ Both servers accept:
 - exact `ModelCases` directory names such as `USA_64zone_GTEP_case`
 - prefixed paths such as `ModelCases/USA_64zone_GTEP_case`
 - the legacy alias `md_gtep_clean`
+
+Case discovery uses `HOPE_MODELCASES_PATH` when it is set and otherwise falls
+back to `<HOPE_REPO_ROOT>/ModelCases`.
+
+## Agent-safe GTEP-to-PCM runs
+
+`hope_run_holistic(gtep_case_id, pcm_case_id, request_id, solver)` copies both
+source cases into an isolated per-request workspace before launching Julia.
+Existing outputs are excluded. Repeating the same request ID with identical
+inputs returns the existing run, while conflicting reuse is rejected. Poll
+`hope_holistic_status(request_id)` for reconnect-safe state and artifact paths.
+
+Set `HOPE_AGENT_RUNS_ROOT` to move the persistent workspaces from their default
+`<HOPE_REPO_ROOT>/artifacts/agent_runs` location. Set
+`HOPE_MODELCASES_PATH` when ModelCases is maintained as a separate checkout.
+
+## Upstream synchronization
+
+The model-aware `core.py` and opt-in integration tests are synchronized from
+`HOPE-Model-Project/HOPE.jl/tools/hope_mcp_server`. PowerMCP retains ownership
+of its MCP SDK 2 transport entrypoints, packaging, lockfile, documentation, and
+layout-specific unit tests. `SYNCED_FROM_HOPE.yml` records the exact upstream
+HOPE commit represented by this downstream copy.
 
 ## Local run
 
