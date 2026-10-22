@@ -217,8 +217,14 @@ async def run_project_to_completion(
 async def _report_progress(project_name: str, state: str, progress: Optional[float], message: str) -> None:
     """Stream progress to clients that support MCP logging; tolerate no logging session."""
     try:
-        from mcp.server.lowlevel.server import request_ctx
+        # Resolve request context lazily: the public MCP SDK import surface has
+        # changed across v2 releases. A missing request context should only
+        # disable streaming progress, never the simulation workflow.
+        from mcp.server.lowlevel import server as lowlevel_server
 
+        request_ctx = getattr(lowlevel_server, "request_ctx", None)
+        if request_ctx is None:
+            return
         ctx = request_ctx.get()
         await ctx.session.send_log_message(
             level="info",
