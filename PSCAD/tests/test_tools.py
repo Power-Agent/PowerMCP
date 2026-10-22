@@ -93,6 +93,15 @@ class TestRunProjectToCompletion(unittest.IsolatedAsyncioTestCase):
         self.pscad = MagicMock()
         self.project = MagicMock()
         pscad_manager._pscad = self.pscad
+        # The connection manager validates process and heartbeat health even
+        # when a mocked PSCAD handle is installed; isolate those OS/RMI checks.
+        self.connection_checks = patch.multiple(
+            "pscad_mcp.core.connection_manager.PSCADConnectionManager",
+            is_process_running=MagicMock(return_value=True),
+        )
+        self.connection_checks.start()
+        self.pscad.is_alive.return_value = True
+        self.pscad.is_busy.return_value = False
         self.pscad.licensed.return_value = True
         self.pscad.project.return_value = self.project
         self.project.start = MagicMock()
@@ -105,6 +114,7 @@ class TestRunProjectToCompletion(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.progress.stop()
+        self.connection_checks.stop()
 
     async def test_completion_requires_observing_running(self):
         self.project.run_status.side_effect = [
