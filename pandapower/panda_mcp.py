@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Any, Union
+import copy
 import sys
 from pathlib import Path
 
@@ -265,7 +266,7 @@ def run_contingency_analysis(contingency_type: str = "N-1",
         net = _get_network()
         
         # Store original state
-        orig_net = net.deepcopy()
+        orig_net = copy.deepcopy(net)
         results = []
         
         # Define elements to analyze
@@ -276,7 +277,7 @@ def run_contingency_analysis(contingency_type: str = "N-1",
         for element_type in elements:
             for idx in net[element_type].index:
                 # Create contingency by taking element out of service
-                contingency_net = orig_net.deepcopy()
+                contingency_net = copy.deepcopy(orig_net)
                 contingency_net[element_type].at[idx, 'in_service'] = False
                 
                 try:
