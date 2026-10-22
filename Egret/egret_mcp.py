@@ -36,6 +36,21 @@ logging.getLogger('pyomo').setLevel(logging.WARNING)
 # Create an MCP server
 mcp = FastMCP("Egret Power System Analysis Server")
 
+# MATPOWER marks an unlimited branch with rateA/B/C = 0. Egret's own parser
+# stores that as None, which its models read as "no thermal limit", but they
+# index these keys directly, so a converter that leaves them out (powerio 0.11.5
+# does) fails with KeyError: 'rating_long_term'.
+_BRANCH_RATING_KEYS = ("rating_long_term", "rating_short_term", "rating_emergency")
+
+
+def _read_model_data(case_file: str) -> ModelData:
+    """Read a case and give unrated branches Egret's explicit None ratings."""
+    md = ModelData.read(case_file)
+    for branch in md.data.get("elements", {}).get("branch", {}).values():
+        for key in _BRANCH_RATING_KEYS:
+            branch.setdefault(key, None)
+    return md
+
 @mcp.tool()
 def solve_unit_commitment_problem(
     case_file: str,
@@ -65,7 +80,7 @@ def solve_unit_commitment_problem(
         
         with redirect_stdout(f_out), redirect_stderr(f_err):
             # Load the case file
-            md = ModelData.read(case_file)
+            md = _read_model_data(case_file)
             
             # Solve the unit commitment problem with solver_tee=False to silence solver output
             md_sol = solve_unit_commitment(
@@ -121,7 +136,7 @@ def solve_ac_opf(
         
         with redirect_stdout(f_out), redirect_stderr(f_err):
             # Load the case file
-            md = ModelData.read(case_file)
+            md = _read_model_data(case_file)
             
             # Solve AC OPF with solver_tee=False to silence solver output
             md_sol, results = solve_acopf(
@@ -178,7 +193,7 @@ def solve_dc_opf(
         
         with redirect_stdout(f_out), redirect_stderr(f_err):
             # Load the case file
-            md = ModelData.read(case_file)
+            md = _read_model_data(case_file)
             
             # Solve DC OPF with solver_tee=False to silence solver output
             md_sol, results = solve_dcopf(
