@@ -146,7 +146,15 @@ class TestRunProjectToCompletion(unittest.IsolatedAsyncioTestCase):
 
     async def test_timeout_is_explicit(self):
         self.project.run_status.return_value = ("Run", 20)
-        with patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=[0, 0, 2, 2, 2, 2, 2]):
+        clock = {"now": 0.0}
+
+        def advance_clock():
+            # Advance deterministically on every clock read without exhausting
+            # a finite mock side_effect as the polling loop evolves.
+            clock["now"] += 0.6
+            return clock["now"]
+
+        with patch("pscad_mcp.tools.project_tools.time.monotonic", side_effect=advance_clock):
             with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new=AsyncMock()):
                 result = await run_project_to_completion("case", timeout_seconds=1, poll_interval_seconds=0.001)
         self.assertEqual(result["final_status"], "timeout")
