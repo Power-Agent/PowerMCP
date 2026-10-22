@@ -43,7 +43,7 @@ New Transformer.XFM1  Phases=3   Windings=2  XHL=2
 
 
 !LINE CODES
-redirect IEEELineCodes.dss
+redirect IEEELineCodes.DSS
 
 // these are local matrix line codes
 // corrected 9-14-2011
