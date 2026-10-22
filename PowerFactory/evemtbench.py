@@ -5,10 +5,79 @@ import inspect
 import json
 import math
 import random
-from typing import Any, Optional
+from typing import Any, Optional, get_args
 
 
 class EvEMTBenchMixin:
+    _evemtbench_creators = {
+        "transformer": "create_evemtbench_transformer",
+        "overhead_line": "create_evemtbench_line",
+        "underground_cable": "create_evemtbench_cable",
+        "external_grid": "create_evemtbench_external_grid",
+        "load": "create_evemtbench_load",
+        "synchronous_machine": "create_evemtbench_synchronous_machine",
+    }
+
+    @staticmethod
+    def _evemtbench_parameter_schema(method):
+        schema = {}
+        types = {str: "string", float: "number", int: "integer", bool: "boolean"}
+        for name, parameter in inspect.signature(method).parameters.items():
+            if name.startswith("_"):
+                continue
+            annotation = parameter.annotation
+            arguments = get_args(annotation)
+            nullable = type(None) in arguments
+            if nullable:
+                annotation = next(arg for arg in arguments if arg is not type(None))
+            entry = {
+                "type": types.get(annotation, str(annotation)),
+                "required": parameter.default is inspect.Parameter.empty,
+            }
+            if nullable:
+                entry["nullable"] = True
+            if parameter.default is not inspect.Parameter.empty:
+                entry["default"] = parameter.default
+            schema[name] = entry
+        return schema
+
+    @classmethod
+    def list_evemtbench_components(cls, component_type: str, filters=None):
+        """List one component catalog and its creation inputs without PowerFactory."""
+        listings = {
+            "transformer": "list_evemtbench_transformer_profiles",
+            "overhead_line": "list_evemtbench_line_profiles",
+            "underground_cable": "list_evemtbench_cable_profiles",
+            "external_grid": "list_evemtbench_external_grid_profiles",
+            "load": "list_evemtbench_load_profiles",
+            "synchronous_machine": "list_evemtbench_synchronous_machine_profiles",
+        }
+        kind = str(component_type or "").strip().lower().replace("-", "_")
+        if kind not in listings:
+            return {
+                "success": False,
+                "component_type": kind,
+                "supported_component_types": list(listings),
+                "message": "component_type must be one of: " + ", ".join(listings),
+            }
+        listing = getattr(cls, listings[kind])
+        metadata = {
+            "component_type": kind,
+            "available_filters": cls._evemtbench_parameter_schema(listing),
+            "creation_parameters": cls._evemtbench_parameter_schema(
+                getattr(cls, cls._evemtbench_creators[kind])
+            ),
+        }
+        if filters is None:
+            filters = {}
+        if not isinstance(filters, dict):
+            return {"success": False, "message": "filters must be an object", **metadata}
+        try:
+            inspect.signature(listing).bind(**filters)
+        except TypeError as exc:
+            return {"success": False, "message": f"Invalid {kind} filters: {exc}", **metadata}
+        return {**listing(**filters), **metadata}
+
     @classmethod
     def _rollback_equipment_type(cls, equipment_folder, created_type,
                                  created_folder, type_name, type_class, folder_name):
@@ -1191,7 +1260,7 @@ class EvEMTBenchMixin:
         }
 
     @classmethod
-    def list_evemtbench_components(
+    def list_evemtbench_transformer_profiles(
         cls,
         voltage_class: str = "",
         rated_power_mva: Optional[float] = None,
@@ -1382,14 +1451,7 @@ class EvEMTBenchMixin:
         parameters: dict[str, Any],
     ) -> dict[str, Any]:
         """Route one component request to its validated EvEMTBench creator."""
-        creators = {
-            "transformer": "create_evemtbench_transformer",
-            "overhead_line": "create_evemtbench_line",
-            "underground_cable": "create_evemtbench_cable",
-            "external_grid": "create_evemtbench_external_grid",
-            "load": "create_evemtbench_load",
-            "synchronous_machine": "create_evemtbench_synchronous_machine",
-        }
+        creators = cls._evemtbench_creators
         kind = str(component_type or "").strip().lower().replace("-", "_")
         method_name = creators.get(kind)
         supported = ", ".join(creators)

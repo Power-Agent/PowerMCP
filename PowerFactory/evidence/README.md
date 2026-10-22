@@ -2,6 +2,7 @@
 
 Latest follow-up records:
 
+- [FT-27](FT-27_unified_evemtbench_catalog_mcp.txt): unified MCP tool exposure and filtered overhead-line listing with creation-parameter discovery.
 - [FT-25](FT-25_bootstrap_confirmation_binding_sp1.txt): bootstrap stale-token rejection after the create/reuse plan changed.
 - [FT-26](FT-26_pdf_diagram_restoration_sp1.txt): restoration of the previously active single-line diagram after successful PDF export.
 

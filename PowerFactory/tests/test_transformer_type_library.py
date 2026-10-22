@@ -315,7 +315,7 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
 
     def test_database_validates_and_lists_supported_classes(self):
         database = agent_module.DIgSILENTAgent._load_evemtbench_database()
-        result = agent_module.DIgSILENTAgent.list_evemtbench_components()
+        result = agent_module.DIgSILENTAgent.list_evemtbench_transformer_profiles()
 
         self.assertEqual(database["schema_version"], 1)
         self.assertTrue(result["success"], result.get("message"))
@@ -328,7 +328,7 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
         self.assertIn("Institute of Electrical Energy Systems", result["affiliation"])
 
     def test_catalog_filters_an_exact_rating(self):
-        result = agent_module.DIgSILENTAgent.list_evemtbench_components(
+        result = agent_module.DIgSILENTAgent.list_evemtbench_transformer_profiles(
             "345/25",
             800.0,
         )
