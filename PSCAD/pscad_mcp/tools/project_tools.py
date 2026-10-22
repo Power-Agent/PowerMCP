@@ -118,7 +118,7 @@ async def run_project_to_completion(
     while time.monotonic() < deadline:
         try:
             status, progress = await robust_executor.run_safe(
-                project.run_status, _timeout=0
+                project.run_status
             )
         except Exception as exc:
             return {
@@ -230,7 +230,7 @@ async def _report_progress(project_name: str, state: str, progress: Optional[flo
             },
             logger="pscad.run",
         )
-    except (LookupError, AttributeError, RuntimeError, ValueError):
+    except Exception:
         # Direct calls and clients without a logging-capable session still get
         # meaningful polling results; progress reporting must not break a run.
         return
@@ -239,7 +239,7 @@ async def _report_progress(project_name: str, state: str, progress: Optional[flo
 async def _read_build_messages(project: Any) -> List[Any]:
     """Read build diagnostics after a run returns idle before starting."""
     try:
-        return await robust_executor.run_safe(project.messages, _timeout=0) or []
+        return await robust_executor.run_safe(project.messages) or []
     except Exception:
         return []
 
