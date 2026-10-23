@@ -25,6 +25,12 @@ if spec is None or not spec.submodule_search_locations:
 package_root = Path(next(iter(spec.submodule_search_locations)))
 catalog_root = package_root / "_servers" / "PowerFactory" / "data"
 
+# README reference links must resolve from the installed package, not the checkout.
+for filename in ("tool_guide.md", "evemtbench.md", "evemtbench_component_catalog.md"):
+    path = catalog_root.parent / "references" / filename
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
+        raise SystemExit(f"wheel is missing reference documentation: {path}")
+
 identifiers = set()
 for filename, expected_tables in CATALOGS.items():
     path = catalog_root / filename
@@ -70,6 +76,16 @@ for label in component_types:
         raise SystemExit(f"installed-wheel {label} listing returned no catalog entries")
     if not result.get("creation_parameters") or "available_filters" not in result:
         raise SystemExit(f"installed-wheel {label} listing omitted parameter discovery")
+    if label == "load":
+        inputs = result["creation_parameters"]
+        if inputs["load_model"].get("default") != "constant_power" or inputs["type_name"].get("default") != "":
+            raise SystemExit("installed-wheel load listing omitted optional ZIP creation inputs")
+    if label == "transformer":
+        inputs = result["creation_parameters"]
+        if inputs["zero_sequence_model"].get("default") != "unchanged":
+            raise SystemExit("installed-wheel transformer listing changed the default zero-sequence mode")
+        if not inputs["r0_r1_ratio"].get("nullable") or not result.get("partial_table_10_mapping"):
+            raise SystemExit("installed-wheel transformer listing omitted partial zero-sequence discovery")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "

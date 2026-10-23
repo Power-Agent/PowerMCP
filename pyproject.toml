@@ -143,6 +143,7 @@ packages = ["powermcp"]
 "PowerFactory/INSTALL.txt" = "powermcp/_servers/PowerFactory/INSTALL.txt"
 "PowerFactory/MCP_PowerFactory.py" = "powermcp/_servers/PowerFactory/MCP_PowerFactory.py"
 "PowerFactory/README.md" = "powermcp/_servers/PowerFactory/README.md"
+"PowerFactory/references" = "powermcp/_servers/PowerFactory/references"
 "PowerFactory/data/evemtbench_transformers.json" = "powermcp/_servers/PowerFactory/data/evemtbench_transformers.json"
 "PowerFactory/data/evemtbench_overhead_lines.json" = "powermcp/_servers/PowerFactory/data/evemtbench_overhead_lines.json"
 "PowerFactory/data/evemtbench_underground_cables.json" = "powermcp/_servers/PowerFactory/data/evemtbench_underground_cables.json"
