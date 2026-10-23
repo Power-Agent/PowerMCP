@@ -99,7 +99,30 @@ def diurnal_by_tech(case_dir, period, zones="all", verbose=False):
     for g, cols in groups.items():
         x = data[cols].sum(axis=1).to_numpy()
         out[g] = np.bincount(hod, weights * x, minlength=24) / wsum
-    df = pd.DataFrame(out, index=range(24))
+
+    # Stable snake_case keys are shared with the capacity classifier; translate
+    # only at the presentation boundary so calculations remain consistent.
+    label_by_key = {
+        "natural_gas": "Natural Gas",
+        "hydro": "Hydro",
+        "nuclear": "Nuclear",
+        "coal": "Coal",
+        "wind": "Wind",
+        "solar": "Solar",
+        "battery": "Battery",
+        "biomass": "Other",
+        "other": "Other",
+        "dr": "DR",
+    }
+    display_out = {}
+    for key, values in out.items():
+        label = label_by_key.get(key, "Other")
+        if label in display_out:
+            display_out[label] = display_out[label] + values
+        else:
+            display_out[label] = values
+
+    df = pd.DataFrame(display_out, index=range(24))
     return df.reindex(columns=[g for g in STACK_ORDER if g in df.columns], fill_value=0.0)
 
 
