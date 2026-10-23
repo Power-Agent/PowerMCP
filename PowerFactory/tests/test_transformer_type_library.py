@@ -10,7 +10,8 @@ DEFAULTS = {
     "ElmTerm": {"uknom": 0.0, "outserv": 0},
     "StaCubic": {"obj_id": None},
     "StaSwitch": {"aUsage": "", "on_off": 0},
-    "ElmTr2": {"typ_id": None, "bushv": None, "buslv": None, "outserv": 0},
+    "ElmTr2": {"typ_id": None, "bushv": None, "buslv": None, "outserv": 0,
+               "neutConfig": 1, "cgnd_h": 1, "re0tr_h": 0.0, "xe0tr_h": 0.0},
     "ElmLne": {
         "typ_id": None,
         "bus1": None,
@@ -55,6 +56,10 @@ DEFAULTS = {
         "itrdr": 0.0,
         "itrdl": 0.0,
         "it0mt": 0,
+        "r0pu": 0.0,
+        "x0pu": 0.03,
+        "uk0tr": 3.0,
+        "ur0tr": 0.0,
         "strn": 0.0,
         "utrn_h": 0.0,
         "utrn_l": 0.0,
@@ -128,6 +133,11 @@ class FakeObject:
                     elif name == "x1pu":
                         attributes["uktr"] = 100.0 * (
                             attributes["r1pu"] ** 2 + value**2
+                        ) ** 0.5
+                    elif name in ("r0pu", "x0pu"):
+                        attributes["ur0tr"] = 100.0 * attributes["r0pu"]
+                        attributes["uk0tr"] = 100.0 * (
+                            attributes["r0pu"] ** 2 + attributes["x0pu"] ** 2
                         ) ** 0.5
             return
         object.__setattr__(self, name, value)
@@ -644,6 +654,161 @@ class EvEMTBenchTransformerTest(unittest.TestCase):
                 self.assertEqual(grid["ElmTr2"], [])
                 self.assertEqual(high_bus["StaCubic"], [])
                 self.assertEqual(low_bus["StaCubic"], [])
+
+
+class EvEMTBenchZeroSequenceTest(unittest.TestCase):
+    network = EvEMTBenchTransformerTest.network
+    call = EvEMTBenchTransformerTest.call
+    transformer_types = staticmethod(EvEMTBenchTransformerTest.transformer_types)
+
+    def options(self, **changes):
+        result = dict(zero_sequence_model="ynd11_equivalent", r0_r1_ratio=2.15, x0_x1_ratio=0.925)
+        result.update(changes)
+        return result
+
+    def test_plan_scales_r_and_x_separately_without_changing_positive_samples(self):
+        agent = agent_module.DIgSILENTAgent
+        for seed in range(20):
+            args = ("110/20", 20.0, 60.0, "YNd", 11, "Type", seed)
+            baseline = agent._evemtbench_transformer_plan(*args)
+            item = agent._evemtbench_transformer_plan(*args, **self.options())
+            self.assertEqual(item["powerfactory_attributes"], baseline["powerfactory_attributes"])
+            self.assertNotIn("zero_sequence", baseline)
+            self.assertEqual(item, agent._evemtbench_transformer_plan(*args, **self.options()))
+            attributes = item["powerfactory_attributes"]
+            r1 = attributes["pcutr"] / (attributes["strn"] * 1000)
+            x1 = ((attributes["uktr"] / 100) ** 2 - r1 ** 2) ** 0.5
+            zero = item["zero_sequence"]
+            self.assertAlmostEqual(zero["type_attributes"]["r0pu"], 2.15 * r1)
+            self.assertAlmostEqual(zero["type_attributes"]["x0pu"], 0.925 * x1)
+            self.assertIn("no physical limb/core", zero["limitations"][0])
+
+    def test_preview_and_confirm_verify_type_grounding_and_service_state(self):
+        folder, grid, hv, lv, app = self.network()
+        preview = self.call(app, **self.options(out_of_service=True))
+        self.assertTrue(preview["success"], preview)
+        self.assertFalse(preview["applied"])
+        self.assertEqual(self.transformer_types(folder), [])
+        result = self.call(app, confirmation=preview["confirmation_required"], **self.options(out_of_service=True))
+        self.assertTrue(result["success"], result)
+        typ = self.transformer_types(folder)[0]
+        transformer = grid["ElmTr2"][0]
+        self.assertIs(transformer.GetAttribute("typ_id"), typ)
+        self.assertEqual(result["retained_element_attributes"]["typ_id"], typ.GetFullName())
+        self.assertEqual(transformer.GetAttribute("outserv"), 1)
+        for field, value in preview["item"]["zero_sequence"]["element_attributes"].items():
+            self.assertEqual(transformer.GetAttribute(field), value)
+        for field, value in preview["item"]["zero_sequence"]["derived_type_attributes"].items():
+            self.assertAlmostEqual(typ.GetAttribute(field), value)
+
+    def test_default_does_not_assign_zero_sequence_or_grounding(self):
+        folder, grid, hv, lv, app = self.network()
+        preview = self.call(app)
+        result = self.call(app, confirmation=preview["confirmation_required"])
+        self.assertTrue(result["success"])
+        self.assertNotIn("zero_sequence", result["item"])
+        self.assertEqual(self.transformer_types(folder)[0].GetAttribute("x0pu"), 0.03)
+        self.assertEqual(grid["ElmTr2"][0].GetAttribute("cgnd_h"), 1)
+
+    def test_unsupported_configurations_and_invalid_ratios_fail_before_connection(self):
+        agent = agent_module.DIgSILENTAgent
+        base = dict(voltage_class="110/20", rated_power_mva=20.0,
+                    nominal_frequency_hz=60.0, vector_group="YNd", clock_number=11,
+                    transformer_name="Transformer", type_name="Type",
+                    high_voltage_bus_name="HV", low_voltage_bus_name="LV", **self.options())
+        changes = [dict(voltage_class="110/11"), dict(rated_power_mva=25),
+                   dict(nominal_frequency_hz=50), dict(vector_group="YNyn"),
+                   dict(clock_number=5), dict(zero_sequence_model="other"),
+                   dict(zero_sequence_model="unchanged")]
+        for field, values in (("r0_r1_ratio", (None, True, "2.15", float("nan"), float("inf"), 1.49, 2.81)),
+                              ("x0_x1_ratio", (None, True, "0.925", -1, 0.84, 1.01))):
+            changes.extend({field: value} for value in values)
+        with patch.object(agent, "_get_application") as connect:
+            for change in changes:
+                with self.subTest(change=change):
+                    arguments = dict(base)
+                    arguments.update(change)
+                    result = agent.create_evemtbench_component("transformer", arguments)
+                    self.assertFalse(result["success"], result)
+            connect.assert_not_called()
+
+    def test_changed_ratio_model_or_destination_invalidates_confirmation(self):
+        folder, grid, hv, lv, app = self.network(with_type_folder=False)
+        preview = self.call(app, **self.options())
+        for changes in (dict(r0_r1_ratio=2.2), dict(x0_x1_ratio=0.95),
+                        dict(zero_sequence_model="unchanged", r0_r1_ratio=None, x0_x1_ratio=None)):
+            result = self.call(app, confirmation=preview["confirmation_required"], **self.options(**changes))
+            self.assertFalse(result["success"])
+            self.assertIn("confirmation must exactly match", result["message"])
+        folder.CreateObject("IntPrjfolder", "Transformer Types")
+        result = self.call(app, confirmation=preview["confirmation_required"], **self.options())
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(self.transformer_types(folder), [])
+        self.assertEqual(grid["ElmTr2"], [])
+
+    def test_readback_and_grounding_failures_roll_back_type_and_connections(self):
+        for rejected in ("r0pu", "x0pu", "cgnd_h"):
+            with self.subTest(rejected=rejected):
+                folder, grid, hv, lv, app = self.network(with_type_folder=False)
+                (grid if rejected == "cgnd_h" else folder).reject_attribute = rejected
+                preview = self.call(app, **self.options())
+                result = self.call(app, confirmation=preview["confirmation_required"], **self.options())
+                self.assertFalse(result["success"], result)
+                self.assertTrue(result["rolled_back"], result)
+                self.assertEqual(folder["IntPrjfolder"], [])
+                self.assertEqual(grid["ElmTr2"], [])
+                self.assertEqual(hv["StaCubic"], [])
+                self.assertEqual(lv["StaCubic"], [])
+
+    def test_partial_element_rollback_preserves_its_type(self):
+        folder, grid, hv, lv, app = self.network()
+        grid.reject_attribute = "cgnd_h"
+        preview = self.call(app, **self.options())
+        create = FakeObject.CreateObject
+        def cannot_delete(parent, class_name, name):
+            obj = create(parent, class_name, name)
+            if class_name == "ElmTr2":
+                obj.delete_fails = True
+            return obj
+        with patch.object(FakeObject, "CreateObject", cannot_delete):
+            result = self.call(app, confirmation=preview["confirmation_required"], **self.options())
+        self.assertFalse(result["success"])
+        self.assertFalse(result["rolled_back"])
+        self.assertTrue(result["type_created"])
+        self.assertIn("remaining_transformer", result)
+        self.assertEqual(len(self.transformer_types(folder)), 1)
+
+    def test_listing_advertises_optional_inputs_and_partial_mapping(self):
+        listing = agent_module.DIgSILENTAgent.list_evemtbench_components("transformer")
+        self.assertEqual(listing["creation_parameters"]["zero_sequence_model"]["default"], "unchanged")
+        self.assertTrue(listing["creation_parameters"]["r0_r1_ratio"]["nullable"])
+        self.assertIn("partial_table_10_mapping", listing)
+        self.assertEqual(listing["unmapped_source_tables"], [10, 12])
+
+    def test_derived_zero_sequence_verification_failure_cleans_new_folder(self):
+        folder, grid, hv, lv, app = self.network(with_type_folder=False)
+        preview = self.call(app, **self.options())
+        original = FakeObject.GetAttribute
+        def bad_derived(obj, key):
+            if obj.class_name == "TypTr2" and key == "uk0tr":
+                return 999.0
+            return original(obj, key)
+        with patch.object(FakeObject, "GetAttribute", bad_derived):
+            result = self.call(app, confirmation=preview["confirmation_required"], **self.options())
+        self.assertFalse(result["success"])
+        self.assertTrue(result["rolled_back"])
+        self.assertEqual(folder["IntPrjfolder"], [])
+        self.assertEqual(grid["ElmTr2"], [])
+
+    def test_database_failure_remains_a_structured_error(self):
+        folder, grid, hv, lv, app = self.network()
+        with patch.object(agent_module.DIgSILENTAgent, "_load_evemtbench_database",
+                          side_effect=RuntimeError("database unavailable")):
+            result = self.call(app, **self.options())
+        self.assertFalse(result["success"])
+        self.assertEqual(result["message"], "database unavailable")
+        self.assertEqual(self.transformer_types(folder), [])
 
 
 if __name__ == "__main__":

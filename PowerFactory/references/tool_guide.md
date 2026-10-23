@@ -367,15 +367,54 @@ The performance values use PowerFactory's native Python property assignment;
 each value is checked immediately and again after the database write. If element
 creation fails, the new type, element, cubicles, and switches are rolled back.
 
-Table 10 zero-sequence and Table 12 saturation data are stored and returned by
-the catalog tool, but are not written until their PowerFactory attribute
-mappings are validated. The `Block` class and other component families remain
-catalog-only for the same reason. The caller must explicitly choose a clock
+Full Table 10 core/limb and Table 12 saturation mappings remain unsupported.
+The restricted zero-sequence equivalent below is an opt-in exception. The
+`Block` class remains catalog-only. The caller must explicitly choose a clock
 number because Table 11 specifies vector-group families rather than one clock
 number for every generated transformer.
 
 See [references/evemtbench.md](evemtbench.md) for the source mapping
 and limitations.
+
+### Opt-in YNd11 zero-sequence impedance equivalent
+
+For **20 MVA, 110/20 kV, 60 Hz, YNd11 only**, add these fields to the
+transformer creation `parameters` (not a complete creation request):
+
+```json
+{
+    "zero_sequence_model": "ynd11_equivalent",
+    "r0_r1_ratio": 2.15,
+    "x0_x1_ratio": 0.925
+}
+```
+
+The default `zero_sequence_model="unchanged"` preserves the previous creation
+path; ratios are rejected unless the opt-in model is selected. The equivalent
+requires finite numeric R0/R1 in [1.5, 2.8] and X0/X1 in [0.85, 1.0], taken
+from Table 10's three-limb numerical rule. No physical three-limb/core model
+is configured or claimed. Ratios are explicit engineering choices, not sampled.
+Other ratings, classes, frequencies, vector groups and clock numbers are rejected.
+
+The creator derives R1/X1 from the same sampled Table 11 data as before, then
+writes `r0pu = r1pu * r0_r1_ratio` and `x0pu = x1pu * x0_x1_ratio`. It checks
+derived `ur0tr` and `uk0tr`, and leaves positive-sequence data unchanged.
+For the new element only, it explicitly sets `neutConfig=0`, `cgnd_h=0`,
+`re0tr_h=0`, `xe0tr_h=0`: no external neutral conductor, connected HV star
+point, zero internal neutral impedance. Existing elements are not edited.
+Model, ratios, derived parameters, grounding and destination are confirmation-bound.
+Type/connection failures roll back new objects; a type is retained if failed
+element cleanup leaves a transformer behind, with survivors reported.
+
+Lab PC write/readback and Complete Method sensitivity/I0-blocking checks passed
+on a separate temporary network: [FT-30](../evidence/FT-30_transformer_zero_sequence_ynd_lab_pc.txt).
+These do not validate absolute fault-current accuracy, core/limb construction,
+zero-sequence magnetizing models, internal-delta YNyn cases, saturation or RMS/EMT.
+The integrated opt-in creator also passed Lab PC creation and readback checks:
+[FT-31](../evidence/FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt).
+The new transformer remained out of service, with the requested type and solid
+HV-neutral grounding retained. No calculation was run on that integrated
+transformer; the fault-response checks used the separate FT-30 network.
 
 ---
 

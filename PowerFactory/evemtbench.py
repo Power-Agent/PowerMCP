@@ -1396,6 +1396,7 @@ class EvEMTBenchMixin:
                 "results": results,
                 "vector_groups": database["vector_groups"],
                 "saturation": database["saturation"],
+                "partial_table_10_mapping": database["powerfactory"].get("partial_table_10_mapping", {}),
                 "unmapped_source_tables": database["powerfactory"][
                     "unmapped_source_tables"
                 ],
@@ -1414,7 +1415,18 @@ class EvEMTBenchMixin:
         clock_number: int,
         type_name: str,
         seed: int,
+        zero_sequence_model: str = "unchanged",
+        r0_r1_ratio: Optional[float] = None,
+        x0_x1_ratio: Optional[float] = None,
     ):
+        if zero_sequence_model not in ("unchanged", "ynd11_equivalent"):
+            raise RuntimeError("zero_sequence_model must be unchanged or ynd11_equivalent")
+        if zero_sequence_model == "unchanged" and (r0_r1_ratio is not None or x0_x1_ratio is not None):
+            raise RuntimeError("Zero-sequence ratios require zero_sequence_model=ynd11_equivalent")
+        if zero_sequence_model == "ynd11_equivalent":
+            if (voltage_class, rated_power_mva, nominal_frequency_hz, vector_group, clock_number) != (
+                    "110/20", 20.0, 60.0, "YNd", 11):
+                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 60 Hz YNd11")
         database = cls._load_evemtbench_database()
         source = database["classes"][voltage_class]
         rng = random.Random(seed)
@@ -1469,7 +1481,7 @@ class EvEMTBenchMixin:
             "pfe": sampled(rating["no_load_losses_kw"]),
             "curmg": sampled(rating["no_load_current_pct"]),
         }
-        return {
+        item = {
             "name": type_name,
             "catalog_id": database["catalog_id"],
             "source_tables": database["source"]["tables"],
@@ -1494,6 +1506,49 @@ class EvEMTBenchMixin:
                 "unmapped_source_tables"
             ],
         }
+
+        if zero_sequence_model == "ynd11_equivalent":
+            rules = [rule for rule in source["zero_sequence_rules"]
+                     if rule["when"] == {"limb_count": 3}]
+            if len(rules) != 1:
+                raise RuntimeError("Expected one Table 10 three-limb numerical-ratio rule")
+            rule = rules[0]
+            for label, value, spec in (
+                ("r0_r1_ratio", r0_r1_ratio, rule["r0_r1_ratio"]),
+                ("x0_x1_ratio", x0_x1_ratio, rule["x0_x1_ratio"]),
+            ):
+                lower, upper = spec["min"], spec["max"]
+                if (isinstance(lower, bool) or isinstance(upper, bool)
+                        or not math.isfinite(float(lower)) or not math.isfinite(float(upper))
+                        or float(lower) > float(upper)):
+                    raise RuntimeError("Invalid zero-sequence source interval")
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or not lower <= value <= upper):
+                    raise RuntimeError(f"{label} must be a finite number in [{lower}, {upper}]")
+            r1 = attributes["pcutr"] / (attributes["strn"] * 1000.0)
+            z1 = attributes["uktr"] / 100.0
+            if r1 > z1:
+                raise RuntimeError("Transformer copper losses exceed short-circuit impedance")
+            x1 = math.sqrt(max(0.0, z1 * z1 - r1 * r1))
+            r0, x0 = r1 * float(r0_r1_ratio), x1 * float(x0_x1_ratio)
+            item["zero_sequence"] = {
+                "model": zero_sequence_model,
+                "r0_r1_ratio": float(r0_r1_ratio),
+                "x0_x1_ratio": float(x0_x1_ratio),
+                "source_table": 10,
+                "numeric_rule": rule,
+                "type_attributes": {"r0pu": r0, "x0pu": x0},
+                "derived_type_attributes": {"ur0tr": 100.0 * r0, "uk0tr": 100.0 * math.hypot(r0, x0)},
+                "element_attributes": {"neutConfig": 0, "cgnd_h": 0, "re0tr_h": 0.0, "xe0tr_h": 0.0},
+                "limitations": [
+                    "Explicit impedance equivalent only; no physical limb/core model is configured.",
+                    "Uses Table 10 three-limb numeric intervals without claiming limb/core validation.",
+                    "HV star point is connected with zero neutral impedance; delta side has no star point.",
+                    "No independent absolute fault-current reference or RMS/EMT validation.",
+                    "Other ratings, frequencies, vector groups, internal-delta and magnetizing models are unsupported.",
+                ],
+            }
+        return item
 
     @classmethod
     def create_evemtbench_component(
@@ -1568,6 +1623,9 @@ class EvEMTBenchMixin:
         out_of_service: bool = False,
         confirmation: str = "",
         open_digsilent: bool = True,
+        zero_sequence_model: str = "unchanged",
+        r0_r1_ratio: Optional[float] = None,
+        x0_x1_ratio: Optional[float] = None,
     ) -> dict[str, Any]:
         """Preview or create a new database-backed TypTr2 and ElmTr2."""
         voltage_class = str(voltage_class or "").strip()
@@ -1580,6 +1638,7 @@ class EvEMTBenchMixin:
         created_type_folder = None
         equipment_folder = None
         type_folder = None
+        grid = None
 
         def failure(message, **extra):
             result = {
@@ -1664,6 +1723,9 @@ class EvEMTBenchMixin:
                 clock_number,
                 type_name,
                 seed,
+                zero_sequence_model,
+                r0_r1_ratio,
+                x0_x1_ratio,
             )
         except Exception as exc:
             return failure(str(exc))
@@ -1741,6 +1803,12 @@ class EvEMTBenchMixin:
                         f"expected {expected:g} kV for {voltage_class}"
                     )
 
+            if "zero_sequence" in item:
+                item["zero_sequence"]["type_destination"] = {
+                    "equipment_folder": equipment_folder.GetFullName(),
+                    "type_folder": type_folder.GetFullName() if type_folder is not None else None,
+                    "create_folder": type_folder is None,
+                }
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
@@ -1771,6 +1839,7 @@ class EvEMTBenchMixin:
                 "type_created": False,
                 "transformer_created": False,
                 "voltage_class": voltage_class,
+                "zero_sequence_model": zero_sequence_model,
                 "seed": seed,
                 "catalog_id": database["catalog_id"],
                 "source": database["source"],
@@ -1790,8 +1859,7 @@ class EvEMTBenchMixin:
                 "confirmation_required": required_confirmation,
                 "message": (
                     "Preview only; no transformer type, grid element, cubicle, "
-                    "or switch was created. Tables 10 and 12 are present in "
-                    "the database but remain unmapped to PowerFactory."
+                    "or switch was created. Saturation and full Table 10 core/limb mapping remain unsupported."
                 ),
             }
             if not confirmation:
@@ -1906,23 +1974,37 @@ class EvEMTBenchMixin:
                 "Transformer type",
                 "after completing transformer type initialization",
             )
+            retained_zero_sequence = retained_zero_derived = None
+            if "zero_sequence" in item:
+                zero = item["zero_sequence"]
+                commit_type_attributes(zero["type_attributes"], "zero sequence", direct=True)
+                retained_zero_sequence = cls._verify_attributes(
+                    created_type, zero["type_attributes"], "Transformer zero sequence")
+                retained_zero_derived = cls._verify_attributes(
+                    created_type, zero["derived_type_attributes"], "Transformer zero sequence",
+                    "after deriving uk0 and ur0")
+                cls._verify_attributes(created_type, attributes, "Transformer type",
+                                       "after zero-sequence assignment")
             if str(created_type.GetAttribute("loc_name")) != type_name:
                 raise RuntimeError(
                     f"PowerFactory did not retain type name: {type_name}"
                 )
             item["full_name"] = created_type.GetFullName()
 
-            _, _, created_transformer, _ = cls._create_connected_element(
+            element_attributes = {
+                "typ_id": created_type,
+                "outserv": int(bool(out_of_service)),
+            }
+            if "zero_sequence" in item:
+                element_attributes.update(item["zero_sequence"]["element_attributes"])
+            _, _, created_transformer, retained_element = cls._create_connected_element(
                 app,
                 "ElmTr2",
                 "Transformer",
                 transformer_name,
                 (high_bus_name, low_bus_name),
                 grid_name,
-                attributes={
-                    "typ_id": created_type,
-                    "outserv": int(bool(out_of_service)),
-                },
+                attributes=element_attributes,
                 connection_attributes=("bushv", "buslv"),
             )
 
@@ -1937,9 +2019,20 @@ class EvEMTBenchMixin:
                     f"'{transformer_name}'"
                 ),
             })
+            if "zero_sequence" in item:
+                retained_element["typ_id"] = created_type.GetFullName()
+                result.update(retained_zero_sequence_attributes=retained_zero_sequence,
+                              retained_zero_sequence_derived_attributes=retained_zero_derived,
+                              retained_element_attributes=retained_element)
             return result
 
         except Exception as exc:
+            if "zero_sequence" in item and created_type is not None and grid is not None:
+                survivors = cls._find_named_contents(grid, transformer_name, "ElmTr2")
+                if survivors:
+                    return failure(str(exc), rolled_back=False, type_created=True,
+                                   remaining_type=type_name, remaining_transformer=survivors[0].GetFullName(),
+                                   item=item)
             return failure(
                 str(exc),
                 **cls._rollback_equipment_type(

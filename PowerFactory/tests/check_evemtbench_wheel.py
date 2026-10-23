@@ -80,6 +80,12 @@ for label in component_types:
         inputs = result["creation_parameters"]
         if inputs["load_model"].get("default") != "constant_power" or inputs["type_name"].get("default") != "":
             raise SystemExit("installed-wheel load listing omitted optional ZIP creation inputs")
+    if label == "transformer":
+        inputs = result["creation_parameters"]
+        if inputs["zero_sequence_model"].get("default") != "unchanged":
+            raise SystemExit("installed-wheel transformer listing changed the default zero-sequence mode")
+        if not inputs["r0_r1_ratio"].get("nullable") or not result.get("partial_table_10_mapping"):
+            raise SystemExit("installed-wheel transformer listing omitted partial zero-sequence discovery")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "

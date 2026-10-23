@@ -2,6 +2,8 @@
 
 Latest follow-up records:
 
+- [FT-31](FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt): successful unified-tool YNd11 zero-sequence creation and readback, with the transformer out of service.
+- [FT-30](FT-30_transformer_zero_sequence_ynd_lab_pc.txt): YNd11 type writes and isolated earth-fault sensitivity/zero-sequence blocking checks on the Lab PC.
 - [FT-29](FT-29_integrated_zip_load_creation_lab_pc.txt): successful integrated unified-tool ZIP creation and retained-value checks, with the load out of service.
 - [FT-28](FT-28_load_zip_mapping_lab_pc.txt): ZIP attribute writes and isolated balanced load-flow voltage response, supplied from the Lab PC.
 - [FT-27](FT-27_unified_evemtbench_catalog_mcp.txt): unified MCP tool exposure and filtered overhead-line listing with creation-parameter discovery.
@@ -51,6 +53,8 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-24 | `FT-24_unified_evemtbench_component_creation_sp1.txt` | Compiled evidence record |
 | FT-28 | `FT-28_load_zip_mapping_lab_pc.txt` | Compiled evidence record; rounded summaries of user-supplied results |
 | FT-29 | `FT-29_integrated_zip_load_creation_lab_pc.txt` | Compiled evidence record containing a user-supplied creation response |
+| FT-30 | `FT-30_transformer_zero_sequence_ynd_lab_pc.txt` | Compiled evidence record; rounded summary of user-supplied Lab PC results |
+| FT-31 | `FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt` | Compiled evidence record containing user-supplied creation and readback extracts |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -133,3 +137,10 @@ FT-29 records subsequent successful unified-tool creation and retained-value
 checks for a dedicated ZIP type and out-of-service load. No calculation was
 run on that load; the voltage-response test remains the separate FT-28 test.
 RMS and EMT ZIP validation are still pending.
+
+FT-31 records subsequent successful unified-tool creation of a dedicated YNd11
+type and out-of-service transformer with the restricted zero-sequence equivalent.
+Type impedance, derived values, type assignment and HV grounding were read back.
+No calculation was run on this integrated transformer; fault-response evidence
+remains the separate FT-30 test. Core/limb, magnetizing, saturation, absolute
+fault-current accuracy and RMS/EMT validation remain outside these records.

@@ -109,7 +109,8 @@ select equipment. See the [equipment examples](references/tool_guide.md#evemtben
   project or a single-line diagram.
 - Lines and cables use sequence equivalents, not geometric ULM models.
   Supply a suitable engineering current rating.
-- Transformer zero-sequence and saturation mappings remain catalog-only.
+- Transformer zero sequence has a restricted opt-in YNd11 impedance equivalent;
+  full core/limb and saturation mappings remain unsupported.
   Loads default to constant power; opt-in `load_model="zip"` creates a new
   type for voltage-dependent load flow. RMS/EMT ZIP behavior is unvalidated.
   Synchronous-machine creation supports round rotors only.

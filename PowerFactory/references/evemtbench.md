@@ -54,10 +54,43 @@ select a clock number for every generated transformer, so the caller must
 provide that engineering choice explicitly.
 
 The paper's `Block` class is catalog-only because its voltage ratio depends on
-generator rating and project voltage. Table 10 zero-sequence and Table 12
-saturation ranges are returned for inspection but are not written until their
-PowerFactory attributes have been validated. The paper's ranges are a research
-basis, not a claim that every sampled type is suitable for a specific study.
+generator rating and project voltage. Table 12 saturation remains catalog-only.
+Table 10 has only the restricted opt-in impedance equivalent below; full
+core/limb mapping is not implemented. The paper's ranges are a research basis,
+not a claim that every sampled type is suitable for a specific study.
+
+#### Restricted Table 10 YNd11 equivalent
+
+`zero_sequence_model="ynd11_equivalent"` supports only 20 MVA, 110/20 kV,
+60 Hz, YNd11, with explicit `r0_r1_ratio` and `x0_x1_ratio`. The allowed
+intervals [1.5, 2.8] and [0.85, 1.0] come from the three-limb numerical rule;
+no physical limb count or core geometry is configured. Default `unchanged`
+does not enable zero-sequence or grounding assignments.
+
+| Quantity | Mapping |
+|---|---|
+| R0/R1 | `r0pu = r1pu * r0_r1_ratio` |
+| X0/X1 | `x0pu = x1pu * x0_x1_ratio` |
+| Resistive zero-sequence voltage | derived `ur0tr = 100 * r0pu` |
+| Zero-sequence voltage magnitude | derived `uk0tr = 100 * hypot(r0pu, x0pu)` |
+| New element HV grounding | `cgnd_h=0`, `re0tr_h=0`, `xe0tr_h=0`, `neutConfig=0` |
+
+Grounding means connected HV star point with zero internal neutral impedance,
+without an external neutral conductor. The impedance ratios must not be
+applied directly to `uktr`; resistance and reactance are scaled separately.
+The positive-sequence sampling stream and attributes are unchanged.
+
+[FT-30](../evidence/FT-30_transformer_zero_sequence_ynd_lab_pc.txt) records
+Lab PC numerical writes and isolated Complete Method earth-fault sensitivity,
+three-phase controls and delta terminal I0 blocking. Absolute fault-current
+accuracy, physical core/limb and magnetizing models, other winding cases,
+saturation and RMS/EMT remain unvalidated.
+[FT-31](../evidence/FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt)
+records successful unified-tool creation and readback of the dedicated type and
+out-of-service transformer on the Lab PC. No calculation was run on that
+integrated transformer; the fault-response checks used the separate FT-30 network.
+`unmapped_source_tables` still includes 10 and 12 because they are not fully
+mapped; `partial_table_10_mapping` exposes the restricted capability separately.
 
 ### Tables 3 and 7 overhead-line mapping
 
