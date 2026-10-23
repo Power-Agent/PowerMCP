@@ -7,23 +7,15 @@ matplotlib.use("Agg")  # no display on a cluster login node
 import matplotlib.pyplot as plt
 
 from GenX.tool_logic.palette import RESOURCE_COLORS
+from GenX.tool_logic.resources import classify_resource, RESOURCE_LABELS
 
-# Resource name mapping for proper capitalization
-resource_labels = {
-    "coal": "Coal",
-    "natural_gas": "Natural Gas",
-    "solar": "Solar",
-    "wind": "Wind",
-    "battery": "Battery",
-    "hydropower": "Hydro",
-    "hydro": "Hydro",
-    "nuclear": "Nuclear",
-    "biomass": "Biomass",
-}
+# Resource-label aliases retained for callers that import this module directly.
+resource_labels = dict(RESOURCE_LABELS)
 
-# Colors for capacity bar graph, keyed by resource_group (shared palette)
+# Colors for capacity bar graph, keyed by the shared technology group.
 resource_colors = {
-    group: RESOURCE_COLORS[label] for group, label in resource_labels.items()
+    group: RESOURCE_COLORS[label]
+    for group, label in resource_labels.items()
 }
 
 # Plot titles for each capacity column
@@ -35,57 +27,7 @@ column_titles = {
     "NetCap": "Net Capacity Change",
 }
 
-# Classify resources for plotting
-
-def classify_resource(resource):
-    r = str(resource).lower()
-
-    # Ignore rows that should not be visualized as resource types
-    if r == "total":
-        return "ignore"
-    
-    # Ignoring distributed generation for now
-    if "distributed_generation" in r or "distributed generation" in r:
-        return "ignore"
-
-    # Storage
-    if "batt" in r:
-        return "battery"
-
-    # Hydro
-    if "hydroelectric" in r or "hydro" in r:
-        return "hydro"
-
-    # Solar
-    if "utilitypv" in r:
-        return "solar"
-    if "solar" in r or "photovoltaic" in r:
-        return "solar"
-
-    # Wind
-    if "wind" in r:
-        return "wind"
-
-    # Biomass
-    if "biomass" in r:
-        return "biomass"
-
-    # Nuclear
-    if "nuclear" in r:
-        return "nuclear"
-
-    # Coal
-    if "coal" in r:
-        return "coal"
-
-    # Natural gas bucket including petroleum
-    if "natural_gas" in r or "naturalgas" in r:
-        return "natural_gas"
-    if "petroleum" in r or "oil" in r:
-        return "natural_gas"
-
-    # Catch all for debugging
-    return "unclassified"
+# Resource classification is shared with the diurnal-generation plotter.
 
 # Filter to a user-specified list of zone numbers
 def filter_by_zones(df: pd.DataFrame, zones: list[int]) -> pd.DataFrame:
