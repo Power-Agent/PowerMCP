@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 from GenX.tool_logic.palette import RESOURCE_COLORS
+from GenX.tool_logic.resources import classify_resource
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +33,10 @@ GRID = "#e1e0d9"
 
 
 def classify(name):
-    """Map a GenX resource name to a technology group."""
-    n = name.lower()
-    if n.endswith("_dr") or "_dr_" in n:
-        return "DR"
-    if "nuclear" in n:
-        return "Nuclear"
-    if "coal" in n:
-        return "Coal"
-    if ("combined_cycle" in n or n.endswith("_cc_new")
-            or "combustion_turbine" in n or n.endswith("_ct_new")):
-        return "Natural Gas"
-    if "hydroelectric" in n:
-        return "Hydro"
-    if "wind" in n:
-        return "Wind"
-    if "pv" in n or "solar" in n or "distributed_generation" in n:
-        return "Solar"
-    if "batter" in n:
-        return "Battery"
-    return "Other"
+    """Backward-compatible alias for the shared GenX resource classifier."""
+    return classify_resource(name)
 
 
-# What is this function doing ??
 def zone_set(spec):
     # Converts a user's zone request into a set for the MCP tool to use
     # i.e. what comes in as "[1, 3, 5]" gets transformed to {1, 3, 5}
