@@ -118,7 +118,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 | PSLF | `pslf.python_lib` | `powermcp config set pslf.python_lib "C:\Program Files\GE PSLF\PSLF_PYTHON"` |
 | PowerFactory | `powerfactory.python_path` | `powermcp config set powerfactory.python_path "...\DIgSILENT\PowerFactory 2024\Python\3.11"` |
 | LTSpice | `ltspice.exe` *(auto-detected)* | Found automatically in standard locations — usually no setup needed. Override: `powermcp config set ltspice.exe "C:\Program Files\ADI\LTspice\LTspice.exe"` |
-| HOPE | `hope.repo_root`, `hope.julia_bin` | `powermcp config set hope.repo_root "C:\src\HOPE"` |
+| HOPE | `hope.repo_root`, `hope.julia_bin`, `hope.julia_depot_path` | `powermcp config set hope.repo_root "C:\src\HOPE"` |
 | GenX | `genx.repo_root` | `powermcp config set genx.repo_root "/home/me/GenX.jl"` — the GenX.jl checkout; `GENX_DIR` overrides it |
 | PowerWorld | *(none)* | `esa` auto-discovers a running, licensed Simulator via COM; the `powerworld` extra also installs `numba` (required by esa) |
 | PSCAD | *(none)* | `pip install powermcp[pscad-windows]` provides `mhi-pscad`; PSCAD must be installed |
