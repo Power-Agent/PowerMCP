@@ -273,6 +273,12 @@ create_evemtbench_component(
 
 An empty `confirmation` keeps the request in preview mode. Repeat the same
 request with the exact returned `confirmation_required` value to apply it.
+
+For all six component types, `out_of_service` and `open_digsilent` require
+actual JSON booleans (`true` or `false`; `True` or `False` in Python).
+Strings such as `"false"`, numbers such as `0` or `1`, and `null` are rejected
+before connecting to PowerFactory. Omit either option to use its documented
+default.
 The unified tool delegates validation, seeded sampling, creation, retained-value
 checks, and rollback to the existing specialized creator without changing its
 behavior. Only the unified create and list tools are exposed through MCP.
