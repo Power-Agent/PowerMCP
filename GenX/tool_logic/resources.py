@@ -74,7 +74,12 @@ def classify_resource(resource: object) -> str:
     ):
         return "solar"
 
-    if "combined_cycle" in normalized or "combustion_turbine" in normalized:
+    if (
+        "combined_cycle" in normalized
+        or "combustion_turbine" in normalized
+        or normalized.endswith("_cc_new")
+        or normalized.endswith("_ct_new")
+    ):
         return "natural_gas"
 
     return "other"
