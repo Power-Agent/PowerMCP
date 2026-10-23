@@ -337,6 +337,8 @@ def test_genx_capacity_and_diurnal_classifiers_share_one_taxonomy():
         ("MA_coal", "coal"),
         ("MA_natural_gas_combined_cycle", "natural_gas"),
         ("MA_combustion_turbine_ct_new", "natural_gas"),
+        ("MA_cc_new", "natural_gas"),
+        ("MA_ct_new", "natural_gas"),
         ("MA_petroleum_oil", "natural_gas"),
         ("MA_distributed_generation_solar", "solar"),
         ("MA_solar_photovoltaic", "solar"),
