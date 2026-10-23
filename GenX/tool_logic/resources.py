@@ -23,7 +23,6 @@ RESOURCE_LABELS: dict[str, str] = {
     "biomass": "Biomass",
     "other": "Other",
     "dr": "DR",
-    "ignore": "Ignore",
 }
 
 
@@ -71,7 +70,6 @@ def classify_resource(resource: object) -> str:
         "solar" in normalized
         or "photovoltaic" in normalized
         or "utilitypv" in normalized
-        or "distributed_generation" in normalized
         or re.search(r"(^|_)pv($|_)", normalized)
     ):
         return "solar"
