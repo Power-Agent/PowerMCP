@@ -112,6 +112,8 @@ powermcp config set ltspice.exe     "C:\Program Files\ADI\LTspice\LTspice.exe"
 powermcp config set pslf.python_lib "C:\Program Files\GE PSLF\PSLF_PYTHON"
 powermcp config set powerfactory.python_path "...\DIgSILENT\PowerFactory 2024\Python\3.11"
 powermcp config set hope.repo_root  "C:\src\HOPE"
+powermcp config set hope.julia_bin  "C:\Users\me\.julia\juliaup\julia.exe"
+powermcp config set hope.julia_depot_path "D:\julia_depot"
 ```
 
 Resolution order for each key is **environment variable** (`POWERMCP_PSSE_BIN`, ...),

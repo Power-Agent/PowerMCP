@@ -132,7 +132,7 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                     while True:
                         status = hope_holistic_status(request_id)
                         state = status.get("status")
-                        if state in ("done", "published", "failed", "cancelled"):
+                        if state in ("done", "failed", "cancelled"):
                             break
                         self.assertTrue(status["ok"], status)
                         now = time.monotonic()
@@ -148,7 +148,7 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                         time.sleep(5.0)
 
                     self.assertTrue(status["ok"], status)
-                    self.assertIn(state, ("done", "published"), status)
+                    self.assertEqual(state, "done", status)
                     result = status["result"]
                     self.assertTrue(result["handoff_valid"])
                     self.assertTrue(result["transfer_valid"])
@@ -184,7 +184,7 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                     _holistic_request_jobs.pop(request_id, None)
                     recovered = hope_holistic_status(request_id)
                     self.assertTrue(recovered["ok"], recovered)
-                    self.assertEqual(recovered["status"], "published")
+                    self.assertEqual(recovered["status"], "done")
                     self.assertTrue(recovered["result"]["coverage_all_passed"])
 
                     repeated = hope_run_holistic(
@@ -195,7 +195,7 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                     )
                     self.assertTrue(repeated["ok"], repeated)
                     self.assertTrue(repeated["reused"])
-                    self.assertEqual(repeated["status"], "published")
+                    self.assertEqual(repeated["status"], "done")
                     self.assertEqual(len(list(runs_root.iterdir())), 1)
                 finally:
                     _holistic_request_jobs.pop(request_id, None)

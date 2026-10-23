@@ -62,7 +62,7 @@ class HolisticAgentIntegrationTests(unittest.TestCase):
                 while True:
                     status = hope_holistic_status(request_id)
                     state = status.get("status")
-                    if state in ("done", "published", "failed", "cancelled"):
+                    if state in ("done", "failed", "cancelled"):
                         break
                     self.assertTrue(status["ok"], status)
                     if time.monotonic() >= deadline:
@@ -70,7 +70,7 @@ class HolisticAgentIntegrationTests(unittest.TestCase):
                     time.sleep(2.0)
 
                 self.assertTrue(status["ok"], status)
-                self.assertIn(state, ("done", "published"))
+                self.assertEqual(state, "done")
                 result = status["result"]
                 self.assertTrue(result["handoff_valid"])
                 self.assertTrue(result["transfer_valid"])
@@ -93,7 +93,7 @@ class HolisticAgentIntegrationTests(unittest.TestCase):
                             stream.close()
                 recovered = hope_holistic_status(request_id)
                 self.assertTrue(recovered["ok"], recovered)
-                self.assertEqual(recovered["status"], "published")
+                self.assertEqual(recovered["status"], "done")
                 self.assertTrue(recovered["result"]["coverage_all_passed"])
 
 

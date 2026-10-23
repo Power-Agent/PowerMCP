@@ -6,6 +6,12 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer as FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from .powermcp_adapter import apply_powermcp_hope_config
+
+# PowerMCP owns this adapter layer. Translate its captured installation paths
+# into the environment-based contract used by the synchronized standalone core.
+apply_powermcp_hope_config()
+
 from .core import (
     hope_aggregation_audit,
     hope_cancel_job,

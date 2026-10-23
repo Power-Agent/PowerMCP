@@ -151,6 +151,14 @@ Existing outputs are excluded. Repeating the same request ID with identical
 inputs returns the existing run, while conflicting reuse is rejected. Poll
 `hope_holistic_status(request_id)` for reconnect-safe state and artifact paths.
 
+The configured HOPE checkout must contain
+`tools/repo_utils/run_holistic_agent_job.jl`, first shipped in HOPE.jl revision
+`8126f0f`. The server checks this before copying either source case. Persistent
+manifests record the launcher and Julia process IDs, so interrupted work becomes
+a structured `failed` result rather than remaining `running` forever. Public
+terminal status values remain the same before and after a reconnect: `done`,
+`failed`, or `cancelled`.
+
 Set `HOPE_AGENT_RUNS_ROOT` to move the persistent workspaces from their default
 `<HOPE_REPO_ROOT>/artifacts/agent_runs` location. Set
 `HOPE_MODELCASES_PATH` when ModelCases is maintained as a separate checkout.
@@ -159,9 +167,12 @@ Set `HOPE_AGENT_RUNS_ROOT` to move the persistent workspaces from their default
 
 The model-aware `core.py` and opt-in integration tests are synchronized from
 `HOPE-Model-Project/HOPE.jl/tools/hope_mcp_server`. PowerMCP retains ownership
-of its MCP SDK 2 transport entrypoints, packaging, lockfile, documentation, and
-layout-specific unit tests. `SYNCED_FROM_HOPE.yml` records the exact upstream
-HOPE commit represented by this downstream copy.
+of its MCP SDK 2 transport entrypoints, configuration adapter, packaging,
+lockfile, documentation, and layout-specific unit tests. The adapter translates
+`powermcp config` values for `hope.repo_root`, `hope.julia_bin`, and
+`hope.julia_depot_path` into the standalone server's environment contract only
+when the corresponding environment variable is unset. `SYNCED_FROM_HOPE.yml`
+records the exact upstream HOPE commit represented by this downstream copy.
 
 ## Local run
 
