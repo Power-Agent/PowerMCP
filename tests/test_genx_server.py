@@ -302,3 +302,65 @@ def test_paths_outside_the_allowed_roots_are_refused(genx_server, tmp_path, monk
     result = genx_server.summarize_capacity(str(outside / "capacity.csv"))
     assert result["success"] is False
     assert "csv_path" in result["message"]
+
+
+
+def test_genx_capacity_and_diurnal_classifiers_share_one_taxonomy():
+    """Every recognized class must have the same label in both plot pathways."""
+    from GenX.tool_logic.plot_capacity import classify_resource, resource_labels
+    from GenX.tool_logic.diurnal_generation import classify
+
+    samples = {
+        "MA_natural_gas_combined_cycle": "natural_gas",
+        "CT_combustion_turbine": "natural_gas",
+        "MA_oil_steam": "natural_gas",
+        "MA_coal": "coal",
+        "MA_solar_pv": "solar",
+        "MA_distributed_generation_solar": "solar",
+        "MA_distributed_generation_wind": "wind",
+        "MA_wind_onshore": "wind",
+        "MA_battery_4hr": "battery",
+        "MA_hydroelectric": "hydro",
+        "MA_nuclear": "nuclear",
+        "MA_biomass": "biomass",
+    }
+    for name, expected_key in samples.items():
+        assert classify_resource(name) == expected_key
+        assert classify(name) == expected_key
+        assert expected_key in resource_labels
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("Total", "ignore"),
+        ("MA_coal", "coal"),
+        ("MA_natural_gas_combined_cycle", "natural_gas"),
+        ("MA_combustion_turbine_ct_new", "natural_gas"),
+        ("MA_cc_new", "natural_gas"),
+        ("MA_ct_new", "natural_gas"),
+        ("MA_petroleum_oil", "natural_gas"),
+        ("MA_distributed_generation_solar", "solar"),
+        ("MA_solar_photovoltaic", "solar"),
+        ("MA_utilitypv", "solar"),
+        ("MA_wind", "wind"),
+        ("MA_batt_4hr", "battery"),
+        ("MA_hydroelectric", "hydro"),
+        ("MA_nuclear", "nuclear"),
+        ("MA_biomass", "biomass"),
+        ("MA_unknown_technology", "other"),
+    ],
+)
+def test_shared_genx_resource_classifier(name, expected):
+    from GenX.tool_logic.resources import classify_resource
+
+    assert classify_resource(name) == expected
+
+
+def test_capacity_classifier_handles_distributed_generation_by_technology():
+    """Use explicit technology tokens; never assume all distributed generation is solar."""
+    from GenX.tool_logic.resources import classify_resource
+
+    assert classify_resource("MA_distributed_generation_solar") == "solar"
+    assert classify_resource("MA_distributed_generation_wind") == "wind"
+    assert classify_resource("MA_distributed_generation") == "other"

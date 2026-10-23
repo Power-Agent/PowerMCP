@@ -60,3 +60,18 @@ def test_diurnal_computes_profile_when_every_hour_has_weight(tmp_path):
     assert result.shape == (24, 2)
     assert result["Coal"].tolist() == [100 + hour for hour in range(24)]
     assert result["Solar"].tolist() == [50 + hour for hour in range(24)]
+
+
+
+def test_diurnal_groups_use_shared_classification_and_display_labels(tmp_path):
+    from GenX.tool_logic.diurnal_generation import diurnal_by_tech
+
+    case = _write_case(
+        tmp_path,
+        [1.0] * 24,
+    )
+    result = diurnal_by_tech(str(case), period=1)
+
+    assert "Coal" in result.columns
+    assert "Solar" in result.columns
+    assert result.shape == (24, 2)

@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 from GenX.tool_logic.palette import RESOURCE_COLORS
+from GenX.tool_logic.resources import classify_resource
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +33,10 @@ GRID = "#e1e0d9"
 
 
 def classify(name):
-    """Map a GenX resource name to a technology group."""
-    n = name.lower()
-    if n.endswith("_dr") or "_dr_" in n:
-        return "DR"
-    if "nuclear" in n:
-        return "Nuclear"
-    if "coal" in n:
-        return "Coal"
-    if ("combined_cycle" in n or n.endswith("_cc_new")
-            or "combustion_turbine" in n or n.endswith("_ct_new")):
-        return "Natural Gas"
-    if "hydroelectric" in n:
-        return "Hydro"
-    if "wind" in n:
-        return "Wind"
-    if "pv" in n or "solar" in n or "distributed_generation" in n:
-        return "Solar"
-    if "batter" in n:
-        return "Battery"
-    return "Other"
+    """Backward-compatible alias for the shared GenX resource classifier."""
+    return classify_resource(name)
 
 
-# What is this function doing ??
 def zone_set(spec):
     # Converts a user's zone request into a set for the MCP tool to use
     # i.e. what comes in as "[1, 3, 5]" gets transformed to {1, 3, 5}
@@ -117,7 +99,30 @@ def diurnal_by_tech(case_dir, period, zones="all", verbose=False):
     for g, cols in groups.items():
         x = data[cols].sum(axis=1).to_numpy()
         out[g] = np.bincount(hod, weights * x, minlength=24) / wsum
-    df = pd.DataFrame(out, index=range(24))
+
+    # Stable snake_case keys are shared with the capacity classifier; translate
+    # only at the presentation boundary so calculations remain consistent.
+    label_by_key = {
+        "natural_gas": "Natural Gas",
+        "hydro": "Hydro",
+        "nuclear": "Nuclear",
+        "coal": "Coal",
+        "wind": "Wind",
+        "solar": "Solar",
+        "battery": "Battery",
+        "biomass": "Other",
+        "other": "Other",
+        "dr": "DR",
+    }
+    display_out = {}
+    for key, values in out.items():
+        label = label_by_key.get(key, "Other")
+        if label in display_out:
+            display_out[label] = display_out[label] + values
+        else:
+            display_out[label] = values
+
+    df = pd.DataFrame(display_out, index=range(24))
     return df.reindex(columns=[g for g in STACK_ORDER if g in df.columns], fill_value=0.0)
 
 
