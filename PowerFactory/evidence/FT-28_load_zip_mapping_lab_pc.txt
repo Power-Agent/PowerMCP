@@ -1,0 +1,44 @@
+FT-28: Load ZIP mapping and voltage response on the Lab PC
+=========================================================
+
+Provenance: summary of screenshots and JSON supplied by the user in this
+conversation. This is not an independent rerun or a complete raw transcript.
+Environment: PowerFactory 2026, interactive execution with MCP stopped.
+The service-pack identifier was not captured in the supplied output.
+
+Attribute inspection confirmed TypLod aP/bP/cP and aQ/bQ/cQ, with exponent
+attributes kpu0/kpu1/kpu and kqu0/kqu1/kqu corresponding to 0/1/2.
+Existing dedicated test type: MCP ZIP Mapping Check 01 (not assigned to loads).
+GUI/readback: aP=0.6, bP=-0.5, derived cP=0.9;
+              aQ=0.5, bQ=-1.0, derived cQ=1.5 (float32 precision).
+Native Python writes: aP=0.55, bP=-0.35, aQ=0.6, bQ=-0.8 retained;
+derived cP=0.8 and cQ=1.2 retained. Original values restored.
+User output: success=true, writes_attempted=true, restored=true.
+
+Corrected voltage probe: MCP ZIP VCheck 2d3651f2.
+An initial probe attempted to deactivate the case-owned Summary Grid and
+stopped before calculations; restoration and cleanup passed. The corrected
+probe considers only networks under Network Data.
+
+Temporary new TypLod and isolated network, P0=1 MW, Q0=0.4 Mvar.
+Coefficients: aP=0.6, bP=-0.5, cP=0.9; aQ=0.5, bQ=-1.0, cQ=1.5.
+PowerFactory's retained coefficients include normal float32 rounding.
+Expected values used retained coefficients and measured terminal voltage.
+
+Voltage dependency  Setpoint pu  P measured MW  Q measured Mvar  Result
+off                 0.90         1.000000        0.400000         pass
+off                 1.10         1.000000        0.400000         pass
+on                  0.90         0.879000        0.326000         pass
+on                  0.95         0.937250        0.361500         pass
+on                  1.00         1.000000        0.400000         pass
+on                  1.05         1.067250        0.441500         pass
+on                  1.10         1.139000        0.486000         pass
+
+Table values are rounded summaries, not raw readings.
+Relative tolerance: 0.0001; absolute power tolerance: 0.00001 MW/Mvar.
+ComLdf iopt_pq description: load options: consider voltage dependency of loads.
+User output: success=true, restored=true, cleanup_ok=true, remaining_objects=[].
+Original Case 1, four real networks, and scenario N were restored.
+
+Scope: balanced steady-state load flow only. No RMS/EMT validation.
+The integrated opt-in unified creator is not yet live-tested by this record.

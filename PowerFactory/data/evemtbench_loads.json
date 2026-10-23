@@ -26,6 +26,21 @@
   "powerfactory": {
     "element_class": "ElmLod",
     "model": "balanced constant-power load",
+    "supported_load_models": ["constant_power", "zip"],
+    "zip_model": {
+      "type_class": "TypLod",
+      "scope": "balanced steady-state load flow; RMS and EMT unvalidated",
+      "requires_type_name": true,
+      "requires_load_flow_voltage_dependency": true,
+      "writable_coefficients": {
+        "kP_P": "aP", "kP_I": "bP", "kQ_P": "aQ", "kQ_I": "bQ"
+      },
+      "derived_coefficients": {"kP_Z": "cP", "kQ_Z": "cQ"},
+      "exponents": {
+        "kpu0": 0.0, "kpu1": 1.0, "kpu": 2.0,
+        "kqu0": 0.0, "kqu1": 1.0, "kqu": 2.0
+      }
+    },
     "mapped_attributes": {
       "active_power_mw": "plini",
       "reactive_power_mvar": "qlini"
@@ -65,7 +80,7 @@
         "kP_Z + kP_I + kP_P = 1",
         "kQ_Z + kQ_I + kQ_P = 1"
       ],
-      "status": "stored but not written until PowerFactory ZIP attributes are live-validated"
+      "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
     }
   }
 }

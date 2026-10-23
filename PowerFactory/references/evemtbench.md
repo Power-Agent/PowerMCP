@@ -144,9 +144,31 @@ ranges and normalization constraints.
 
 At 20 kV, the creator samples apparent power and an angle spanning 0.95
 capacitive to 0.8 inductive, then converts them to P and Q. Positive Q denotes
-inductive demand and negative Q denotes capacitive demand. The ZIP
-coefficients remain catalog-only until their PowerFactory attributes and
-normalization behaviour are live-validated.
+inductive demand and negative Q denotes capacitive demand. Constant-power
+creation remains the default. Opt-in `load_model="zip"` requires a new
+`type_name` and creates a dedicated `TypLod` for load flow.
+
+| ZIP quantity | `TypLod` attribute | Exponent attribute/value |
+|---|---|---|
+| kP,P / kQ,P | `aP` / `aQ` | `kpu0` / `kqu0` = 0 |
+| kP,I / kQ,I | `bP` / `bQ` | `kpu1` / `kqu1` = 1 |
+| kP,Z / kQ,Z | derived `cP` / `cQ` | `kpu` / `kqu` = 2 |
+
+Each triplet sums to one. Negative coefficients are retained, not clamped.
+Sampling is sequential uniform within feasible Z and conditional I intervals;
+the power term is the residual. Power samples use the existing seeded stream;
+ZIP coefficients use a separate stream. The old `catalog_only` JSON grouping
+is retained for compatibility, but coefficients are available via opt-in ZIP.
+
+Lab PC checks confirmed native Python writes, derived coefficients, and
+load-flow response at 0.90-1.10 pu, including voltage-dependency-disabled
+controls. See [FT-28](../evidence/FT-28_load_zip_mapping_lab_pc.txt).
+Load flow must enable voltage dependency; the creator does not change `ComLdf`.
+Integrated unified-tool creation and retained-value verification passed on
+the Lab PC with the new load out of service; see
+[FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
+The voltage sweep used a separate diagnostic network, not the integrated load.
+RMS/EMT ZIP behavior remains unvalidated.
 
 ### Table 13 synchronous-machine mapping
 

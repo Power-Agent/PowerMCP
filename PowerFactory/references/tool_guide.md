@@ -540,8 +540,51 @@ create_evemtbench_component(
 Repeat the call with the exact returned `confirmation_required` value to create
 the balanced `ElmLod`, cubicle, and closed circuit breaker. The tool verifies
 `plini`, `qlini`, the bus connection, and the service state and rolls back new
-objects if creation fails. The Table 5 ZIP coefficients remain catalog-only
-until their PowerFactory attribute mapping is live-validated.
+objects if creation fails. This remains the default `load_model="constant_power"`
+path: no load type is created or assigned, and seeded P/Q values are unchanged.
+
+### Opt-in ZIP load-flow model
+
+Add `"load_model": "zip"` and an explicit, unused `"type_name"` to the load's
+`parameters`. For example, add these to the preview above:
+
+```json
+{
+    "load_model": "zip",
+    "type_name": "Research ZIP Load Type"
+}
+```
+
+These are additional parameters, not a complete request. Repeat the complete
+preview request with its exact confirmation string to create a new `TypLod`
+and connected `ElmLod`. Existing types are never reused or edited. The `Load
+Types` folder is created only on confirmation if needed. Model, type name,
+destination, coefficients, and exponents are bound into the confirmation plan.
+
+For P and Q independently, a separate seeded stream samples Z uniformly over
+its feasible interval, then I uniformly over its conditional feasible interval,
+and derives P = 1 - Z - I. All coefficients stay in the published ranges,
+including negative values. This is not independent uniform sampling of all six
+terms, nor a claim to reproduce the paper's joint distribution.
+
+`aP`/`aQ` receive constant-power coefficients, `bP`/`bQ` constant-current
+coefficients, and PowerFactory derives `cP`/`cQ` for constant impedance.
+Exponents are explicitly set to 0, 1, and 2. Writable and derived attributes
+are verified after the database write. Failures roll back new objects;
+incomplete cleanup is reported, and a type is preserved if failed load
+cleanup leaves an element behind.
+
+This maps **balanced steady-state load flow only**. Enable **Consider Voltage
+Dependency of Loads** in `ComLdf` to use ZIP behavior. The creator does not
+alter calculation settings, dynamic percentages, time constants, or voltage
+limits. RMS/EMT behavior remains unvalidated. Supplying `type_name` in
+constant-power mode is rejected rather than silently ignored.
+
+The Lab PC mapping and separate diagnostic voltage-response checks are in
+[FT-28](../evidence/FT-28_load_zip_mapping_lab_pc.txt). Integrated unified-tool
+creation and retained-value verification of an out-of-service ZIP load passed
+on the Lab PC; see [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
+No calculation was run on that integrated load. RMS/EMT validation remains pending.
 
 ---
 

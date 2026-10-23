@@ -391,7 +391,7 @@ creator and must not be represented as a complete motor database.
 |---|---|---|---|
 | Events/faults | yes | partial, existing tools | not planned as a library type |
 | External grids | yes | validated on PowerFactory 2026 SP1 | implemented |
-| Loads | yes | power mapped (`plini`, `qlini`); ZIP pending | power creator implemented |
+| Loads | yes | power mapped (`plini`, `qlini`); opt-in ZIP `TypLod` for load flow | constant power default; RMS/EMT ZIP unvalidated |
 | Underground cables | yes | sequence equivalent validated on SP1 | implemented |
 | Overhead lines/conductors | yes | sequence equivalent validated on SP1 | implemented |
 | Transformers | yes, Tables 10-12 | Table 11 validated on SP1; Tables 10/12 pending | implemented for Table 11 |

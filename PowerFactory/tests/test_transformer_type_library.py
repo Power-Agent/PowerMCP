@@ -30,6 +30,7 @@ DEFAULTS = {
         "outserv": 0,
     },
     "ElmLod": {
+        "typ_id": None,
         "bus1": None,
         "plini": 0.0,
         "qlini": 0.0,
@@ -41,6 +42,11 @@ DEFAULTS = {
         "pgini": 0.0,
         "qgini": 0.0,
         "outserv": 0,
+    },
+    "TypLod": {
+        "aP": 0.0, "bP": 0.0, "aQ": 0.0, "bQ": 0.0,
+        "kpu0": 0.0, "kpu1": 1.0, "kpu": 2.0,
+        "kqu0": 0.0, "kqu1": 1.0, "kqu": 2.0,
     },
     "TypTr2": {
         "nt2ph": 0,
@@ -150,6 +156,9 @@ class FakeObject:
         return current
 
     def GetAttribute(self, name):
+        if self.class_name == "TypLod" and name in ("cP", "cQ"):
+            suffix = name[-1]
+            return 1.0 - self.attributes["a" + suffix] - self.attributes["b" + suffix]
         return self.attributes[name]
 
     def _attribute_is_blocked(self, name):

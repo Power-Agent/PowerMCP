@@ -76,6 +76,10 @@ for label in component_types:
         raise SystemExit(f"installed-wheel {label} listing returned no catalog entries")
     if not result.get("creation_parameters") or "available_filters" not in result:
         raise SystemExit(f"installed-wheel {label} listing omitted parameter discovery")
+    if label == "load":
+        inputs = result["creation_parameters"]
+        if inputs["load_model"].get("default") != "constant_power" or inputs["type_name"].get("default") != "":
+            raise SystemExit("installed-wheel load listing omitted optional ZIP creation inputs")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "

@@ -1183,6 +1183,7 @@ class EvEMTBenchMixin:
         voltage_kv: float,
         load_name: str,
         seed: int,
+        load_model: str = "constant_power",
     ):
         database = cls._load_evemtbench_load_database()
         class_name, profile = next(
@@ -1239,7 +1240,7 @@ class EvEMTBenchMixin:
 
         active_power = round(active_power, 6)
         reactive_power = round(reactive_power, 6)
-        return class_name, {
+        item = {
             "name": load_name,
             "catalog_id": database["catalog_id"],
             "source_tables": database["source"]["tables"],
@@ -1256,8 +1257,58 @@ class EvEMTBenchMixin:
                 "qlini": reactive_power,
             },
             "model": database["powerfactory"]["model"],
+            "load_model": load_model,
             "catalog_only": database["catalog_only"],
         }
+
+        if load_model == "zip":
+            # A separate stream keeps the existing seeded P/Q samples unchanged.
+            zip_rng = random.Random(f"evemtbench-load-zip:{seed}")
+            specs = database["catalog_only"]["load_model_coefficients"]
+            coefficients = {}
+            for prefix in ("kP", "kQ"):
+                bounds = []
+                for term in ("Z", "I", "P"):
+                    spec = specs[f"{prefix}_{term}"]
+                    lo, hi = spec["min"], spec["max"]
+                    if (isinstance(lo, bool) or isinstance(hi, bool)
+                            or not math.isfinite(float(lo)) or not math.isfinite(float(hi))
+                            or float(lo) > float(hi)):
+                        raise RuntimeError("Invalid ZIP coefficient interval")
+                    bounds.append((float(lo), float(hi)))
+                (zmin, zmax), (imin, imax), (pmin, pmax) = bounds
+                lower, upper = max(zmin, 1 - imax - pmax), min(zmax, 1 - imin - pmin)
+                if lower > upper:
+                    raise RuntimeError("ZIP coefficient constraints have no feasible solution")
+                z = zip_rng.uniform(lower, upper)
+                ilower, iupper = max(imin, 1 - z - pmax), min(imax, 1 - z - pmin)
+                if ilower > iupper:
+                    raise RuntimeError("ZIP current coefficient interval is empty")
+                current = zip_rng.uniform(ilower, iupper)
+                power = 1 - z - current
+                coefficients.update({f"{prefix}_Z": z, f"{prefix}_I": current,
+                                     f"{prefix}_P": power})
+            mapping = database["powerfactory"]["zip_model"]
+            item.update({
+                "model": "balanced voltage-dependent ZIP load (load flow only)",
+                "zip_coefficients": coefficients,
+                "type_attributes": {
+                    **mapping["exponents"],
+                    **{attribute: coefficients[source]
+                       for source, attribute in mapping["writable_coefficients"].items()},
+                },
+                "derived_type_attributes": {
+                    attribute: coefficients[source]
+                    for source, attribute in mapping["derived_coefficients"].items()
+                },
+                "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+                "limitations": [
+                    "Enable Consider Voltage Dependency of Loads in ComLdf to apply ZIP behavior.",
+                    "No load-flow command settings are changed by this creator.",
+                    "RMS and EMT ZIP behavior have not been validated.",
+                ],
+            })
+        return class_name, item
 
     @classmethod
     def list_evemtbench_transformer_profiles(
@@ -2480,10 +2531,13 @@ class EvEMTBenchMixin:
         out_of_service: bool = False,
         confirmation: str = "",
         open_digsilent: bool = True,
+        load_model: str = "constant_power",
+        type_name: str = "",
     ) -> dict[str, Any]:
         """Preview or create a seeded Table 5 ElmLod."""
         load_name = str(load_name or "").strip()
         bus_name = str(bus_name or "").strip()
+        created_type = created_type_folder = equipment_folder = type_folder = None
 
         def failure(message, **extra):
             result = {
@@ -2501,6 +2555,16 @@ class EvEMTBenchMixin:
         ):
             if not isinstance(value, bool):
                 return failure(f"{field_name} must be a boolean")
+
+        if load_model not in ("constant_power", "zip"):
+            return failure("load_model must be constant_power or zip")
+        if not isinstance(type_name, str):
+            return failure("type_name must be a string")
+        type_name = type_name.strip()
+        if load_model == "zip" and (not type_name or len(type_name) > cls._max_loc_name_length):
+            return failure(f"ZIP type_name must contain 1 to {cls._max_loc_name_length} characters")
+        if load_model == "constant_power" and type_name:
+            return failure("type_name is only supported for load_model=zip")
 
         for field_name, value in (
             ("load_name", load_name),
@@ -2530,6 +2594,7 @@ class EvEMTBenchMixin:
                 voltage,
                 load_name,
                 seed,
+                load_model,
             )
         except Exception as exc:
             return failure(str(exc))
@@ -2544,6 +2609,22 @@ class EvEMTBenchMixin:
             app = cls._get_application(open_digsilent)
             if app.GetActiveProject() is None:
                 raise RuntimeError("No PowerFactory project is active")
+            if load_model == "zip":
+                equipment_folder = app.GetProjectFolder("equip")
+                if equipment_folder is None:
+                    raise RuntimeError("Equipment Type Library is unavailable")
+                folders = cls._find_named_contents(equipment_folder, "Load Types", "IntPrjfolder")
+                if len(folders) > 1:
+                    raise RuntimeError("Multiple Load Types folders were found")
+                type_folder = folders[0] if folders else None
+                if cls._find_named_contents(equipment_folder, type_name, "TypLod"):
+                    raise RuntimeError(f"Load type already exists: {type_name}")
+                item["type_destination"] = {
+                    "equipment_folder": equipment_folder.GetFullName(),
+                    "load_types_folder": type_folder.GetFullName() if type_folder else None,
+                    "create_folder": type_folder is None,
+                    "type_name": type_name,
+                }
             grid = cls._select_grid(app, grid_name)
             if cls._find_named_contents(grid, load_name, "ElmLod"):
                 raise RuntimeError(
@@ -2566,6 +2647,8 @@ class EvEMTBenchMixin:
                 confirmation_prefix,
                 {
                     "component": "load",
+                    "load_model": load_model,
+                    "type_name": type_name,
                     "catalog_id": database["catalog_id"],
                     "resolved_item": item,
                     "voltage_kv": voltage,
@@ -2583,6 +2666,8 @@ class EvEMTBenchMixin:
                 "success": True,
                 "applied": False,
                 "load_created": False,
+                "type_created": False,
+                "load_model": load_model,
                 "voltage_class": voltage_class,
                 "seed": seed,
                 "catalog_id": database["catalog_id"],
@@ -2597,7 +2682,7 @@ class EvEMTBenchMixin:
                 "item": item,
                 "confirmation_required": required_confirmation,
                 "message": (
-                    "Preview only; no load, cubicle, or switch was created. "
+                    "Preview only; no type, load, cubicle, or switch was created. "
                     "Table 5 power intervals were sampled reproducibly."
                 ),
             }
@@ -2611,10 +2696,35 @@ class EvEMTBenchMixin:
                 )
 
             creating = True
+            retained_type = retained_derived = None
+            if load_model == "zip":
+                if type_folder is None:
+                    type_folder = equipment_folder.CreateObject("IntPrjfolder", "Load Types")
+                    if type_folder is None:
+                        raise RuntimeError("Could not create Load Types folder")
+                    created_type_folder = type_folder
+                created_type = type_folder.CreateObject("TypLod", type_name)
+                if created_type is None:
+                    raise RuntimeError(f"Could not create load type: {type_name}")
+                if created_type.GetClassName() != "TypLod":
+                    raise RuntimeError("PowerFactory created an unexpected type class")
+                # Native assignment matches the Lab PC write/readback validation.
+                for attribute, value in item["type_attributes"].items():
+                    setattr(created_type, attribute, value)
+                    cls._verify_attributes(created_type, {attribute: value}, "ZIP load type")
+                created_type.WriteChangesToDb()
+                retained_type = cls._verify_attributes(
+                    created_type, item["type_attributes"], "ZIP load type", "after database write")
+                retained_derived = cls._verify_attributes(
+                    created_type, item["derived_type_attributes"], "ZIP load type", "derived coefficients")
+                if str(created_type.GetAttribute("loc_name")) != type_name:
+                    raise RuntimeError("PowerFactory did not retain the load type name")
             attributes = {
                 **item["powerfactory_attributes"],
                 "outserv": int(bool(out_of_service)),
             }
+            if created_type is not None:
+                attributes["typ_id"] = created_type
             _, _, created, actual = cls._create_connected_element(
                 app,
                 "ElmLod",
@@ -2635,12 +2745,32 @@ class EvEMTBenchMixin:
                     f"'{bus_name}'"
                 ),
             })
+            if created_type is not None:
+                # Avoid serializing a live PowerFactory DataObject in the response.
+                actual["typ_id"] = created_type.GetFullName()
+                result.update(type_created=True, created_type=created_type.GetFullName(),
+                              retained_type_attributes=retained_type,
+                              retained_derived_attributes=retained_derived)
             return result
         except Exception as exc:
             message = str(exc)
             extra = {"item": item}
             if creating:
                 extra["rolled_back"] = "rolled_back=True" in message
+            if load_model == "zip":
+                # Never remove a type still referenced by a failed element rollback.
+                survivors = cls._find_named_contents(grid, load_name, "ElmLod") if creating else []
+                if survivors:
+                    extra.update(rolled_back=False, type_created=created_type is not None,
+                                 remaining_type=type_name if created_type is not None else None,
+                                 remaining_load=survivors[0].GetFullName())
+                else:
+                    rollback = cls._rollback_equipment_type(
+                        equipment_folder, created_type, created_type_folder,
+                        type_name, "TypLod", "Load Types")
+                    if rollback["rolled_back"] is None:
+                        rollback.pop("rolled_back")
+                    extra.update(rollback)
             return failure(message, **extra)
 
     @classmethod
