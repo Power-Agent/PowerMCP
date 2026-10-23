@@ -25,6 +25,12 @@ if spec is None or not spec.submodule_search_locations:
 package_root = Path(next(iter(spec.submodule_search_locations)))
 catalog_root = package_root / "_servers" / "PowerFactory" / "data"
 
+# README reference links must resolve from the installed package, not the checkout.
+for filename in ("tool_guide.md", "evemtbench.md", "evemtbench_component_catalog.md"):
+    path = catalog_root.parent / "references" / filename
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
+        raise SystemExit(f"wheel is missing reference documentation: {path}")
+
 identifiers = set()
 for filename, expected_tables in CATALOGS.items():
     path = catalog_root / filename

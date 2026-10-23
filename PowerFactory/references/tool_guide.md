@@ -721,7 +721,10 @@ Return the sampled values and confirmation phrase without creating anything.
 ## Automated tests and validation reports
 
 The EvEMTBench catalogs and builders are implemented in `evemtbench.py` and
-inherited by `DIgSILENTAgent`; the public MCP tool names and arguments are unchanged.
+inherited by `DIgSILENTAgent`. The public MCP interface now uses only
+`list_evemtbench_components(component_type, filters)` and
+`create_evemtbench_component(component_type, parameters)`; specialized MCP
+tools have been removed. Existing clients must migrate and refresh their tool list.
 Equipment-type rollback and confirmation hashing share helpers in that module.
 
 Grid-bootstrap confirmation is bound to the active project and study case,

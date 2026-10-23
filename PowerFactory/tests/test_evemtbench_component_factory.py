@@ -163,6 +163,41 @@ class UnifiedEvEMTBenchCreatorTest(unittest.TestCase):
         self.assertFalse(result["applied"])
         self.assertIn("Invalid load parameters", result["message"])
 
+    def test_rejects_non_boolean_flags_before_connecting(self):
+        agent = agent_module.DIgSILENTAgent
+        with patch.object(agent, "_get_application") as connect:
+            for kind, method_name in agent._evemtbench_creators.items():
+                inputs = agent.list_evemtbench_components(kind)["creation_parameters"]
+                parameters = {name: "" for name, spec in inputs.items() if spec["required"]}
+                for flag in ("out_of_service", "open_digsilent"):
+                    for value in ("false", "true", 0, 1, None, [], {}):
+                        for confirmation in ("", "stale confirmation"):
+                            for unified in (False, True):
+                                with self.subTest(kind=kind, flag=flag, value=value,
+                                                  confirmation=confirmation, unified=unified):
+                                    options = dict(parameters, **{flag: value},
+                                                   confirmation=confirmation)
+                                    original = dict(options)
+                                    if unified:
+                                        result = agent.create_evemtbench_component(kind, options)
+                                    else:
+                                        result = getattr(agent, method_name)(**options)
+                                    self.assertFalse(result["success"])
+                                    self.assertFalse(result["applied"])
+                                    self.assertEqual(result["message"], f"{flag} must be a boolean")
+                                    self.assertEqual(options, original)
+            connect.assert_not_called()
+
+    def test_routes_real_booleans_without_coercion(self):
+        for kind in self.FakeAgent._evemtbench_creators:
+            for value in (False, True):
+                with self.subTest(kind=kind, value=value):
+                    parameters = {"out_of_service": value, "open_digsilent": value}
+                    result = self.FakeAgent.create_evemtbench_component(kind, parameters)
+                    self.assertTrue(result["success"])
+                    self.assertIs(self.FakeAgent.calls[-1][1]["out_of_service"], value)
+                    self.assertIs(self.FakeAgent.calls[-1][1]["open_digsilent"], value)
+
 
 if __name__ == "__main__":
     unittest.main()

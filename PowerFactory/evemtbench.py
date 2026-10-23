@@ -1541,6 +1541,13 @@ class EvEMTBenchMixin:
             result.update(extra)
             return result
 
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
+
         try:
             database = cls._load_evemtbench_database()
         except Exception as exc:
@@ -1935,6 +1942,13 @@ class EvEMTBenchMixin:
             result.update(extra)
             return result
 
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
+
         database_loader = _database_loader or cls._load_evemtbench_line_database
         plan_builder = _plan_builder or cls._evemtbench_line_plan
         try:
@@ -2303,6 +2317,13 @@ class EvEMTBenchMixin:
             return result
 
         for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
+
+        for field_name, value in (
             ("external_grid_name", external_grid_name),
             ("bus_name", bus_name),
         ):
@@ -2473,6 +2494,13 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
 
         for field_name, value in (
             ("load_name", load_name),
@@ -2651,6 +2679,13 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
 
         for field_name, value in (
             ("machine_name", machine_name),
