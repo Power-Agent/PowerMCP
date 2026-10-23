@@ -416,6 +416,14 @@ The new transformer remained out of service, with the requested type and solid
 HV-neutral grounding retained. No calculation was run on that integrated
 transformer; the fault-response checks used the separate FT-30 network.
 
+[FT-32](../evidence/FT-32_transformer_earth_fault_reference_lab_pc.txt) adds an
+independent absolute-current comparison for a separate unloaded, lossless YNd11
+equivalent, including a source-only control and 20-ohm neutral-resistance case.
+All four comparisons passed the predeclared 0.5% relative / 0.00001 kA absolute
+tolerance; the record includes the complete JSON, script and rerun instructions.
+This is not an absolute-current certification of the original lossy type or
+integrated transformer, and does not extend the creator's configuration scope.
+
 ---
 
 ## EvEMTBench Overhead-Line Database and Creator

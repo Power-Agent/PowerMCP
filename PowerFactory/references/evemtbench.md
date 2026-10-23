@@ -89,6 +89,13 @@ saturation and RMS/EMT remain unvalidated.
 records successful unified-tool creation and readback of the dedicated type and
 out-of-service transformer on the Lab PC. No calculation was run on that
 integrated transformer; the fault-response checks used the separate FT-30 network.
+[FT-32](../evidence/FT-32_transformer_earth_fault_reference_lab_pc.txt) adds
+an independent sequence-network current reference for an unloaded, lossless
+temporary YNd11 equivalent, with complete JSON and a reproducible script.
+All four comparisons and the source-only control passed, with restoration and
+cleanup confirmed. This does not certify absolute fault currents for the original
+lossy type or integrated transformer, or validate core/limb, magnetizing,
+saturation or RMS/EMT models. Supported creator configurations are unchanged.
 `unmapped_source_tables` still includes 10 and 12 because they are not fully
 mapped; `partial_table_10_mapping` exposes the restricted capability separately.
 

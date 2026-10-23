@@ -2,6 +2,7 @@
 
 Latest follow-up records:
 
+- [FT-32](FT-32_transformer_earth_fault_reference_lab_pc.txt): independent lossless YNd11 current reference, with [complete JSON](FT-32_transformer_earth_fault_reference_lab_pc.json) and [standalone script](scripts/lab_transformer_earth_fault_reference_check.py).
 - [FT-31](FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt): successful unified-tool YNd11 zero-sequence creation and readback, with the transformer out of service.
 - [FT-30](FT-30_transformer_zero_sequence_ynd_lab_pc.txt): YNd11 type writes and isolated earth-fault sensitivity/zero-sequence blocking checks on the Lab PC.
 - [FT-29](FT-29_integrated_zip_load_creation_lab_pc.txt): successful integrated unified-tool ZIP creation and retained-value checks, with the load out of service.
@@ -55,6 +56,7 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-29 | `FT-29_integrated_zip_load_creation_lab_pc.txt` | Compiled evidence record containing a user-supplied creation response |
 | FT-30 | `FT-30_transformer_zero_sequence_ynd_lab_pc.txt` | Compiled evidence record; rounded summary of user-supplied Lab PC results |
 | FT-31 | `FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt` | Compiled evidence record containing user-supplied creation and readback extracts |
+| FT-32 | `FT-32_transformer_earth_fault_reference_lab_pc.txt` | Compiled evidence record with complete account-sanitized JSON and reproducible script |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -143,4 +145,10 @@ type and out-of-service transformer with the restricted zero-sequence equivalent
 Type impedance, derived values, type assignment and HV grounding were read back.
 No calculation was run on this integrated transformer; fault-response evidence
 remains the separate FT-30 test. Core/limb, magnetizing, saturation, absolute
-fault-current accuracy and RMS/EMT validation remain outside these records.
+fault-current accuracy and RMS/EMT validation remain outside FT-30/FT-31.
+
+FT-32 separately records independent analytical agreement for an unloaded,
+lossless temporary YNd11 equivalent. All four transformer comparisons and the
+source-only control passed; restoration and cleanup were confirmed. This does
+not certify absolute currents for the original lossy type or integrated
+transformer, and does not widen the creator's supported configurations.
