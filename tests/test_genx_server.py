@@ -355,9 +355,10 @@ def test_shared_genx_resource_classifier(name, expected):
     assert classify_resource(name) == expected
 
 
-def test_capacity_classifier_does_not_drop_distributed_generation():
-    """Distributed-generation resources remain visible in technology totals."""
+def test_capacity_classifier_handles_distributed_generation_by_technology():
+    """Use explicit technology tokens; never assume all distributed generation is solar."""
     from GenX.tool_logic.resources import classify_resource
 
     assert classify_resource("MA_distributed_generation_solar") == "solar"
     assert classify_resource("MA_distributed_generation_wind") == "wind"
+    assert classify_resource("MA_distributed_generation") == "other"
