@@ -29,6 +29,12 @@ Claude/local full-access server:
 - `hope_nodal_prices`
 - `hope_compare_cases`
 - `hope_run_holistic`
+- `hope_holistic_status`
+- `hope_prepare_holistic_study`
+- `hope_prepare_holistic_validation_study`
+- `hope_launch_holistic_study`
+- `hope_holistic_study_status`
+- `hope_audit_holistic_study`
 - `hope_run_erec`
 - `hope_rep_day_audit`
 - `hope_aggregation_audit`
@@ -166,6 +172,31 @@ uv --directory /path/to/HOPE/tools/hope_mcp_server run \
 If an agent launches a long-running Julia job and needs to stop it early, call
 `hope_cancel_job(job_id)` with the `job_id` returned by `hope_warmup`,
 `hope_run_hope`, `hope_run_holistic`, or `hope_run_erec`.
+
+## Durable holistic studies
+
+`hope_run_holistic(gtep_case_id, pcm_case_id, request_id, solver)` fingerprints
+the GTEP and PCM inputs, copies them into an isolated request workspace, and
+launches the deterministic linkage workflow. Use a stable `request_id` for safe
+retries and poll `hope_holistic_status(request_id)` for status that survives an
+MCP reconnect. The default run workspace is `artifacts/agent_runs/`; override it
+with `HOPE_AGENT_RUNS_ROOT` when needed.
+
+For role-separated agent operation, the local server exposes a durable protocol:
+
+- `hope_prepare_holistic_study(...)` prepares an arbitrary compatible case pair.
+- `hope_prepare_holistic_validation_study(...)` materializes the registered
+  annual-GTEP/monthly-PCM Maryland validation profile with a bounded PCM month.
+- `hope_launch_holistic_study(study_id, ...)` executes the prepared request.
+- `hope_holistic_study_status(study_id)` provides reconnect-safe monitoring.
+- `hope_audit_holistic_study(study_id, ...)` validates the published evidence
+  and records an `ACCEPTED` or `REJECTED` receipt.
+
+Preparation does not launch Julia. It pins source fingerprints and the request
+hash under `artifacts/agent_studies/<study_id>/study_manifest.yml`; execution
+rechecks them before solving, and audit writes `audit_report.yml`. The roles may
+be handled by separate agents or sequentially by one MCP client. Override the
+study root with `HOPE_AGENT_STUDIES_ROOT`.
 
 If Claude appears to be running stale code or the wrong Julia environment, call
 `hope_debug_solver_environment(case_id, solver, timeout_seconds)` to inspect the active project,

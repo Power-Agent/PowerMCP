@@ -146,6 +146,12 @@ class HopeCoreTests(unittest.TestCase):
         self.assertIn("hope_cancel_job", tool_names)
         self.assertIn("hope_debug_solver_environment", tool_names)
         self.assertIn("hope_debug_solver_environment_async", tool_names)
+        self.assertIn("hope_holistic_status", tool_names)
+        self.assertIn("hope_prepare_holistic_study", tool_names)
+        self.assertIn("hope_prepare_holistic_validation_study", tool_names)
+        self.assertIn("hope_launch_holistic_study", tool_names)
+        self.assertIn("hope_holistic_study_status", tool_names)
+        self.assertIn("hope_audit_holistic_study", tool_names)
 
     def test_read_only_server_accepts_configured_public_hostname(self) -> None:
         with mock.patch.dict(
