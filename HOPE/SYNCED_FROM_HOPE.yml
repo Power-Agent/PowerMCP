@@ -1,0 +1,5 @@
+schema_version: 1
+upstream_repository: https://github.com/HOPE-Model-Project/HOPE.jl
+upstream_path: tools/hope_mcp_server
+upstream_commit: dc4d1fc415ef0de855e4d0f36990ef0dc9e8a638
+sync_manifest: tools/hope_mcp_server/powermcp_sync.yml
