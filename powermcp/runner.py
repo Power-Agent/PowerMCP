@@ -21,6 +21,7 @@ from __future__ import annotations
 import importlib.util
 import runpy
 import sys
+import threading
 from contextlib import contextmanager
 from collections.abc import Iterator
 
@@ -31,6 +32,9 @@ class LaunchError(RuntimeError):
     """Raised with an actionable message when a server cannot be launched."""
 
 
+_SYS_PATH_LOCK = threading.RLock()
+
+
 @contextmanager
 def _temporary_sys_path(*paths: str) -> Iterator[None]:
     """Expose paths for one launch and restore the caller's import path.
@@ -39,17 +43,20 @@ def _temporary_sys_path(*paths: str) -> Iterator[None]:
     caller entries (including their original order). A finally block guarantees
     restoration when import or server startup raises.
     """
-    original = sys.path[:]
-    try:
-        for path in paths:
-            if path not in sys.path:
-                sys.path.insert(0, path)
-        yield
-    finally:
-        # sys.path is process-global and servers may reorder, remove, or append
-        # entries while importing. Restore the caller's exact contents in place
-        # so references to the sys.path list remain valid.
-        sys.path[:] = original
+    # sys.path is process-global. Serialize PowerMCP launches so overlapping
+    # contexts cannot restore snapshots over one another.
+    with _SYS_PATH_LOCK:
+        original = sys.path[:]
+        try:
+            for path in paths:
+                if path not in sys.path:
+                    sys.path.insert(0, path)
+            yield
+        finally:
+            # Servers may reorder, remove, or append entries while importing.
+            # Restore the caller's exact contents in place so references to the
+            # sys.path list remain valid.
+            sys.path[:] = original
 
 
 def probe_installed(probe: str | None) -> bool:
