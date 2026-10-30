@@ -39,21 +39,17 @@ def _temporary_sys_path(*paths: str) -> Iterator[None]:
     caller entries (including their original order). A finally block guarantees
     restoration when import or server startup raises.
     """
-    added: list[str] = []
+    original = sys.path[:]
     try:
         for path in paths:
             if path not in sys.path:
                 sys.path.insert(0, path)
-                added.append(path)
         yield
     finally:
-        for path in reversed(added):
-            try:
-                sys.path.remove(path)
-            except ValueError:
-                # A server may have removed its own temporary path. Do not
-                # mask the original launch exception while restoring state.
-                pass
+        # sys.path is process-global and servers may reorder, remove, or append
+        # entries while importing. Restore the caller's exact contents in place
+        # so references to the sys.path list remain valid.
+        sys.path[:] = original
 
 
 def probe_installed(probe: str | None) -> bool:
