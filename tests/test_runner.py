@@ -7,6 +7,7 @@ registration but the stdio loop is a no-op (records the call instead).
 from __future__ import annotations
 
 import sys
+import threading
 from types import SimpleNamespace
 
 import pytest
@@ -175,6 +176,46 @@ def test_temporary_sys_path_restores_exact_state_after_server_mutation(tmp_path,
             mutation(entry)
         assert sys.path == original
     finally:
+        sys.path[:] = original
+
+
+def test_temporary_sys_path_serializes_overlapping_launches(tmp_path):
+    original = sys.path[:]
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+    first_path = str(tmp_path / "first")
+    second_path = str(tmp_path / "second")
+
+    def first():
+        with runner._temporary_sys_path(first_path):
+            first_entered.set()
+            assert release_first.wait(timeout=2)
+
+    def second():
+        assert first_entered.wait(timeout=2)
+        with runner._temporary_sys_path(second_path):
+            second_entered.set()
+
+    first_thread = threading.Thread(target=first)
+    second_thread = threading.Thread(target=second)
+    try:
+        first_thread.start()
+        assert first_entered.wait(timeout=2)
+        second_thread.start()
+        assert not second_entered.wait(timeout=0.05)
+        release_first.set()
+        first_thread.join(timeout=2)
+        second_thread.join(timeout=2)
+        assert not first_thread.is_alive()
+        assert not second_thread.is_alive()
+        assert second_entered.is_set()
+        assert sys.path == original
+    finally:
+        release_first.set()
+        first_thread.join(timeout=2)
+        if second_thread.ident is not None:
+            second_thread.join(timeout=2)
         sys.path[:] = original
 
 
