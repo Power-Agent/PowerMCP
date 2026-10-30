@@ -1,5 +1,6 @@
-"""OnSSET MCP server.
 
+"""OnSSET MCP server.
+author Corrado Maria Caminiti
 Exposes the OnSSET electrification model (https://github.com/OnSSET/onsset) to MCP clients:
 input discovery and validation, calibration, scenario runs and result analysis.
 
