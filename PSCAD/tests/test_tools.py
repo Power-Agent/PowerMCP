@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import os
 from pathlib import Path
 import tempfile
+import time
 from pscad_mcp.tools.project_tools import (
     register_project_tools,
     run_project,
@@ -227,6 +228,42 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["errors"], [])
         self.assertIn("output file was created or updated", result["message"])
+
+    async def _run_short_run_with_output_mtime_offset(self, offset_ns):
+        with tempfile.TemporaryDirectory() as output_dir:
+            mock_project = MagicMock()
+            mock_project.temp_folder = output_dir
+            output_file = Path(output_dir) / "short.psout"
+
+            def start():
+                output_file.write_text("fresh output")
+                mtime_ns = time.time_ns() + offset_ns
+                os.utime(output_file, ns=(mtime_ns, mtime_ns))
+
+            mock_project.start.side_effect = start
+            mock_project.run_status.side_effect = [
+                (None, None),  # preflight idle
+                ("Build", None),
+                ("Build", None),
+                (None, None),  # Run completed between status samples
+            ]
+            mock_project.messages.side_effect = [[], []]
+            self.mock_pscad.project.return_value = mock_project
+            ctx = MagicMock()
+            ctx.report_progress = AsyncMock()
+
+            with patch.dict(os.environ, {"POWERIO_MCP_ALLOWED_ROOTS": output_dir}):
+                with patch("pscad_mcp.tools.project_tools.asyncio.sleep", new_callable=AsyncMock):
+                    return await run_project_to_completion("test", ctx)
+
+    async def test_run_to_completion_tolerates_coarse_filesystem_mtime(self):
+        result = await self._run_short_run_with_output_mtime_offset(-1_000_000_000)
+        self.assertEqual(result["status"], "completed")
+        self.assertIn("output file was created or updated", result["message"])
+
+    async def test_run_to_completion_rejects_output_far_older_than_run(self):
+        result = await self._run_short_run_with_output_mtime_offset(-3600 * 1_000_000_000)
+        self.assertEqual(result["status"], "not_completed")
 
     async def test_run_to_completion_does_not_accept_empty_output_as_completion(self):
         with tempfile.TemporaryDirectory() as output_dir:

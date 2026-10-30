@@ -30,6 +30,11 @@ Claude/local full-access server:
 - `hope_compare_cases`
 - `hope_run_holistic`
 - `hope_holistic_status`
+- `hope_prepare_holistic_study`
+- `hope_prepare_holistic_validation_study`
+- `hope_launch_holistic_study`
+- `hope_holistic_study_status`
+- `hope_audit_holistic_study`
 - `hope_run_erec`
 - `hope_rep_day_audit`
 - `hope_aggregation_audit`
@@ -162,6 +167,57 @@ terminal status values remain the same before and after a reconnect: `done`,
 Set `HOPE_AGENT_RUNS_ROOT` to move the persistent workspaces from their default
 `<HOPE_REPO_ROOT>/artifacts/agent_runs` location. Set
 `HOPE_MODELCASES_PATH` when ModelCases is maintained as a separate checkout.
+
+## Durable holistic studies
+
+`hope_run_holistic(gtep_case_id, pcm_case_id, request_id, solver)` fingerprints
+the GTEP and PCM inputs, copies them into an isolated request workspace, and
+launches the deterministic linkage workflow. Use a stable `request_id` for safe
+retries and poll `hope_holistic_status(request_id)` for status that survives an
+MCP reconnect. The default run workspace is `artifacts/agent_runs/`; override it
+with `HOPE_AGENT_RUNS_ROOT` when needed.
+
+For role-separated agent operation, the local server exposes a durable protocol:
+
+- `hope_prepare_holistic_study(...)` prepares an arbitrary compatible case pair.
+- `hope_prepare_holistic_validation_study(...)` materializes the registered
+  annual-GTEP/monthly-PCM Maryland validation profile with a bounded PCM month.
+- `hope_launch_holistic_study(study_id, ...)` executes the prepared request.
+- `hope_holistic_study_status(study_id)` provides reconnect-safe monitoring.
+- `hope_audit_holistic_study(study_id, ...)` validates the published evidence
+  and records an `ACCEPTED` or `REJECTED` receipt.
+
+Preparation does not launch Julia. It pins source fingerprints and the request
+hash under `artifacts/agent_studies/<study_id>/study_manifest.yml`; execution
+rechecks them before solving, and audit writes `audit_report.yml`. The roles may
+be handled by separate agents or sequentially by one MCP client. Override the
+study root with `HOPE_AGENT_STUDIES_ROOT`.
+
+If Claude appears to be running stale code or the wrong Julia environment, call
+`hope_debug_solver_environment(case_id, solver, timeout_seconds)` to inspect the active project,
+depot path, loaded `HOPE.jl` path, and the exact optimizer constructor JuMP sees.
+
+If the synchronous debug probe risks hitting Claude-side request timeouts, call
+`hope_debug_solver_environment_async(case_id, solver)` and then poll with
+`hope_job_status(job_id)` to retrieve the full probe stdout, stderr, and parsed fields.
+
+## Dashboard launch notes
+
+The `hope_open_dashboard` tool launches the HOPE dashboards from the repository
+root and, on Windows, intentionally shells out through `cmd.exe /d /c` instead
+of invoking Python directly. This mirrors the manual Command Prompt launch path
+that has proven reliable with Claude Desktop and the local MCP server.
+
+The tool also:
+
+- sanitizes inherited Python environment variables that can interfere with Dash startup
+- sets `HOPE_MODELCASES_PATH` so the dashboard can discover `ModelCases/`
+- sets `HOPE_DASHBOARD_PORT` so the runner scripts can bind the requested port
+- writes startup logs to `tools/hope_dashboard/logs/`
+
+If `hope_open_dashboard` reports a startup timeout or immediate crash, check the
+returned `log_path` first.
+
 
 ## Upstream synchronization
 
