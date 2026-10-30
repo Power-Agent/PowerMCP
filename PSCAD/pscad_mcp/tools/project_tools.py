@@ -74,6 +74,13 @@ async def _snapshot_project_outputs(project: Any) -> Optional[Dict[str, tuple]]:
         return None
 
 
+# Filesystem timestamp clocks can be coarser than time.time_ns() (for example,
+# FAT timestamps have 2-second granularity). The baseline comparison proves
+# the output changed during this run; bounded slack avoids rejecting a fresh
+# output solely because its timestamp was quantized down.
+_OUTPUT_MTIME_SLACK_NS = 2_000_000_000
+
+
 async def _project_output_changed(
     project: Any,
     baseline: Optional[Dict[str, tuple]],
@@ -87,7 +94,7 @@ async def _project_output_changed(
         return False
     return any(
         metadata[1] > 0
-        and metadata[0] >= run_started_ns
+        and metadata[0] >= run_started_ns - _OUTPUT_MTIME_SLACK_NS
         and (path not in baseline or baseline[path] != metadata)
         for path, metadata in current.items()
     )
