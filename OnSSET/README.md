@@ -4,9 +4,34 @@ An MCP server that lets an AI client run the [OnSSET](https://github.com/OnSSET/
 electrification model: find and validate inputs, calibrate a settlement file, run least-cost
 electrification scenarios and analyse the results.
 
-It drives the real OnSSET code (the `onsset` package of your OnSSET checkout). The calibration and
-scenario logic of the OnSSET notebooks is ported to two headless scripts. The Uganda regression test
-shows the scenario script reproduces a notebook run.
+It drives the real OnSSET code: the `onsset` package of an unmodified clone of the upstream
+repository. The calibration and scenario logic of the OnSSET notebooks is ported to two headless
+scripts. The Uganda regression test shows the scenario script reproduces a notebook run.
+
+## OnSSET version
+
+The server is built and validated against one upstream commit:
+
+| | |
+|---|---|
+| repository | [OnSSET/onsset](https://github.com/OnSSET/onsset), branch `master` |
+| commit | [`486c26039ecbf8614d68da90c7b4968b2f4a5b13`](https://github.com/OnSSET/onsset/commit/486c26039ecbf8614d68da90c7b4968b2f4a5b13) ("Updated env files", 2026-06-29) |
+| `git describe` | `ol-v2.0-30-g486c260` |
+| package version | `onsset 2.1.dev30+g486c260…` (from `setuptools_scm`) |
+
+No change to the OnSSET code is needed. The ports and the input checks follow these files at that
+commit:
+
+| upstream file | ported or mirrored in |
+|---|---|
+| `onsset/onsset.py`, `onsset/hybrids.py`, `onsset/hybrids_wind.py` | imported as-is by both engine scripts. `onsset_inputs.py` mirrors the columns and file layouts they read |
+| `1. OnSSET_Calibration.ipynb` | `onsset_calibration.py` |
+| `2. OnSSET_Scenarios.ipynb`, `funcs.ipynb`, `detailed_tech_parameters.ipynb` | `onsset_engine.py`, defaults in `onsset_params.py` |
+
+The notebooks are not read at run time. Editing them in your checkout does not change what the
+server computes. Changes to the `onsset` package do. `check_environment` returns the checkout's
+`onsset_commit` next to `validated_against_commit`. If they differ, the checkout has moved away from
+the validated commit: re-run the regression tests before trusting results.
 
 ## Architecture
 
@@ -21,7 +46,7 @@ MCP client ──stdio──▶ onsset_mcp.py           tools, argument checks, 
                                  ▼
                        onsset_calibration.py  ── port of 1. OnSSET_Calibration.ipynb ──┐
                        onsset_engine.py       ── port of 2. OnSSET_Scenarios.ipynb ────┤──▶ onsset package
-                                                 + funcs.ipynb, detailed_tech_parameters  (C:\...\onsset)
+                                                 + funcs.ipynb, detailed_tech_parameters  (OnSSET clone @ 486c260)
 ```
 
 The server process never imports `onsset`:
@@ -51,15 +76,32 @@ Run folder layout (`<workspace>/<name>/`):
 
 ## Prerequisites and installation
 
-1. An OnSSET checkout, e.g. `C:\Users\corra\Desktop\onsset` (commit `486c260` is the tested one).
+1. A clone of OnSSET at the validated commit.
 2. A Python environment with OnSSET's dependencies plus `mcp>=2,<3` and `pytest`.
    `onsset_env_mcp.yml` describes it.
 
+The commands below use these placeholders:
+
+| placeholder | meaning | example |
+|---|---|---|
+| `<onsset>` | your OnSSET clone | `C:\Users\me\onsset` |
+| `<PowerMCP>` | this repository | `C:\Users\me\PowerMCP` |
+| `<env-python>` | `python.exe` of the conda environment | `C:\Users\me\anaconda3\envs\onsset_env_mcp\python.exe` |
+
 ```powershell
-conda env create -f C:\Users\corra\Desktop\MCP\PowerMCP\OnSSET\onsset_env_mcp.yml
+git clone https://github.com/OnSSET/onsset.git <onsset>
+git -C <onsset> checkout 486c26039ecbf8614d68da90c7b4968b2f4a5b13
+conda env create -f <PowerMCP>\OnSSET\onsset_env_mcp.yml
 conda activate onsset_env_mcp
-pip install -e C:\Users\corra\Desktop\onsset      # installs the onsset package from your checkout
+pip install -e <onsset>      # installs the onsset package from your clone
 ```
+
+The `checkout` leaves the clone on a detached HEAD. That is intended: it keeps the clone at the
+validated commit. To try a newer OnSSET, check out that commit instead and run the tests (see
+[Tests](#tests)).
+
+`pip install -e` is required for the default configuration. With it, the engine interpreter finds
+the clone by itself, and `ONSSET_REPO` can stay unset.
 
 The engine is checked against the versions in that environment: Python 3.12, pandas 3.0, numpy 2.4,
 geopandas 1.1, numba 0.65, mcp 2.2.
@@ -88,7 +130,7 @@ are resolved, including `..` and symlinks, before that check. Tools write only i
 ## Launching
 
 ```powershell
-C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe C:\Users\corra\Desktop\MCP\PowerMCP\OnSSET\onsset_mcp.py
+<env-python> <PowerMCP>\OnSSET\onsset_mcp.py
 ```
 
 The server speaks MCP over stdio, so it waits silently for a client.
@@ -96,7 +138,7 @@ The server speaks MCP over stdio, so it waits silently for a client.
 ### Claude Code
 
 ```powershell
-claude mcp add onsset -- C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe C:\Users\corra\Desktop\MCP\PowerMCP\OnSSET\onsset_mcp.py
+claude mcp add onsset -- <env-python> <PowerMCP>\OnSSET\onsset_mcp.py
 ```
 
 ### Claude Desktop and other JSON-configured clients
@@ -105,11 +147,11 @@ claude mcp add onsset -- C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe
 {
   "mcpServers": {
     "onsset": {
-      "command": "C:\\Users\\corra\\anaconda3\\envs\\onsset_env_mcp\\python.exe",
-      "args": ["C:\\Users\\corra\\Desktop\\MCP\\PowerMCP\\OnSSET\\onsset_mcp.py"],
+      "command": "C:\\Users\\me\\anaconda3\\envs\\onsset_env_mcp\\python.exe",
+      "args": ["C:\\Users\\me\\PowerMCP\\OnSSET\\onsset_mcp.py"],
       "env": {
-        "ONSSET_REPO": "C:\\Users\\corra\\Desktop\\onsset",
-        "ONSSET_ALLOWED_ROOTS": "C:\\Users\\corra\\Documents\\onsset_data"
+        "ONSSET_REPO": "C:\\Users\\me\\onsset",
+        "ONSSET_ALLOWED_ROOTS": "C:\\Users\\me\\Documents\\onsset_data"
       }
     }
   }
@@ -117,7 +159,7 @@ claude mcp add onsset -- C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe
 ```
 
 Use the environment's own `python.exe`. A bare `python` would start whichever interpreter is first
-on `PATH`.
+on `PATH`. In JSON, write backslashes as `\\` or use forward slashes.
 
 ## Tools
 
@@ -173,7 +215,10 @@ The checks follow the OnSSET code (`onsset/onsset.py`, `hybrids.py`, `hybrids_wi
 
 ### Example session
 
-1. `check_environment` returns `{"ok": true, "packages": {"onsset": "2.1.dev30+g486c26039…", …}, "onsset_commit": "486c260…"}`.
+The session uses the Uganda inputs described in [Test data](#test-data).
+
+1. `check_environment` returns `{"ok": true, "packages": {"onsset": "2.1.dev30+g486c26039…", …},
+   "onsset_commit": "486c260…", "validated_against_commit": "486c260…"}`.
 2. `list_input_files` lists `test\inputTestUganda\OnSSET_InputFile_Calibrated_v1.csv`
    (`settlements (calibrated)`), `ug-2-pv.csv`, `ug-2-wind.csv` and `UGA\UGA\UGA_mv_lines.shp`.
 3. `validate_parameters` with
@@ -227,13 +272,47 @@ python onsset_engine.py --input-csv calibrated.csv --pv-csv pv.csv --wind-csv wi
     --mv-lines mv.shp --params params.json --output-dir out --scenario-name s1
 ```
 
+## Test data
+
+Two datasets are used. Only the first ships with the upstream repository.
+
+* **Djibouti** (`<onsset>\test\test_data\dj-test.csv`) is tracked in OnSSET at `486c260`. It is an
+  uncalibrated GIS extract, and the slow stdio test calibrates it.
+* **Uganda** is not part of the OnSSET repository. Place it in the clone, untracked, as:
+
+  ```
+  <onsset>\test\inputTestUganda\OnSSET_InputFile_Calibrated_v1.csv   calibrated settlements, 397,910 rows
+  <onsset>\test\inputTestUganda\ug-2-pv.csv                         renewables.ninja weather, 1980-2019
+  <onsset>\test\inputTestUganda\ug-2-wind.csv                       renewables.ninja wind
+  <onsset>\test\inputTestUganda\UGA\UGA\UGA_mv_lines.shp            existing MV lines (+ .dbf .shx .prj .cpg)
+  <onsset>\test\outputTestUganda\ugandaGeneral_*.csv, new_mv_lines_ugandaGeneral_2050.geojson
+  ```
+
+  `tests/baseline_uganda/inputs.json` records the size and SHA-256 of every input. Compare them
+  to confirm you have the same files.
+
+The reference outputs in `outputTestUganda` come from the upstream `2. OnSSET_Scenarios.ipynb` at
+`486c260`, run on the Uganda inputs. The notebook was changed in two cells only:
+
+| notebook cell | upstream value | reference run |
+|---|---|---|
+| `end_year` | `2030` | `2050` |
+| `end_year_pop` | `26000000` | `86000000` |
+
+All other inputs keep the notebook defaults. `tests/baseline_uganda/params.json` contains the full
+parameter set.
+
+The GIS extraction notebook is a separate upstream repository,
+[OnSSET/OnSSET_GIS_Extraction_notebook](https://github.com/OnSSET/OnSSET_GIS_Extraction_notebook).
+The server does not use it (see [Limitations](#limitations)).
+
 ## Tests
 
 ```powershell
-cd C:\Users\corra\Desktop\MCP\PowerMCP\OnSSET
-C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe -m pytest tests -m "not slow" --ignore=tests/test_baseline_uganda.py   # ~15 s
-C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe -m pytest tests/test_mcp_stdio.py -m slow                               # ~3 min, real model through MCP
-C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe -m pytest tests/test_baseline_uganda.py                                 # ~3 min, national notebook regression
+cd <PowerMCP>\OnSSET
+<env-python> -m pytest tests -m "not slow" --ignore=tests/test_baseline_uganda.py   # ~15 s
+<env-python> -m pytest tests/test_mcp_stdio.py -m slow                               # ~3 min, real model through MCP
+<env-python> -m pytest tests/test_baseline_uganda.py                                 # ~3 min, national notebook regression
 ```
 
 | file | covers |
@@ -246,8 +325,12 @@ C:\Users\corra\anaconda3\envs\onsset_env_mcp\python.exe -m pytest tests/test_bas
 | `test_mcp_stdio.py` | real stdio sessions: protocol, errors, recovery. `slow`: calibration (Djibouti) and two scenarios plus a cancel on a 4,385-settlement Uganda window |
 | `test_baseline_uganda.py` | the engine reproduces the national Uganda notebook run |
 
-The data-dependent tests skip when the OnSSET test data is absent. `ONSSET_UGANDA_REPO` points them
-at another checkout.
+The data-dependent tests skip when the test data is absent. They look in
+`C:\Users\corra\Desktop\onsset` by default. Set `ONSSET_UGANDA_REPO=<onsset>` to point them at
+your clone.
+
+Run all three after moving the clone to another OnSSET commit. `test_baseline_uganda.py` is the one
+that detects a change in model results.
 
 ## Limitations
 
@@ -266,8 +349,11 @@ at another checkout.
 
 ## Troubleshooting
 
+* `check_environment` reports a different `onsset_commit` from `validated_against_commit`. Run
+  `git -C <onsset> checkout 486c26039ecbf8614d68da90c7b4968b2f4a5b13`, or run the tests against the
+  new commit.
 * `check_environment` reports `onsset` as not importable. Point `ONSSET_PYTHON` at the environment
-  where `pip install -e <onsset checkout>` was run.
+  where `pip install -e <onsset>` was run.
 * "outside the allowed directories": add the input folder to `ONSSET_ALLOWED_ROOTS`.
 * A run `failed`: `get_run_status` returns the engine's error message and the last log lines. The
   full log is `engine.log` in the run folder.
