@@ -74,6 +74,13 @@ async def _snapshot_project_outputs(project: Any) -> Optional[Dict[str, tuple]]:
         return None
 
 
+# File mtimes come from a coarser clock than time.time_ns() (kernel ticks on
+# Linux, 2 s on FAT), so output written right after start can be stamped
+# slightly before it. The baseline comparison already proves the file changed
+# during this call; the mtime check only rejects files with old timestamps.
+_OUTPUT_MTIME_SLACK_NS = 2_000_000_000
+
+
 async def _project_output_changed(
     project: Any,
     baseline: Optional[Dict[str, tuple]],
@@ -87,7 +94,7 @@ async def _project_output_changed(
         return False
     return any(
         metadata[1] > 0
-        and metadata[0] >= run_started_ns
+        and metadata[0] >= run_started_ns - _OUTPUT_MTIME_SLACK_NS
         and (path not in baseline or baseline[path] != metadata)
         for path, metadata in current.items()
     )
