@@ -20,6 +20,13 @@ def _finite(value: Real, name: str) -> float:
     return result
 
 
+def _finite_result(value: float, name: str) -> float:
+    """Reject arithmetic overflow instead of returning misleading infinities."""
+    if not math.isfinite(value):
+        raise ValueError(f"{name} overflowed or produced a non-finite result")
+    return value
+
+
 @dataclass(frozen=True)
 class ChannelSeries:
     """One physical signal sampled at its own strictly increasing time points."""
@@ -128,8 +135,11 @@ def _interpolate(times: tuple[float, ...], values: tuple[float, ...], point: flo
         return values[lo]
     if point == times[hi]:
         return values[hi]
-    fraction = (point - times[lo]) / (times[hi] - times[lo])
-    return values[lo] + fraction * (values[hi] - values[lo])
+    numerator = _finite_result(point - times[lo], "interpolation time difference")
+    denominator = _finite_result(times[hi] - times[lo], "interpolation interval")
+    fraction = _finite_result(numerator / denominator, "interpolation fraction")
+    delta = _finite_result(values[hi] - values[lo], "interpolation value difference")
+    return _finite_result(values[lo] + fraction * delta, "interpolated value")
 
 
 def compare_dynamic_snapshots(
@@ -184,10 +194,17 @@ def compare_dynamic_snapshots(
         if a.unit != b.unit:
             units.append(key)
             continue
-        at = tuple(t - left.event_time_s for t in a.time_s)
-        bt = tuple(t - right.event_time_s for t in b.time_s)
+        at = tuple(
+            _finite_result(t - left.event_time_s, "left event-relative timestamp")
+            for t in a.time_s
+        )
+        bt = tuple(
+            _finite_result(t - right.event_time_s, "right event-relative timestamp")
+            for t in b.time_s
+        )
         start, end = max(at[0], bt[0]), min(at[-1], bt[-1])
-        if end <= start or end - start < minimum_overlap_s:
+        duration = _finite_result(end - start, "overlap duration")
+        if duration <= 0 or duration < minimum_overlap_s:
             insufficient.append(key)
             continue
         grid = sorted({start, end, *(t for t in at if start < t < end), *(t for t in bt if start < t < end)})
@@ -195,22 +212,50 @@ def compare_dynamic_snapshots(
             raise ValueError(f"channel {key!r} alignment requires {len(grid)} points; limit is {max_points_per_channel}")
         av = tuple(_interpolate(at, a.values, t) for t in grid)
         bv = tuple(_interpolate(bt, b.values, t) for t in grid)
-        errors = tuple(abs(x - y) for x, y in zip(av, bv))
-        squared = tuple((x - y) ** 2 for x, y in zip(av, bv))
-        duration = end - start
-        iae = sum((errors[i] + errors[i + 1]) * 0.5 * (grid[i + 1] - grid[i]) for i in range(len(grid) - 1))
-        ise = sum((squared[i] + squared[i + 1]) * 0.5 * (grid[i + 1] - grid[i]) for i in range(len(grid) - 1))
+        errors = tuple(
+            _finite_result(abs(x - y), f"absolute error for channel {key!r}")
+            for x, y in zip(av, bv)
+        )
+        max_error = max(errors)
+
+        # Normalize before squaring so large, but representable, errors do not
+        # overflow merely because the RMSE calculation squares them.
+        if max_error == 0:
+            normalized_iae = 0.0
+            normalized_ise = 0.0
+        else:
+            normalized = tuple(error / max_error for error in errors)
+            normalized_iae = sum(
+                (normalized[i] + normalized[i + 1]) * 0.5
+                * (grid[i + 1] - grid[i])
+                for i in range(len(grid) - 1)
+            )
+            normalized_ise = sum(
+                (normalized[i] ** 2 + normalized[i + 1] ** 2) * 0.5
+                * (grid[i + 1] - grid[i])
+                for i in range(len(grid) - 1)
+            )
+        iae = _finite_result(max_error * normalized_iae, "integrated absolute error")
+        mean_error = _finite_result(iae / duration, "mean absolute error")
+        rms_error = _finite_result(
+            max_error * math.sqrt(normalized_ise / duration),
+            "root mean square error",
+        )
         atol, rtol = (channel_tolerances or {}).get(key, (absolute_tolerance, relative_tolerance))
-        allowed = atol + rtol * max(max(map(abs, av)), max(map(abs, bv)))
-        within = max(errors) <= allowed
+        signal_scale = max(max(map(abs, av)), max(map(abs, bv)))
+        allowed = _finite_result(
+            atol + _finite_result(rtol * signal_scale, "relative tolerance"),
+            "combined tolerance",
+        )
+        within = max_error <= allowed
         if not within:
             outside.append(key)
         metrics.append(ChannelMetrics(
             channel=key, unit=a.unit, samples_compared=len(grid),
             overlap_start_s=start, overlap_end_s=end,
-            mean_absolute_error=iae / duration,
-            root_mean_square_error=math.sqrt(ise / duration),
-            maximum_absolute_error=max(errors), integrated_absolute_error=iae,
+            mean_absolute_error=mean_error,
+            root_mean_square_error=rms_error,
+            maximum_absolute_error=max_error, integrated_absolute_error=iae,
             left_peak=max(av, key=abs), right_peak=max(bv, key=abs),
             allowed_maximum_error=allowed, within_tolerance=within,
         ))
