@@ -158,6 +158,26 @@ def test_temporary_import_paths_are_restored_when_launch_raises(monkeypatch, kin
     assert sys.path == original
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda path: sys.path.append("server-added-entry"),
+        lambda path: sys.path.remove(path),
+        lambda path: sys.path.insert(0, "server-reordered-entry"),
+        lambda path: sys.path.append(path),
+    ],
+)
+def test_temporary_sys_path_restores_exact_state_after_server_mutation(tmp_path, mutation):
+    original = sys.path[:]
+    entry = str(tmp_path)
+    try:
+        with runner._temporary_sys_path(entry):
+            mutation(entry)
+        assert sys.path == original
+    finally:
+        sys.path[:] = original
+
+
 def test_temporary_sys_path_preserves_preexisting_entries(tmp_path):
     entry = str(tmp_path)
     original = list(sys.path)
