@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from powermcp.dynamic_validation import (
@@ -185,3 +187,48 @@ def test_report_order_is_deterministic():
     right = snap("andes", {"z": series(), "a": series()})
     report = compare_dynamic_snapshots(left, right)
     assert [item.channel for item in report.channels_compared] == ["a", "z"]
+
+
+
+def test_constant_signal_uses_signal_magnitude_for_relative_tolerance():
+    left = snap(channels={"v": series((0, 1, 2), (1e12, 1e12, 1e12), "V")})
+    right = snap("andes", {"v": series((0, 1, 2), (1e12 + 1e6, 1e12 + 1e6, 1e12 + 1e6), "V")})
+    report = compare_dynamic_snapshots(
+        left, right, absolute_tolerance=0, relative_tolerance=2e-6,
+    )
+    metric = report.channels_compared[0]
+    assert metric.allowed_maximum_error == pytest.approx(2e6)
+    assert metric.mean_absolute_error == pytest.approx(1e6)
+    assert metric.root_mean_square_error == pytest.approx(1e6)
+    assert metric.within_tolerance
+
+
+def test_large_finite_signal_error_does_not_overflow_during_rms():
+    left = snap(channels={"x": series((0, 1), (0, 0), "MW")})
+    right = snap("andes", {"x": series((0, 1), (1e200, 1e200), "MW")})
+    metric = compare_dynamic_snapshots(
+        left, right, absolute_tolerance=1e200, relative_tolerance=0,
+    ).channels_compared[0]
+    assert math.isfinite(metric.root_mean_square_error)
+    assert metric.root_mean_square_error == pytest.approx(1e200)
+
+
+def test_extreme_finite_values_that_overflow_subtraction_are_rejected():
+    left = snap(channels={"x": series((0, 1), (-1e308, -1e308), "MW")})
+    right = snap("andes", {"x": series((0, 1), (1e308, 1e308), "MW")})
+    with pytest.raises(ValueError, match="absolute error"):
+        compare_dynamic_snapshots(left, right)
+
+
+def test_extreme_event_time_subtraction_is_rejected():
+    left = snap(event=1e308, channels={"x": series((-1e308, -1e308 + 1e292), (0, 1))})
+    right = snap("andes", {"x": series((0, 1), (0, 1))}, event=0)
+    with pytest.raises(ValueError, match="event-relative timestamp"):
+        compare_dynamic_snapshots(left, right)
+
+
+def test_non_finite_intermediate_tolerance_is_rejected():
+    left = snap(channels={"x": series((0, 1), (1e308, 1e308), "MW")})
+    right = snap("andes", {"x": series((0, 1), (1e308, 1e308), "MW")})
+    with pytest.raises(ValueError, match="relative tolerance"):
+        compare_dynamic_snapshots(left, right, relative_tolerance=2.0)
