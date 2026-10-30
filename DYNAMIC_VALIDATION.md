@@ -54,6 +54,9 @@ print(report.channels_compared[0].root_mean_square_error)
   `(absolute_tolerance, relative_tolerance)` pairs when a study has justified,
   documented channel-specific tolerances. Unknown tolerance keys are errors.
 - `max_points_per_channel` bounds alignment work and defaults to 100,000 points.
+- Arithmetic that overflows or produces a non-finite intermediate is rejected with a
+  `ValueError`; large finite errors are normalized before RMS integration to avoid
+  unnecessary overflow from squaring.
 
 This core does not claim dynamic stability equivalence from waveform similarity
 alone. It does not yet calculate damping ratios, critical clearing time, rotor
