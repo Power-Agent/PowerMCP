@@ -39,9 +39,9 @@ _SYS_PATH_LOCK = threading.RLock()
 def _temporary_sys_path(*paths: str) -> Iterator[None]:
     """Expose paths for one launch and restore the caller's import path.
 
-    Remove only entries introduced by this context, preserving any existing
-    caller entries (including their original order). A finally block guarantees
-    restoration when import or server startup raises.
+    Restore the exact caller list contents in place, even if server startup
+    reorders or mutates it. A finally block guarantees restoration when import
+    or server startup raises.
     """
     # sys.path is process-global. Serialize PowerMCP launches so overlapping
     # contexts cannot restore snapshots over one another.
