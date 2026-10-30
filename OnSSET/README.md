@@ -360,3 +360,11 @@ that detects a change in model results.
 * "already in progress": only `ONSSET_MAX_CONCURRENT_RUNS` runs may execute at once.
 * GDAL prints `GDAL_DATA is not defined` warnings to the engine log. They are harmless for the
   formats used here.
+
+## Acknowledgements
+
+We thank:
+
+* the Department of Energy of Politecnico di Milano, represented by Marco Merlo and Andrea Pomarico;
+* the Division of Energy Systems at KTH Royal Institute of Technology, in the person of
+  Francesco Fuso Nerini.
