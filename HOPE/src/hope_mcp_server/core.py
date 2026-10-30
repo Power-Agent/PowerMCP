@@ -9,6 +9,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -30,6 +31,7 @@ LEGACY_CASE_ALIASES = {
 }
 
 HOLISTIC_REQUEST_SCHEMA_VERSION = 1
+HOLISTIC_STUDY_SCHEMA_VERSION = 1
 HOLISTIC_RUNNER_RELATIVE_PATH = Path("tools") / "repo_utils" / "run_holistic_agent_job.jl"
 HOLISTIC_MINIMUM_HOPE_REVISION = "8126f0f"
 HOLISTIC_OUTPUT_DIR_NAMES = {
@@ -40,6 +42,18 @@ HOLISTIC_OUTPUT_DIR_NAMES = {
     "debug_report",
 }
 HOLISTIC_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+HOLISTIC_VALIDATION_PROFILES = {
+    "md-rps20-annual-gtep-monthly-pcm": {
+        "gtep_case_id": "MD_GTEP_RPS20_4zone_full8760_public_case",
+        "pcm_case_id": "MD_PCM_RPS20_transmission_full8760_public_case",
+        "builder_relative_path": Path("tools")
+        / "md_transmission_case_related"
+        / "build_md_rps20_full8760_holistic_pair.py",
+        "generated_gtep_case_id": "gtep_case",
+        "generated_pcm_case_id": "pcm_case",
+        "expected_gtep_hours": 8760,
+    }
+}
 
 BOOLEAN_SETTING_KEYS = (
     "resource_aggregation",
@@ -238,6 +252,21 @@ def holistic_runs_root(repo_root: Path) -> Path:
     return (repo_root / "artifacts" / "agent_runs").resolve()
 
 
+def holistic_studies_root(repo_root: Path) -> Path:
+    configured = os.environ.get("HOPE_AGENT_STUDIES_ROOT")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (repo_root / "artifacts" / "agent_studies").resolve()
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
 def normalize_holistic_request_id(
     request_id: str | None,
 ) -> tuple[str | None, dict[str, Any] | None]:
@@ -311,10 +340,37 @@ def _write_yaml_atomic(path: Path, payload: dict[str, Any]) -> None:
     try:
         with temporary.open("w", encoding="utf-8", newline="\n") as handle:
             yaml.safe_dump(payload, handle, sort_keys=False)
-        os.replace(temporary, path)
+        # Dropbox, antivirus, and indexers can briefly open a manifest between
+        # creation and replacement on Windows. Retain atomic publication while
+        # tolerating that transient sharing violation.
+        for attempt in range(8):
+            try:
+                os.replace(temporary, path)
+                break
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(min(0.05 * (2**attempt), 0.5))
     finally:
         if temporary.exists():
-            temporary.unlink()
+            try:
+                temporary.unlink()
+            except OSError:
+                # Do not mask the original publication error with best-effort
+                # cleanup of a Dropbox-locked temporary file.
+                pass
+
+
+def _replace_directory_with_retry(source: Path, destination: Path) -> None:
+    """Publish a prepared directory despite transient Windows sync-client locks."""
+    for attempt in range(12):
+        try:
+            os.replace(source, destination)
+            return
+        except PermissionError:
+            if attempt == 11:
+                raise
+            time.sleep(min(0.05 * (2**attempt), 1.0))
 
 
 def _read_holistic_manifest(path: Path) -> dict[str, Any]:
@@ -489,6 +545,7 @@ class _Job:
 _jobs: dict[str, _Job] = {}
 _holistic_request_jobs: dict[str, str] = {}
 _holistic_request_lock = threading.Lock()
+_holistic_study_lock = threading.Lock()
 
 
 def _stream_lines(stream: Any, target: list[str]) -> None:
@@ -515,6 +572,7 @@ def _launch_job(
     process = subprocess.Popen(
         command,
         cwd=repo_root,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -710,6 +768,7 @@ def check_optional_solvers_available(
             completed = subprocess.run(
                 command,
                 cwd=repo_root,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -1349,6 +1408,7 @@ def hope_debug_solver_environment(
         completed = subprocess.run(
             command,
             cwd=repo_root,
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -2230,16 +2290,43 @@ def hope_run_holistic(
     pcm_case_id: str,
     request_id: str | None = None,
     solver: str | None = None,
+    *,
+    _gtep_source_path: Path | None = None,
+    _pcm_source_path: Path | None = None,
 ) -> dict[str, Any]:
     """Launch an isolated, idempotent GTEP-to-PCM workflow for an agent."""
     repo_root = get_repo_root()
 
-    gtep_path, err = resolve_case(gtep_case_id)
-    if err is not None:
-        return error_result("invalid_gtep_case", err.get("message", ""), case_id=gtep_case_id)
-    pcm_path, err = resolve_case(pcm_case_id)
-    if err is not None:
-        return error_result("invalid_pcm_case", err.get("message", ""), case_id=pcm_case_id)
+    if (_gtep_source_path is None) != (_pcm_source_path is None):
+        return error_result(
+            "invalid_holistic_inputs",
+            "Internal source-path overrides must provide both GTEP and PCM paths.",
+        )
+    if _gtep_source_path is not None and _pcm_source_path is not None:
+        gtep_path = Path(_gtep_source_path).resolve()
+        pcm_path = Path(_pcm_source_path).resolve()
+        trusted_roots = (
+            modelcases_root(repo_root),
+            holistic_studies_root(repo_root),
+        )
+        for label, path in (("GTEP", gtep_path), ("PCM", pcm_path)):
+            if not any(_path_is_within(path, root) for root in trusted_roots):
+                return error_result(
+                    "invalid_holistic_inputs",
+                    f"Pinned {label} source path is outside the trusted case roots: {path}",
+                )
+            if not is_valid_case_dir(path):
+                return error_result(
+                    "invalid_holistic_inputs",
+                    f"Pinned {label} source is not a valid HOPE case: {path}",
+                )
+    else:
+        gtep_path, err = resolve_case(gtep_case_id)
+        if err is not None:
+            return error_result("invalid_gtep_case", err.get("message", ""), case_id=gtep_case_id)
+        pcm_path, err = resolve_case(pcm_case_id)
+        if err is not None:
+            return error_result("invalid_pcm_case", err.get("message", ""), case_id=pcm_case_id)
 
     try:
         gtep_settings = read_yaml(settings_path_for_case(gtep_path))
@@ -2463,14 +2550,25 @@ def hope_run_holistic(
             if launched_job is not None
             else None
         )
-        _update_holistic_manifest(
-            manifest_path,
-            status="RUNNING",
-            updated_at_unix=time.time(),
-            job_id=job_id,
-            process_pid=process_pid,
-            command=command,
-        )
+        manifest_warning: dict[str, Any] | None = None
+        try:
+            _update_holistic_manifest(
+                manifest_path,
+                status="RUNNING",
+                updated_at_unix=time.time(),
+                job_id=job_id,
+                process_pid=process_pid,
+                command=command,
+            )
+        except OSError as exc:
+            # The Julia worker owns terminal publication and can still finish
+            # from the already-written VALIDATED manifest. Preserve the live
+            # job handle instead of turning a bookkeeping lock into a false
+            # launch failure.
+            manifest_warning = {
+                "type": "manifest_status_update_deferred",
+                "message": str(exc),
+            }
 
     return success_result(
         job_id=job_id,
@@ -2483,12 +2581,926 @@ def hope_run_holistic(
         request_sha256=request_sha256,
         workspace_path=str(workspace_path),
         manifest_path=str(manifest_path),
+        warning=manifest_warning,
         message=(
             f"Isolated holistic GTEP-to-PCM run started for request '{normalized_request_id}'. "
             "Call hope_holistic_status with this request_id; retries are idempotent."
         ),
         command=command,
     )
+
+
+# ---------------------------------------------------------------------------
+# Durable multi-agent study protocol
+# ---------------------------------------------------------------------------
+
+def _read_holistic_study_manifest(path: Path) -> dict[str, Any]:
+    try:
+        return read_yaml(path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        raise ValueError(f"Invalid holistic study manifest {path}: {exc}") from exc
+
+
+def _holistic_study_manifest_path(study_id: str) -> Path:
+    return holistic_studies_root(get_repo_root()) / study_id / "study_manifest.yml"
+
+
+def _normalize_agent_label(
+    agent_label: str | None,
+    default: str,
+) -> tuple[str | None, dict[str, Any] | None]:
+    value = str(agent_label).strip() if agent_label is not None else default
+    if not value or len(value) > 128 or any(ord(character) < 32 for character in value):
+        return None, error_result(
+            "invalid_agent_label",
+            "agent_label must be 1-128 printable characters.",
+        )
+    return value, None
+
+
+def _holistic_study_response(
+    manifest: dict[str, Any],
+    *,
+    reused: bool,
+    run: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    status = str(manifest.get("status", "UNKNOWN")).strip().upper()
+    next_action = {
+        "PREPARED": "Call hope_launch_holistic_study with this study_id.",
+        "LAUNCHING": "Call hope_holistic_study_status with this study_id.",
+        "RUNNING": "Poll hope_holistic_study_status with this study_id.",
+        "READY_FOR_AUDIT": "Call hope_audit_holistic_study with this study_id.",
+        "ACCEPTED": "The study is accepted; inspect the audit report and run artifacts.",
+        "REJECTED": "Inspect the failed audit checks before changing or rerunning the study.",
+        "FAILED": "Inspect the run error before retrying with a new study_id or corrected environment.",
+    }.get(status, "Inspect the study manifest.")
+    return success_result(
+        study_id=manifest.get("study_id"),
+        status=status.lower(),
+        manifest_status=status,
+        reused=reused,
+        study_manifest_path=manifest.get("study_manifest_path"),
+        request_sha256=manifest.get("request_sha256"),
+        gtep_case_id=manifest.get("gtep_case_id"),
+        pcm_case_id=manifest.get("pcm_case_id"),
+        solver=manifest.get("solver"),
+        preparation=manifest.get("preparation"),
+        receipts=manifest.get("receipts", {}),
+        audit=manifest.get("audit"),
+        last_error=manifest.get("last_error"),
+        run=run,
+        next_action=next_action,
+    )
+
+
+def _load_holistic_study(study_id: str) -> tuple[dict[str, Any] | None, Path | None, dict[str, Any] | None]:
+    normalized, error = normalize_holistic_request_id(study_id)
+    if error is not None:
+        return None, None, error
+    assert normalized is not None
+    manifest_path = _holistic_study_manifest_path(normalized)
+    if not manifest_path.is_file():
+        return None, manifest_path, error_result(
+            "holistic_study_not_found",
+            f"No holistic study found with study_id '{normalized}'.",
+            study_id=normalized,
+        )
+    try:
+        return _read_holistic_study_manifest(manifest_path), manifest_path, None
+    except ValueError as exc:
+        return None, manifest_path, error_result(
+            "invalid_holistic_study_manifest",
+            str(exc),
+            study_id=normalized,
+            study_manifest_path=str(manifest_path),
+        )
+
+
+def _validate_holistic_study_cases(
+    gtep_case_id: str,
+    pcm_case_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    gtep_path, error = resolve_case(gtep_case_id)
+    if error is not None:
+        return None, error_result("invalid_gtep_case", error.get("message", ""), case_id=gtep_case_id)
+    pcm_path, error = resolve_case(pcm_case_id)
+    if error is not None:
+        return None, error_result("invalid_pcm_case", error.get("message", ""), case_id=pcm_case_id)
+    assert gtep_path is not None and pcm_path is not None
+    return _validate_holistic_study_case_paths(gtep_path, pcm_path)
+
+
+def _validate_holistic_study_case_paths(
+    gtep_path: Path,
+    pcm_path: Path,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    gtep_path = Path(gtep_path).resolve()
+    pcm_path = Path(pcm_path).resolve()
+    if not is_valid_case_dir(gtep_path):
+        return None, error_result(
+            "invalid_gtep_case",
+            f"GTEP path is not a valid HOPE case: {gtep_path}",
+        )
+    if not is_valid_case_dir(pcm_path):
+        return None, error_result(
+            "invalid_pcm_case",
+            f"PCM path is not a valid HOPE case: {pcm_path}",
+        )
+    try:
+        gtep_settings = read_yaml(settings_path_for_case(gtep_path))
+        pcm_settings = read_yaml(settings_path_for_case(pcm_path))
+        gtep_fingerprint = holistic_case_input_fingerprint(gtep_path)
+        pcm_fingerprint = holistic_case_input_fingerprint(pcm_path)
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        return None, error_result("invalid_holistic_inputs", str(exc))
+    gtep_mode = str(gtep_settings.get("model_mode", "")).strip().upper()
+    pcm_mode = str(pcm_settings.get("model_mode", "")).strip().upper()
+    if gtep_mode != "GTEP" or pcm_mode != "PCM":
+        return None, error_result(
+            "invalid_holistic_model_modes",
+            "The holistic study requires a GTEP source case and a PCM source case.",
+            gtep_model_mode=gtep_mode,
+            pcm_model_mode=pcm_mode,
+        )
+    return {
+        "gtep_path": gtep_path,
+        "pcm_path": pcm_path,
+        "gtep_fingerprint": gtep_fingerprint,
+        "pcm_fingerprint": pcm_fingerprint,
+    }, None
+
+
+def _prepare_holistic_study_manifest(
+    *,
+    cases: dict[str, Any],
+    study_id: str,
+    solver: str | None,
+    coordinator: str,
+    preparation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    request_payload = {
+        "schema_version": HOLISTIC_REQUEST_SCHEMA_VERSION,
+        "operation": "GTEP-PCM",
+        "gtep_case_id": cases["gtep_path"].name,
+        "pcm_case_id": cases["pcm_path"].name,
+        "solver": solver,
+        "gtep_source_sha256": cases["gtep_fingerprint"]["sha256"],
+        "pcm_source_sha256": cases["pcm_fingerprint"]["sha256"],
+    }
+    request_sha256 = _canonical_payload_hash(request_payload)
+    manifest_path = _holistic_study_manifest_path(study_id)
+    with _holistic_study_lock:
+        if manifest_path.exists():
+            try:
+                existing = _read_holistic_study_manifest(manifest_path)
+            except ValueError as exc:
+                return error_result(
+                    "invalid_holistic_study_manifest",
+                    str(exc),
+                    study_id=study_id,
+                )
+            preparation_sha256 = (
+                preparation.get("preparation_sha256") if preparation is not None else None
+            )
+            if (
+                existing.get("request_sha256") != request_sha256
+                or existing.get("preparation", {}).get("preparation_sha256")
+                != preparation_sha256
+            ):
+                return error_result(
+                    "study_id_conflict",
+                    "study_id already belongs to different cases, source versions, "
+                    "solver settings, or preparation settings.",
+                    study_id=study_id,
+                    existing_request_sha256=existing.get("request_sha256"),
+                    requested_sha256=request_sha256,
+                )
+            return _holistic_study_response(existing, reused=True)
+        now = time.time()
+        manifest = {
+            **request_payload,
+            "study_schema_version": HOLISTIC_STUDY_SCHEMA_VERSION,
+            "study_id": study_id,
+            "request_sha256": request_sha256,
+            "status": "PREPARED",
+            "created_at_unix": now,
+            "updated_at_unix": now,
+            "study_manifest_path": str(manifest_path),
+            "gtep_source_path": str(cases["gtep_path"]),
+            "pcm_source_path": str(cases["pcm_path"]),
+            "gtep_source_fingerprint": cases["gtep_fingerprint"],
+            "pcm_source_fingerprint": cases["pcm_fingerprint"],
+            "receipts": {
+                "coordinator": {
+                    "agent_label": coordinator,
+                    "completed_at_unix": now,
+                    "request_sha256": request_sha256,
+                }
+            },
+        }
+        if preparation is not None:
+            manifest["preparation"] = preparation
+        _write_yaml_atomic(manifest_path, manifest)
+    return _holistic_study_response(manifest, reused=False)
+
+
+def hope_prepare_holistic_study(
+    gtep_case_id: str,
+    pcm_case_id: str,
+    study_id: str | None = None,
+    solver: str | None = None,
+    agent_label: str | None = None,
+) -> dict[str, Any]:
+    """Pin source inputs and publish a durable coordinator receipt without solving."""
+    normalized, error = normalize_holistic_request_id(study_id)
+    if error is not None:
+        return error
+    assert normalized is not None
+    coordinator, error = _normalize_agent_label(agent_label, "study-coordinator")
+    if error is not None:
+        return error
+    selected_solver = str(solver).strip().lower() if solver is not None else None
+    if selected_solver is not None and selected_solver not in _SOLVER_OPTIONS:
+        return error_result(
+            "invalid_solver",
+            f"Unsupported solver '{selected_solver}'.",
+            solver=selected_solver,
+            allowed_solvers=list(_SOLVER_OPTIONS),
+        )
+    cases, error = _validate_holistic_study_cases(gtep_case_id, pcm_case_id)
+    if error is not None:
+        return error
+    assert cases is not None
+    return _prepare_holistic_study_manifest(
+        cases=cases,
+        study_id=normalized,
+        solver=selected_solver,
+        coordinator=coordinator,
+    )
+
+
+def hope_prepare_holistic_validation_study(
+    study_id: str | None = None,
+    profile: str = "md-rps20-annual-gtep-monthly-pcm",
+    evaluation_month: int = 7,
+    warmup_hours: int = 48,
+    solver: str | None = "gurobi",
+    agent_label: str | None = None,
+) -> dict[str, Any]:
+    """Materialize and pin a registered annual-GTEP/monthly-PCM validation study."""
+    normalized, error = normalize_holistic_request_id(study_id)
+    if error is not None:
+        return error
+    assert normalized is not None
+    coordinator, error = _normalize_agent_label(agent_label, "study-coordinator")
+    if error is not None:
+        return error
+    profile_name = str(profile).strip().lower()
+    profile_config = HOLISTIC_VALIDATION_PROFILES.get(profile_name)
+    if profile_config is None:
+        return error_result(
+            "invalid_validation_profile",
+            f"Unsupported holistic validation profile '{profile}'.",
+            allowed_profiles=sorted(HOLISTIC_VALIDATION_PROFILES),
+        )
+    if isinstance(evaluation_month, bool) or not isinstance(evaluation_month, int):
+        return error_result(
+            "invalid_evaluation_month",
+            "evaluation_month must be an integer in 1..12.",
+        )
+    if evaluation_month not in range(1, 13):
+        return error_result("invalid_evaluation_month", "evaluation_month must be in 1..12.")
+    if isinstance(warmup_hours, bool) or not isinstance(warmup_hours, int):
+        return error_result(
+            "invalid_warmup_hours",
+            "warmup_hours must be a non-negative integer.",
+        )
+    if warmup_hours < 0:
+        return error_result("invalid_warmup_hours", "warmup_hours must be non-negative.")
+    selected_solver = str(solver).strip().lower() if solver is not None else None
+    if selected_solver is not None and selected_solver not in _SOLVER_OPTIONS:
+        return error_result(
+            "invalid_solver",
+            f"Unsupported solver '{selected_solver}'.",
+            solver=selected_solver,
+            allowed_solvers=list(_SOLVER_OPTIONS),
+        )
+
+    source_cases, error = _validate_holistic_study_cases(
+        str(profile_config["gtep_case_id"]),
+        str(profile_config["pcm_case_id"]),
+    )
+    if error is not None:
+        return error
+    assert source_cases is not None
+    repo_root = get_repo_root()
+    cases_root = modelcases_root(repo_root)
+    builder_path = (cases_root / Path(profile_config["builder_relative_path"])).resolve()
+    if not _path_is_within(builder_path, cases_root) or not builder_path.is_file():
+        return error_result(
+            "validation_builder_unavailable",
+            f"The registered validation builder is unavailable: {builder_path}",
+            profile=profile_name,
+        )
+    builder_sha256 = hashlib.sha256(builder_path.read_bytes()).hexdigest()
+    preparation_request = {
+        "profile": profile_name,
+        "evaluation_month": evaluation_month,
+        "warmup_hours": warmup_hours,
+        "solver": selected_solver,
+        "source_gtep_case_id": profile_config["gtep_case_id"],
+        "source_pcm_case_id": profile_config["pcm_case_id"],
+        "source_gtep_path": str(source_cases["gtep_path"]),
+        "source_pcm_path": str(source_cases["pcm_path"]),
+        "source_gtep_sha256": source_cases["gtep_fingerprint"]["sha256"],
+        "source_pcm_sha256": source_cases["pcm_fingerprint"]["sha256"],
+        "builder_sha256": builder_sha256,
+    }
+    preparation_sha256 = _canonical_payload_hash(preparation_request)
+    manifest_path = _holistic_study_manifest_path(normalized)
+    if manifest_path.exists():
+        try:
+            existing = _read_holistic_study_manifest(manifest_path)
+        except ValueError as exc:
+            return error_result("invalid_holistic_study_manifest", str(exc), study_id=normalized)
+        if existing.get("preparation", {}).get("preparation_sha256") == preparation_sha256:
+            return _holistic_study_response(existing, reused=True)
+        return error_result(
+            "study_id_conflict",
+            "study_id already belongs to different preparation settings or source versions.",
+            study_id=normalized,
+        )
+
+    studies_root = holistic_studies_root(repo_root)
+    studies_root.mkdir(parents=True, exist_ok=True)
+    final_study_root = studies_root / normalized
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=f".{normalized}-preparing-",
+            dir=studies_root,
+            ignore_cleanup_errors=True,
+        ) as temporary:
+            temporary_root = Path(temporary)
+            generated_root = temporary_root / "derived_cases"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(builder_path),
+                    "--validation-month",
+                    str(evaluation_month),
+                    "--validation-root",
+                    str(generated_root),
+                    "--validation-warmup-hours",
+                    str(warmup_hours),
+                ],
+                cwd=repo_root,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                timeout=900,
+                check=False,
+            )
+            if completed.returncode != 0:
+                return error_result(
+                    "validation_case_preparation_failed",
+                    "The registered validation builder failed.",
+                    profile=profile_name,
+                    exit_code=completed.returncode,
+                    stdout_tail=last_nonempty_lines(completed.stdout),
+                    stderr_tail=last_nonempty_lines(completed.stderr),
+                )
+            validation_slice_path = generated_root / "validation_slice.yml"
+            validation_slice = read_yaml(validation_slice_path)
+            expected_gtep_hours = int(profile_config["expected_gtep_hours"])
+            expected_values = {
+                "gtep_hours": expected_gtep_hours,
+                "pcm_month": evaluation_month,
+                "pcm_warmup_hours": warmup_hours,
+            }
+            mismatches = {
+                key: {"expected": value, "actual": validation_slice.get(key)}
+                for key, value in expected_values.items()
+                if validation_slice.get(key) != value
+            }
+            if mismatches:
+                return error_result(
+                    "invalid_validation_slice",
+                    "The prepared temporal slice does not match the requested profile.",
+                    mismatches=mismatches,
+                )
+            pcm_hours = int(validation_slice.get("pcm_hours", 0))
+            evaluation_hours = int(validation_slice.get("pcm_evaluation_hours", 0))
+            if (
+                pcm_hours <= 0
+                or evaluation_hours <= 0
+                or pcm_hours != evaluation_hours + warmup_hours
+                or validation_slice.get("pcm_evaluation_start_hour") != warmup_hours + 1
+                or validation_slice.get("pcm_evaluation_end_hour") != pcm_hours
+            ):
+                return error_result(
+                    "invalid_validation_slice",
+                    "The prepared PCM chronology is internally inconsistent.",
+                    validation_slice=validation_slice,
+                )
+            generated_cases, error = _validate_holistic_study_case_paths(
+                generated_root / str(profile_config["generated_gtep_case_id"]),
+                generated_root / str(profile_config["generated_pcm_case_id"]),
+            )
+            if error is not None:
+                return error
+            assert generated_cases is not None
+            current_sources, error = _validate_holistic_study_cases(
+                str(profile_config["gtep_case_id"]),
+                str(profile_config["pcm_case_id"]),
+            )
+            if error is not None:
+                return error
+            assert current_sources is not None
+            source_drift = {
+                "gtep": current_sources["gtep_fingerprint"] != source_cases["gtep_fingerprint"],
+                "pcm": current_sources["pcm_fingerprint"] != source_cases["pcm_fingerprint"],
+            }
+            if any(source_drift.values()):
+                return error_result(
+                    "study_source_drift",
+                    "A source case changed while the validation cases were being prepared.",
+                    drift=source_drift,
+                )
+            try:
+                final_study_root.mkdir()
+            except FileExistsError:
+                return error_result(
+                    "study_id_conflict",
+                    "Another process reserved this study_id while cases were being prepared.",
+                    study_id=normalized,
+                )
+            try:
+                _replace_directory_with_retry(
+                    generated_root,
+                    final_study_root / "derived_cases",
+                )
+            except OSError:
+                try:
+                    final_study_root.rmdir()
+                except OSError:
+                    pass
+                raise
+    except subprocess.TimeoutExpired as exc:
+        return error_result(
+            "validation_case_preparation_timeout",
+            "The registered validation builder exceeded its 900-second preparation limit.",
+            profile=profile_name,
+            timeout_seconds=exc.timeout,
+        )
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        return error_result(
+            "validation_case_preparation_failed",
+            str(exc),
+            profile=profile_name,
+        )
+
+    final_generated_root = final_study_root / "derived_cases"
+    final_cases, error = _validate_holistic_study_case_paths(
+        final_generated_root / str(profile_config["generated_gtep_case_id"]),
+        final_generated_root / str(profile_config["generated_pcm_case_id"]),
+    )
+    if error is not None:
+        return error
+    assert final_cases is not None
+    preparation = {
+        **preparation_request,
+        "preparation_sha256": preparation_sha256,
+        "derived_cases_path": str(final_generated_root),
+        "validation_slice_path": str(final_generated_root / "validation_slice.yml"),
+        "validation_slice_sha256": hashlib.sha256(
+            (final_generated_root / "validation_slice.yml").read_bytes()
+        ).hexdigest(),
+        "pcm_hours": pcm_hours,
+        "pcm_evaluation_hours": evaluation_hours,
+        "production_benchmark": False,
+    }
+    return _prepare_holistic_study_manifest(
+        cases=final_cases,
+        study_id=normalized,
+        solver=selected_solver,
+        coordinator=coordinator,
+        preparation=preparation,
+    )
+
+
+def _holistic_preparation_drift(
+    manifest: dict[str, Any],
+    manifest_path: Path,
+) -> dict[str, bool]:
+    preparation = manifest.get("preparation")
+    if not isinstance(preparation, dict):
+        return {}
+    drift: dict[str, bool] = {}
+    validation_path = Path(str(preparation.get("validation_slice_path", ""))).resolve()
+    validation_scoped = _path_is_within(validation_path, manifest_path.parent)
+    expected_validation_hash = str(preparation.get("validation_slice_sha256", ""))
+    try:
+        current_validation_hash = (
+            hashlib.sha256(validation_path.read_bytes()).hexdigest()
+            if validation_scoped and validation_path.is_file()
+            else ""
+        )
+    except OSError:
+        current_validation_hash = ""
+    drift["validation_slice"] = (
+        not expected_validation_hash or current_validation_hash != expected_validation_hash
+    )
+    for role in ("gtep", "pcm"):
+        source_path = Path(str(preparation.get(f"source_{role}_path", ""))).resolve()
+        expected_hash = str(preparation.get(f"source_{role}_sha256", ""))
+        if not _path_is_within(source_path, modelcases_root(get_repo_root())):
+            drift[f"original_{role}"] = True
+            continue
+        try:
+            current_hash = holistic_case_input_fingerprint(source_path)["sha256"]
+        except (OSError, ValueError, yaml.YAMLError):
+            drift[f"original_{role}"] = True
+        else:
+            drift[f"original_{role}"] = not expected_hash or current_hash != expected_hash
+    return drift
+
+
+def hope_launch_holistic_study(
+    study_id: str,
+    agent_label: str | None = None,
+) -> dict[str, Any]:
+    """Execute a prepared study through the existing deterministic holistic runner."""
+    executor, error = _normalize_agent_label(agent_label, "workflow-executor")
+    if error is not None:
+        return error
+    manifest, manifest_path, error = _load_holistic_study(study_id)
+    if error is not None:
+        return error
+    assert manifest is not None and manifest_path is not None
+    if manifest.get("status") in {"ACCEPTED", "REJECTED"}:
+        run = hope_holistic_status(str(manifest["study_id"]))
+        return _holistic_study_response(manifest, reused=True, run=run)
+    gtep_source_path = Path(str(manifest.get("gtep_source_path", ""))).resolve()
+    pcm_source_path = Path(str(manifest.get("pcm_source_path", ""))).resolve()
+    trusted_roots = (
+        modelcases_root(get_repo_root()),
+        manifest_path.parent,
+    )
+    if not all(
+        any(_path_is_within(path, root) for root in trusted_roots)
+        for path in (gtep_source_path, pcm_source_path)
+    ):
+        return error_result(
+            "invalid_holistic_study_manifest",
+            "Pinned study case paths are outside the permitted ModelCases "
+            "or study workspace roots.",
+            study_id=manifest.get("study_id"),
+        )
+    cases, error = _validate_holistic_study_case_paths(
+        gtep_source_path,
+        pcm_source_path,
+    )
+    if error is not None:
+        return error
+    assert cases is not None
+    drift = {
+        "gtep": cases["gtep_fingerprint"]["sha256"] != manifest.get("gtep_source_sha256"),
+        "pcm": cases["pcm_fingerprint"]["sha256"] != manifest.get("pcm_source_sha256"),
+    }
+    drift.update(_holistic_preparation_drift(manifest, manifest_path))
+    if any(drift.values()):
+        last_error = {
+            "type": "study_source_drift",
+            "message": "A source case changed after the coordinator pinned this study.",
+            "drift": drift,
+        }
+        with _holistic_study_lock:
+            manifest.update(updated_at_unix=time.time(), last_error=last_error)
+            _write_yaml_atomic(manifest_path, manifest)
+        return error_result(
+            "study_source_drift",
+            last_error["message"],
+            study_id=manifest.get("study_id"),
+            drift=drift,
+        )
+
+    now = time.time()
+    receipts = dict(manifest.get("receipts", {}))
+    receipts["executor"] = {
+        "agent_label": executor,
+        "started_at_unix": now,
+        "request_sha256": manifest.get("request_sha256"),
+    }
+    with _holistic_study_lock:
+        manifest.update(status="LAUNCHING", updated_at_unix=now, receipts=receipts)
+        manifest.pop("last_error", None)
+        _write_yaml_atomic(manifest_path, manifest)
+
+    run = hope_run_holistic(
+        str(manifest["gtep_case_id"]),
+        str(manifest["pcm_case_id"]),
+        request_id=str(manifest["study_id"]),
+        solver=manifest.get("solver"),
+        _gtep_source_path=cases["gtep_path"],
+        _pcm_source_path=cases["pcm_path"],
+    )
+    finished_at = time.time()
+    receipts["executor"].update(
+        completed_at_unix=finished_at,
+        run_ok=bool(run.get("ok")),
+        job_id=run.get("job_id"),
+        run_manifest_path=run.get("manifest_path"),
+    )
+    if not run.get("ok"):
+        with _holistic_study_lock:
+            manifest.update(
+                status="PREPARED",
+                updated_at_unix=finished_at,
+                receipts=receipts,
+                last_error={
+                    "type": run.get("error_type", "holistic_launch_failed"),
+                    "message": run.get("message", "The holistic run could not be launched."),
+                },
+            )
+            _write_yaml_atomic(manifest_path, manifest)
+        return error_result(
+            str(run.get("error_type", "holistic_launch_failed")),
+            str(run.get("message", "The holistic run could not be launched.")),
+            study_id=manifest.get("study_id"),
+            run=run,
+        )
+    run_status = str(run.get("status", "running")).lower()
+    study_status = "READY_FOR_AUDIT" if run_status == "done" else "RUNNING"
+    with _holistic_study_lock:
+        manifest.update(
+            status=study_status,
+            updated_at_unix=finished_at,
+            receipts=receipts,
+            run_request_id=manifest.get("study_id"),
+            run_manifest_path=run.get("manifest_path"),
+            run_job_id=run.get("job_id"),
+        )
+        _write_yaml_atomic(manifest_path, manifest)
+    return _holistic_study_response(manifest, reused=bool(run.get("reused")), run=run)
+
+
+def hope_holistic_study_status(study_id: str) -> dict[str, Any]:
+    """Return durable role receipts and reconcile them with the underlying run."""
+    manifest, manifest_path, error = _load_holistic_study(study_id)
+    if error is not None:
+        return error
+    assert manifest is not None and manifest_path is not None
+    run: dict[str, Any] | None = None
+    if manifest.get("run_request_id") or manifest.get("status") in {
+        "LAUNCHING",
+        "RUNNING",
+        "READY_FOR_AUDIT",
+        "ACCEPTED",
+        "REJECTED",
+        "FAILED",
+    }:
+        run = hope_holistic_status(str(manifest["study_id"]))
+        if run.get("ok"):
+            run_status = str(run.get("status", "")).lower()
+            receipts = dict(manifest.get("receipts", {}))
+            executor_receipt = dict(receipts.get("executor", {}))
+            executor_receipt.update(
+                run_ok=run_status == "done",
+                job_id=run.get("job_id"),
+                run_manifest_path=run.get("manifest_path"),
+            )
+            if run_status == "done" and "completed_at_unix" not in executor_receipt:
+                executor_receipt["completed_at_unix"] = time.time()
+            receipts["executor"] = executor_receipt
+            manifest["receipts"] = receipts
+            manifest["run_request_id"] = manifest.get("study_id")
+            manifest["run_manifest_path"] = run.get("manifest_path")
+            manifest["run_job_id"] = run.get("job_id")
+            if manifest.get("status") not in {"ACCEPTED", "REJECTED"}:
+                if run_status == "done":
+                    manifest["status"] = "READY_FOR_AUDIT"
+                elif run_status in {"failed", "cancelled"}:
+                    manifest["status"] = "FAILED"
+                else:
+                    manifest["status"] = "RUNNING"
+        elif run.get("error_type") == "job_failed":
+            manifest["status"] = "FAILED"
+            manifest["last_error"] = {
+                "type": run.get("error_type"),
+                "message": run.get("message"),
+            }
+        manifest["updated_at_unix"] = time.time()
+        with _holistic_study_lock:
+            _write_yaml_atomic(manifest_path, manifest)
+    return _holistic_study_response(manifest, reused=True, run=run)
+
+
+def _resolved_artifact_path(value: Any, workspace: Path) -> Path | None:
+    if not value:
+        return None
+    try:
+        path = Path(str(value)).expanduser().resolve()
+        path.relative_to(workspace.resolve())
+    except (OSError, ValueError):
+        return None
+    return path
+
+
+def hope_audit_holistic_study(
+    study_id: str,
+    agent_label: str | None = None,
+) -> dict[str, Any]:
+    """Independently audit a published run and issue an ACCEPTED or REJECTED receipt."""
+    auditor, error = _normalize_agent_label(agent_label, "validation-agent")
+    if error is not None:
+        return error
+    status_result = hope_holistic_study_status(study_id)
+    if not status_result.get("ok"):
+        return status_result
+    manifest, manifest_path, error = _load_holistic_study(study_id)
+    if error is not None:
+        return error
+    assert manifest is not None and manifest_path is not None
+    audit_path = manifest_path.parent / "audit_report.yml"
+    if manifest.get("status") == "ACCEPTED" and audit_path.is_file():
+        return _holistic_study_response(manifest, reused=True, run=status_result.get("run"))
+    if manifest.get("status") != "READY_FOR_AUDIT":
+        return error_result(
+            "study_not_ready_for_audit",
+            "The holistic run must finish successfully before it can be audited.",
+            study_id=manifest.get("study_id"),
+            status=str(manifest.get("status", "unknown")).lower(),
+        )
+
+    workspace = holistic_runs_root(get_repo_root()) / str(manifest["study_id"])
+    run_manifest_path = workspace / "run_manifest.yml"
+    try:
+        run_manifest = _read_holistic_manifest(run_manifest_path)
+    except ValueError as exc:
+        return error_result(
+            "invalid_holistic_manifest",
+            str(exc),
+            study_id=manifest.get("study_id"),
+        )
+    checks: list[dict[str, Any]] = []
+
+    def check(name: str, passed: bool, actual: Any, expected: Any) -> None:
+        checks.append(
+            {
+                "check": name,
+                "passed": bool(passed),
+                "actual": actual,
+                "expected": expected,
+            }
+        )
+
+    check(
+        "run_published",
+        run_manifest.get("status") == "PUBLISHED",
+        run_manifest.get("status"),
+        "PUBLISHED",
+    )
+    for key in (
+        "request_id",
+        "request_sha256",
+        "gtep_case_id",
+        "pcm_case_id",
+        "solver",
+        "gtep_source_sha256",
+        "pcm_source_sha256",
+    ):
+        expected = manifest.get("study_id") if key == "request_id" else manifest.get(key)
+        check(f"manifest_{key}", run_manifest.get(key) == expected, run_manifest.get(key), expected)
+    try:
+        current_gtep = holistic_case_input_fingerprint(Path(str(manifest["gtep_source_path"])))
+        current_pcm = holistic_case_input_fingerprint(Path(str(manifest["pcm_source_path"])))
+        check(
+            "source_gtep_unchanged",
+            current_gtep == manifest.get("gtep_source_fingerprint"),
+            current_gtep,
+            manifest.get("gtep_source_fingerprint"),
+        )
+        check(
+            "source_pcm_unchanged",
+            current_pcm == manifest.get("pcm_source_fingerprint"),
+            current_pcm,
+            manifest.get("pcm_source_fingerprint"),
+        )
+    except (OSError, ValueError, yaml.YAMLError) as exc:
+        check("source_inputs_readable", False, str(exc), "readable and unchanged")
+
+    for key, changed in _holistic_preparation_drift(manifest, manifest_path).items():
+        check(
+            f"preparation_{key}_unchanged",
+            not changed,
+            "changed" if changed else "unchanged",
+            "unchanged",
+        )
+
+    result = (
+        run_manifest.get("result")
+        if isinstance(run_manifest.get("result"), dict)
+        else {}
+    )
+    for key in ("handoff_valid", "transfer_valid", "coverage_evaluated", "coverage_all_passed"):
+        check(key, result.get(key) is True, result.get(key), True)
+
+    output_path = _resolved_artifact_path(result.get("pcm_output_path"), workspace)
+    check(
+        "pcm_output_path_scoped",
+        output_path is not None and output_path.is_dir(),
+        str(output_path) if output_path else result.get("pcm_output_path"),
+        "existing directory inside run workspace",
+    )
+    coverage_paths = (
+        result.get("coverage_paths")
+        if isinstance(result.get("coverage_paths"), dict)
+        else {}
+    )
+    coverage_path = _resolved_artifact_path(coverage_paths.get("coverage_yaml"), workspace)
+    checks_path = _resolved_artifact_path(coverage_paths.get("checks_csv"), workspace)
+    coverage_document: dict[str, Any] = {}
+    if coverage_path is not None and coverage_path.is_file():
+        try:
+            coverage_document = read_yaml(coverage_path)
+        except (OSError, ValueError, yaml.YAMLError):
+            coverage_document = {}
+    check(
+        "coverage_report_all_passed",
+        coverage_document.get("all_passed") is True,
+        coverage_document.get("all_passed"),
+        True,
+    )
+    acceptance_rows: list[dict[str, str]] = []
+    if checks_path is not None and checks_path.is_file():
+        try:
+            acceptance_rows = read_csv_rows(checks_path)
+        except OSError:
+            acceptance_rows = []
+    acceptance_passed = bool(acceptance_rows) and all(
+        str(row.get("Passed", "")).strip().lower() in {"true", "1", "yes"}
+        for row in acceptance_rows
+    )
+    check(
+        "acceptance_checks_passed",
+        acceptance_passed,
+        len(acceptance_rows),
+        "one or more rows, all Passed=true",
+    )
+
+    if output_path is not None:
+        realized = output_path / "realized_inputs"
+        for name, filename in (
+            ("handoff_contract_artifact", "handoff_contract.yml"),
+            ("transfer_reconciliation_artifact", "transfer_reconciliation.yml"),
+        ):
+            document: dict[str, Any] = {}
+            artifact = realized / filename
+            if artifact.is_file():
+                try:
+                    document = read_yaml(artifact)
+                except (OSError, ValueError, yaml.YAMLError):
+                    document = {}
+            check(name, document.get("valid") is True, document.get("valid"), True)
+    else:
+        check("handoff_contract_artifact", False, None, True)
+        check("transfer_reconciliation_artifact", False, None, True)
+
+    accepted = all(item["passed"] for item in checks)
+    now = time.time()
+    audit = {
+        "schema_version": HOLISTIC_STUDY_SCHEMA_VERSION,
+        "study_id": manifest.get("study_id"),
+        "agent_label": auditor,
+        "completed_at_unix": now,
+        "accepted": accepted,
+        "passed_checks": sum(1 for item in checks if item["passed"]),
+        "total_checks": len(checks),
+        "checks": checks,
+    }
+    _write_yaml_atomic(audit_path, audit)
+    receipts = dict(manifest.get("receipts", {}))
+    receipts["auditor"] = {
+        "agent_label": auditor,
+        "completed_at_unix": now,
+        "accepted": accepted,
+        "audit_report_path": str(audit_path),
+        "audit_sha256": hashlib.sha256(audit_path.read_bytes()).hexdigest(),
+    }
+    with _holistic_study_lock:
+        manifest.update(
+            status="ACCEPTED" if accepted else "REJECTED",
+            updated_at_unix=now,
+            receipts=receipts,
+            audit={
+                "accepted": accepted,
+                "passed_checks": audit["passed_checks"],
+                "total_checks": audit["total_checks"],
+                "audit_report_path": str(audit_path),
+            },
+        )
+        _write_yaml_atomic(manifest_path, manifest)
+    return _holistic_study_response(manifest, reused=False, run=status_result.get("run"))
 
 
 # ---------------------------------------------------------------------------

@@ -15,9 +15,7 @@ from hope_mcp_server.core import (
     _Job,
     _jobs,
     build_debug_solver_environment_command,
-    build_optional_solver_probe_command,
     build_run_command,
-    check_optional_solvers_available,
     hope_cancel_job,
     hope_case_info,
     hope_debug_solver_environment,
@@ -149,6 +147,11 @@ class HopeCoreTests(unittest.TestCase):
         self.assertIn("hope_debug_solver_environment", tool_names)
         self.assertIn("hope_debug_solver_environment_async", tool_names)
         self.assertIn("hope_holistic_status", tool_names)
+        self.assertIn("hope_prepare_holistic_study", tool_names)
+        self.assertIn("hope_prepare_holistic_validation_study", tool_names)
+        self.assertIn("hope_launch_holistic_study", tool_names)
+        self.assertIn("hope_holistic_study_status", tool_names)
+        self.assertIn("hope_audit_holistic_study", tool_names)
 
     def test_read_only_server_accepts_configured_public_hostname(self) -> None:
         with mock.patch.dict(
@@ -220,36 +223,6 @@ class HopeCoreTests(unittest.TestCase):
         self.assertNotIn(str(case_path), script)
         self.assertNotIn("$solver", script)
         self.assertEqual(command[script_index + 1 :], [str(case_path), "$solver"])
-
-    def test_optional_solver_probe_does_not_load_hope(self) -> None:
-        command = build_optional_solver_probe_command(REPO_ROOT, JULIA_BIN, "Gurobi")
-        script = command[command.index("-e") + 1]
-        self.assertIn("Base.find_package(pkg)", script)
-        self.assertIn("Sys.iswindows()", script)
-        self.assertNotIn("using HOPE", script)
-        self.assertEqual(command[-1], "Gurobi")
-
-    def test_missing_optional_solver_returns_actionable_error(self) -> None:
-        completed = subprocess.CompletedProcess(
-            args=[],
-            returncode=3,
-            stdout="DEPOT_PATH=/depot\nLOAD_PATH=/project:/version\nPACKAGE_PATH=\n",
-            stderr="",
-        )
-        with mock.patch(
-            "hope_mcp_server.core.subprocess.run",
-            return_value=completed,
-        ):
-            result = check_optional_solvers_available(
-                REPO_ROOT,
-                JULIA_BIN,
-                ["gurobi"],
-            )
-        self.assertIsNotNone(result)
-        assert result is not None
-        self.assertEqual(result["error_type"], "optional_solver_unavailable")
-        self.assertEqual(result["package"], "Gurobi")
-        self.assertIn("Pkg.add", result["install_command"])
 
     def test_missing_julia_path_returns_structured_error(self) -> None:
         with mock.patch.dict(

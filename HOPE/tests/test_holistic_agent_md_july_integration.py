@@ -21,8 +21,10 @@ sys.path.insert(0, str(PACKAGE_ROOT / "src"))
 from hope_mcp_server.core import (  # noqa: E402
     _holistic_request_jobs,
     _jobs,
-    hope_holistic_status,
-    hope_run_holistic,
+    hope_audit_holistic_study,
+    hope_holistic_study_status,
+    hope_launch_holistic_study,
+    hope_prepare_holistic_validation_study,
 )
 
 
@@ -40,7 +42,7 @@ def configured_modelcases_root() -> Path:
     "set HOPE_RUN_HOLISTIC_AGENT_MD_JULY_INTEGRATION=1 to run the high-resolution agent test",
 )
 class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
-    def test_annual_gtep_july_pcm_request_is_agent_safe(self) -> None:
+    def test_annual_gtep_july_pcm_multi_agent_study_is_auditable(self) -> None:
         source_modelcases = configured_modelcases_root()
         builder = (
             source_modelcases
@@ -60,6 +62,9 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
 
         solver = os.environ.get("HOPE_HOLISTIC_AGENT_MD_JULY_SOLVER", "gurobi")
         month = int(os.environ.get("HOPE_HOLISTIC_AGENT_MD_JULY_MONTH", "7"))
+        warmup_hours = int(
+            os.environ.get("HOPE_HOLISTIC_AGENT_MD_JULY_WARMUP_HOURS", "48")
+        )
         timeout_seconds = float(
             os.environ.get("HOPE_HOLISTIC_AGENT_MD_JULY_TIMEOUT", "3600")
         )
@@ -72,57 +77,63 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
         if work_parent is not None:
             work_parent.mkdir(parents=True, exist_ok=True)
 
-        request_id = f"md-rps20-july-{uuid.uuid4().hex}"
+        study_id = f"md-rps20-month-{uuid.uuid4().hex}"
         launch: dict | None = None
         with tempfile.TemporaryDirectory(
             prefix="hope-md-july-agent-",
             dir=str(work_parent) if work_parent is not None else None,
+            # Cloud-sync clients on Windows can briefly retain a handle after
+            # Julia exits.  Cleanup residue must not turn a scientifically
+            # successful integration run into a failed test result.
+            ignore_cleanup_errors=True,
         ) as tmp:
             temporary_root = Path(tmp)
-            generated_cases = temporary_root / "model-cases"
             runs_root = temporary_root / "agent-runs"
-
-            print(
-                f"Preparing annual-GTEP/month-{month}-PCM validation cases...",
-                flush=True,
-            )
-            subprocess.run(
-                [
-                    sys.executable,
-                    str(builder),
-                    "--validation-month",
-                    str(month),
-                    "--validation-root",
-                    str(generated_cases),
-                ],
-                cwd=REPO_ROOT,
-                check=True,
-            )
-
-            validation_slice = yaml.safe_load(
-                (generated_cases / "validation_slice.yml").read_text(encoding="utf-8")
-            )
-            self.assertEqual(validation_slice["gtep_hours"], 8760)
-            self.assertEqual(validation_slice["pcm_month"], month)
-            self.assertGreater(validation_slice["pcm_hours"], 0)
-            if month == 7:
-                self.assertEqual(validation_slice["pcm_hours"], 744)
-
+            studies_root = temporary_root / "agent-studies"
             with mock.patch.dict(
                 "os.environ",
                 {
                     "HOPE_REPO_ROOT": str(REPO_ROOT),
-                    "HOPE_MODELCASES_PATH": str(generated_cases),
+                    "HOPE_MODELCASES_PATH": str(source_modelcases),
                     "HOPE_AGENT_RUNS_ROOT": str(runs_root),
+                    "HOPE_AGENT_STUDIES_ROOT": str(studies_root),
                 },
                 clear=False,
             ):
                 try:
-                    launch = hope_run_holistic(
-                        "gtep_case",
-                        "pcm_case",
-                        request_id=request_id,
+                    prepared = hope_prepare_holistic_validation_study(
+                        study_id=study_id,
+                        evaluation_month=month,
+                        warmup_hours=warmup_hours,
                         solver=solver,
+                        agent_label="integration-coordinator",
+                    )
+                    self.assertTrue(prepared["ok"], prepared)
+                    validation_slice = yaml.safe_load(
+                        Path(prepared["preparation"]["validation_slice_path"]).read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                    self.assertEqual(validation_slice["gtep_hours"], 8760)
+                    self.assertEqual(validation_slice["pcm_month"], month)
+                    self.assertGreater(validation_slice["pcm_hours"], 0)
+                    self.assertEqual(
+                        validation_slice["pcm_warmup_hours"], warmup_hours
+                    )
+                    self.assertEqual(
+                        validation_slice["pcm_hours"],
+                        validation_slice["pcm_evaluation_hours"] + warmup_hours,
+                    )
+                    self.assertEqual(
+                        validation_slice["pcm_evaluation_start_hour"],
+                        warmup_hours + 1,
+                    )
+                    if month == 7:
+                        self.assertEqual(validation_slice["pcm_evaluation_hours"], 744)
+
+                    launch = hope_launch_holistic_study(
+                        study_id,
+                        agent_label="integration-executor",
                     )
                     self.assertTrue(launch["ok"], launch)
                     self.assertFalse(launch["reused"])
@@ -130,26 +141,26 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                     deadline = time.monotonic() + timeout_seconds
                     next_progress = 0.0
                     while True:
-                        status = hope_holistic_status(request_id)
+                        status = hope_holistic_study_status(study_id)
                         state = status.get("status")
-                        if state in ("done", "failed", "cancelled"):
+                        if state in ("ready_for_audit", "failed"):
                             break
                         self.assertTrue(status["ok"], status)
                         now = time.monotonic()
                         if now >= next_progress:
                             print(
                                 "High-resolution holistic agent test status: "
-                                f"{state}; elapsed={status.get('elapsed_seconds', 'unknown')}s",
+                                f"{state}; run={status.get('run', {}).get('status', 'unknown')}",
                                 flush=True,
                             )
                             next_progress = now + 30.0
                         if now >= deadline:
-                            self.fail(f"Holistic request timed out: {status}")
+                            self.fail(f"Holistic study timed out: {status}")
                         time.sleep(5.0)
 
                     self.assertTrue(status["ok"], status)
-                    self.assertEqual(state, "done", status)
-                    result = status["result"]
+                    self.assertEqual(state, "ready_for_audit", status)
+                    result = status["run"]["result"]
                     self.assertTrue(result["handoff_valid"])
                     self.assertTrue(result["transfer_valid"])
                     self.assertTrue(result["coverage_evaluated"])
@@ -181,26 +192,44 @@ class MarylandJulyHolisticAgentIntegrationTests(unittest.TestCase):
                     self.assertLessEqual(float(metrics["gtep_rps_slack_mwh"]), 1e-6)
                     self.assertLessEqual(float(metrics["pcm_rps_slack_mwh"]), 1e-6)
 
-                    _holistic_request_jobs.pop(request_id, None)
-                    recovered = hope_holistic_status(request_id)
+                    _holistic_request_jobs.pop(study_id, None)
+                    recovered = hope_holistic_study_status(study_id)
                     self.assertTrue(recovered["ok"], recovered)
-                    self.assertEqual(recovered["status"], "done")
-                    self.assertTrue(recovered["result"]["coverage_all_passed"])
+                    self.assertEqual(recovered["status"], "ready_for_audit")
+                    self.assertTrue(
+                        recovered["run"]["result"]["coverage_all_passed"]
+                    )
 
-                    repeated = hope_run_holistic(
-                        "gtep_case",
-                        "pcm_case",
-                        request_id=request_id,
+                    audited = hope_audit_holistic_study(
+                        study_id,
+                        agent_label="integration-auditor",
+                    )
+                    self.assertTrue(audited["ok"], audited)
+                    self.assertEqual(audited["status"], "accepted")
+                    self.assertTrue(audited["audit"]["accepted"])
+                    self.assertEqual(
+                        set(audited["receipts"]),
+                        {"coordinator", "executor", "auditor"},
+                    )
+
+                    repeated = hope_prepare_holistic_validation_study(
+                        study_id=study_id,
+                        evaluation_month=month,
+                        warmup_hours=warmup_hours,
                         solver=solver,
                     )
                     self.assertTrue(repeated["ok"], repeated)
                     self.assertTrue(repeated["reused"])
-                    self.assertEqual(repeated["status"], "done")
+                    relaunched = hope_launch_holistic_study(study_id)
+                    self.assertTrue(relaunched["ok"], relaunched)
+                    self.assertTrue(relaunched["reused"])
+                    self.assertEqual(relaunched["status"], "accepted")
                     self.assertEqual(len(list(runs_root.iterdir())), 1)
                 finally:
-                    _holistic_request_jobs.pop(request_id, None)
+                    _holistic_request_jobs.pop(study_id, None)
                     if launch is not None:
-                        job = _jobs.pop(launch.get("job_id", ""), None)
+                        run = launch.get("run") or {}
+                        job = _jobs.pop(run.get("job_id", ""), None)
                         if job is not None:
                             if job.process.poll() is None:
                                 job.process.terminate()
