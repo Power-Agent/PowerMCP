@@ -1,0 +1,41 @@
+{
+  "onsset_repo": "C:/Users/corra/Desktop/onsset",
+  "onsset_commit": "486c26039ecbf8614d68da90c7b4968b2f4a5b13",
+  "run_date": "2026-09-29",
+  "run_scenario_seconds": 138,
+  "notebook_total_minutes": 4,
+  "reference_outputs_local_only": "test/outputTestUganda/ugandaGeneral_{Results.csv,Summaries.csv,Variables.csv}, new_mv_lines_ugandaGeneral_2050.geojson",
+  "inputs": {
+    "input_csv": {
+      "path": "test/inputTestUganda/OnSSET_InputFile_Calibrated_v1.csv",
+      "bytes": 224395474,
+      "sha256": "943026f63a8b7a1a677dc487693ba9aac8910d2c478db13e1edab9f8a3cf4aca"
+    },
+    "pv_csv": {
+      "path": "test/inputTestUganda/ug-2-pv.csv",
+      "bytes": 22538020,
+      "sha256": "f01258bf4902dbd2ea89acb9aab7df90cd50beca28223344c1d45d884ca0425c"
+    },
+    "wind_csv": {
+      "path": "test/inputTestUganda/ug-2-wind.csv",
+      "bytes": 394924,
+      "sha256": "33690394b95c4fa83de3fdda808bbdfb0b1b2ece9d41a8281fa3de2f45aa7d7b"
+    },
+    "mv_lines": {
+      "path": "test/inputTestUganda/UGA/UGA/UGA_mv_lines.shp",
+      "bytes": 445212,
+      "sha256": "afbcc8d2afeecf79b26c6ef27b98e581b68ba14cf0274deb8cdf3162eb8512b3"
+    },
+    "detailed_tech_parameters": {
+      "path": "detailed_tech_parameters.ipynb",
+      "bytes": 14187,
+      "sha256": "be6ef6643681c03dd62cbff10038c4bc38848b2405a49c89b5314bef9018df7f"
+    },
+    "funcs": {
+      "path": "funcs.ipynb",
+      "bytes": 34889,
+      "sha256": "3ac3d074fb36a83cf2bbf9f27970f7725111dcaaae4b6e89ae18c51f041b47f1"
+    }
+  },
+  "scenario_name": "ugandaGeneral"
+}

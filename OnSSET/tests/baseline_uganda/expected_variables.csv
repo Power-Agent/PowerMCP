@@ -1,0 +1,44 @@
+Variable,Value,Source,Comments,Description
+Start_year,2024,,,
+End_year,2050,,,
+End year electrification rate target,1,,,
+Start year elec rate modelled,0.3502401358731049,,,
+Urban target tier,4,,,
+Rural target tier large,3,,,
+Rural target tier small,1,,,
+Intensification distance,0,,,Distance from existing MV network (km) for automatic connection to the grid
+Max intensification cost,1500,Maximum cost per household (USD/household) for forced grid intensification,,
+Pop start year,49938407.89794922,,,Population in the start of the analysis
+pop_end_year,86000000,,,the projected population in the end year (e.g. 2030)
+urban_ratio_start_year,0.2737772020678615,,,the urban population population ratio in the start year
+urban_ratio_end_year,0.36,,,the urban population population ratio in the end year
+grid_generation_cost,0.1,,,This is the grid cost electricity USD/kWh as expected in the end year of the analysis
+grid_power_plants_capital_cost,2500,,,The cost in USD/kW to for capacity upgrades of the grid-connected power plants
+grid_losses,0.15,,,The fraction of electricity lost in transmission and distribution (percentage)
+diesel_price,1.43,,,This is the diesel price in USD/liter as expected in the end year of the analysis
+mg_hydro_capital_cost,{inf: 15000},,,Mini-grid Hydro capital cost (USD/kW) as expected in the years of the analysis
+min_mg_size,100,Minimum number of connections (households) for mini-grids to be considered,,
+mg_min_grid_dist,0,Minimum distance from existing MV lines for mini-grids to be considered as an option,,
+mg_interconnection,1,"Whether mini-grids should be allowed to be interconnected to the grid in a later time-step. 0 = NO, 1 = YES",,
+pv_cost,1400,"Mini-grid: PV panel costs including BoS (PV inverter, charge controller) (USD/kW)",,
+battery_cost,550,"Mini-grid: battery capital cost, USD/kWh of storage capacity",,
+inverter_cost,598,Mini-grid: Battery inverter (USD/kW),,
+diesel_gen_cost,500,"Mini-grid: diesel generator capital cost, USD/kW rated power",,
+max_diesel,0.0,Mini-grid: Maximum share of generation that can come from diesel generators (0-1). Set to 0 for fully renewable mini-grids,,
+sa_pv_capital_cost_1,11600,,,Stand-alone PV capital cost (USD/kW) for household systems under 20 W
+sa_pv_capital_cost_2,7500,,,Stand-alone PV capital cost (USD/kW) for household systems between 21-50 W
+sa_pv_capital_cost_3,7500,,,Stand-alone PV capital cost (USD/kW) for household systems between 51-100 W
+sa_pv_capital_cost_4,8000,,,Stand-alone PV capital cost (USD/kW) for household systems between 101-200 W
+sa_pv_capital_cost_5,8000,,,Stand-alone PV capital cost (USD/kW) for household systems over 200 W
+grid_mv_line_cost,20000,,,Cost of MV lines in USD/km
+grid_lv_line_cost,15000,,,Cost of LV lines in USD/km
+grid_mv_line_capacity,33,,,Capacity of MV lines in kW/line
+grid_lv_line_capacity,0.4,,,Capacity of LV lines in kW/line
+grid_lv_line_max_length,1,,,Maximum length of LV lines (km)
+hv_line_cost,106000,,,Cost of HV lines in USD/km
+max_grid_extension_dist,100,,,Maximum distance that the grid may be extended by means of MV lines
+annual_new_grid_connections_limit,999999999,,,This is the maximum amount of new households that can be connected to the grid in one year (thousands)
+grid_capacity_limit,9999999,,,This is the maximum generation capacity that can be added to the grid in one year (MW)
+grid_discount_rate,0.12,Grid discount rate,,
+mini_grid_discount_rate,0.12,Mini-grid discount rate,,
+standalone_discount_rate,0.12,Stand-alone PV discount rate,,
