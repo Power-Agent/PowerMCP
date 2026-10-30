@@ -1183,6 +1183,7 @@ class EvEMTBenchMixin:
         voltage_kv: float,
         load_name: str,
         seed: int,
+        load_model: str = "constant_power",
     ):
         database = cls._load_evemtbench_load_database()
         class_name, profile = next(
@@ -1239,7 +1240,7 @@ class EvEMTBenchMixin:
 
         active_power = round(active_power, 6)
         reactive_power = round(reactive_power, 6)
-        return class_name, {
+        item = {
             "name": load_name,
             "catalog_id": database["catalog_id"],
             "source_tables": database["source"]["tables"],
@@ -1256,8 +1257,58 @@ class EvEMTBenchMixin:
                 "qlini": reactive_power,
             },
             "model": database["powerfactory"]["model"],
+            "load_model": load_model,
             "catalog_only": database["catalog_only"],
         }
+
+        if load_model == "zip":
+            # A separate stream keeps the existing seeded P/Q samples unchanged.
+            zip_rng = random.Random(f"evemtbench-load-zip:{seed}")
+            specs = database["catalog_only"]["load_model_coefficients"]
+            coefficients = {}
+            for prefix in ("kP", "kQ"):
+                bounds = []
+                for term in ("Z", "I", "P"):
+                    spec = specs[f"{prefix}_{term}"]
+                    lo, hi = spec["min"], spec["max"]
+                    if (isinstance(lo, bool) or isinstance(hi, bool)
+                            or not math.isfinite(float(lo)) or not math.isfinite(float(hi))
+                            or float(lo) > float(hi)):
+                        raise RuntimeError("Invalid ZIP coefficient interval")
+                    bounds.append((float(lo), float(hi)))
+                (zmin, zmax), (imin, imax), (pmin, pmax) = bounds
+                lower, upper = max(zmin, 1 - imax - pmax), min(zmax, 1 - imin - pmin)
+                if lower > upper:
+                    raise RuntimeError("ZIP coefficient constraints have no feasible solution")
+                z = zip_rng.uniform(lower, upper)
+                ilower, iupper = max(imin, 1 - z - pmax), min(imax, 1 - z - pmin)
+                if ilower > iupper:
+                    raise RuntimeError("ZIP current coefficient interval is empty")
+                current = zip_rng.uniform(ilower, iupper)
+                power = 1 - z - current
+                coefficients.update({f"{prefix}_Z": z, f"{prefix}_I": current,
+                                     f"{prefix}_P": power})
+            mapping = database["powerfactory"]["zip_model"]
+            item.update({
+                "model": "balanced voltage-dependent ZIP load (load flow only)",
+                "zip_coefficients": coefficients,
+                "type_attributes": {
+                    **mapping["exponents"],
+                    **{attribute: coefficients[source]
+                       for source, attribute in mapping["writable_coefficients"].items()},
+                },
+                "derived_type_attributes": {
+                    attribute: coefficients[source]
+                    for source, attribute in mapping["derived_coefficients"].items()
+                },
+                "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+                "limitations": [
+                    "Enable Consider Voltage Dependency of Loads in ComLdf to apply ZIP behavior.",
+                    "No load-flow command settings are changed by this creator.",
+                    "RMS and EMT ZIP behavior have not been validated.",
+                ],
+            })
+        return class_name, item
 
     @classmethod
     def list_evemtbench_transformer_profiles(
@@ -1345,6 +1396,7 @@ class EvEMTBenchMixin:
                 "results": results,
                 "vector_groups": database["vector_groups"],
                 "saturation": database["saturation"],
+                "partial_table_10_mapping": database["powerfactory"].get("partial_table_10_mapping", {}),
                 "unmapped_source_tables": database["powerfactory"][
                     "unmapped_source_tables"
                 ],
@@ -1363,7 +1415,18 @@ class EvEMTBenchMixin:
         clock_number: int,
         type_name: str,
         seed: int,
+        zero_sequence_model: str = "unchanged",
+        r0_r1_ratio: Optional[float] = None,
+        x0_x1_ratio: Optional[float] = None,
     ):
+        if zero_sequence_model not in ("unchanged", "ynd11_equivalent"):
+            raise RuntimeError("zero_sequence_model must be unchanged or ynd11_equivalent")
+        if zero_sequence_model == "unchanged" and (r0_r1_ratio is not None or x0_x1_ratio is not None):
+            raise RuntimeError("Zero-sequence ratios require zero_sequence_model=ynd11_equivalent")
+        if zero_sequence_model == "ynd11_equivalent":
+            if (voltage_class, rated_power_mva, nominal_frequency_hz, vector_group, clock_number) != (
+                    "110/20", 20.0, 60.0, "YNd", 11):
+                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 60 Hz YNd11")
         database = cls._load_evemtbench_database()
         source = database["classes"][voltage_class]
         rng = random.Random(seed)
@@ -1418,7 +1481,7 @@ class EvEMTBenchMixin:
             "pfe": sampled(rating["no_load_losses_kw"]),
             "curmg": sampled(rating["no_load_current_pct"]),
         }
-        return {
+        item = {
             "name": type_name,
             "catalog_id": database["catalog_id"],
             "source_tables": database["source"]["tables"],
@@ -1443,6 +1506,49 @@ class EvEMTBenchMixin:
                 "unmapped_source_tables"
             ],
         }
+
+        if zero_sequence_model == "ynd11_equivalent":
+            rules = [rule for rule in source["zero_sequence_rules"]
+                     if rule["when"] == {"limb_count": 3}]
+            if len(rules) != 1:
+                raise RuntimeError("Expected one Table 10 three-limb numerical-ratio rule")
+            rule = rules[0]
+            for label, value, spec in (
+                ("r0_r1_ratio", r0_r1_ratio, rule["r0_r1_ratio"]),
+                ("x0_x1_ratio", x0_x1_ratio, rule["x0_x1_ratio"]),
+            ):
+                lower, upper = spec["min"], spec["max"]
+                if (isinstance(lower, bool) or isinstance(upper, bool)
+                        or not math.isfinite(float(lower)) or not math.isfinite(float(upper))
+                        or float(lower) > float(upper)):
+                    raise RuntimeError("Invalid zero-sequence source interval")
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or not lower <= value <= upper):
+                    raise RuntimeError(f"{label} must be a finite number in [{lower}, {upper}]")
+            r1 = attributes["pcutr"] / (attributes["strn"] * 1000.0)
+            z1 = attributes["uktr"] / 100.0
+            if r1 > z1:
+                raise RuntimeError("Transformer copper losses exceed short-circuit impedance")
+            x1 = math.sqrt(max(0.0, z1 * z1 - r1 * r1))
+            r0, x0 = r1 * float(r0_r1_ratio), x1 * float(x0_x1_ratio)
+            item["zero_sequence"] = {
+                "model": zero_sequence_model,
+                "r0_r1_ratio": float(r0_r1_ratio),
+                "x0_x1_ratio": float(x0_x1_ratio),
+                "source_table": 10,
+                "numeric_rule": rule,
+                "type_attributes": {"r0pu": r0, "x0pu": x0},
+                "derived_type_attributes": {"ur0tr": 100.0 * r0, "uk0tr": 100.0 * math.hypot(r0, x0)},
+                "element_attributes": {"neutConfig": 0, "cgnd_h": 0, "re0tr_h": 0.0, "xe0tr_h": 0.0},
+                "limitations": [
+                    "Explicit impedance equivalent only; no physical limb/core model is configured.",
+                    "Uses Table 10 three-limb numeric intervals without claiming limb/core validation.",
+                    "HV star point is connected with zero neutral impedance; delta side has no star point.",
+                    "No independent absolute fault-current reference or RMS/EMT validation.",
+                    "Other ratings, frequencies, vector groups, internal-delta and magnetizing models are unsupported.",
+                ],
+            }
+        return item
 
     @classmethod
     def create_evemtbench_component(
@@ -1517,6 +1623,9 @@ class EvEMTBenchMixin:
         out_of_service: bool = False,
         confirmation: str = "",
         open_digsilent: bool = True,
+        zero_sequence_model: str = "unchanged",
+        r0_r1_ratio: Optional[float] = None,
+        x0_x1_ratio: Optional[float] = None,
     ) -> dict[str, Any]:
         """Preview or create a new database-backed TypTr2 and ElmTr2."""
         voltage_class = str(voltage_class or "").strip()
@@ -1529,6 +1638,7 @@ class EvEMTBenchMixin:
         created_type_folder = None
         equipment_folder = None
         type_folder = None
+        grid = None
 
         def failure(message, **extra):
             result = {
@@ -1540,6 +1650,13 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
 
         try:
             database = cls._load_evemtbench_database()
@@ -1606,6 +1723,9 @@ class EvEMTBenchMixin:
                 clock_number,
                 type_name,
                 seed,
+                zero_sequence_model,
+                r0_r1_ratio,
+                x0_x1_ratio,
             )
         except Exception as exc:
             return failure(str(exc))
@@ -1683,6 +1803,12 @@ class EvEMTBenchMixin:
                         f"expected {expected:g} kV for {voltage_class}"
                     )
 
+            if "zero_sequence" in item:
+                item["zero_sequence"]["type_destination"] = {
+                    "equipment_folder": equipment_folder.GetFullName(),
+                    "type_folder": type_folder.GetFullName() if type_folder is not None else None,
+                    "create_folder": type_folder is None,
+                }
             required_confirmation = cls._creation_confirmation_token(
                 confirmation_prefix,
                 {
@@ -1713,6 +1839,7 @@ class EvEMTBenchMixin:
                 "type_created": False,
                 "transformer_created": False,
                 "voltage_class": voltage_class,
+                "zero_sequence_model": zero_sequence_model,
                 "seed": seed,
                 "catalog_id": database["catalog_id"],
                 "source": database["source"],
@@ -1732,8 +1859,7 @@ class EvEMTBenchMixin:
                 "confirmation_required": required_confirmation,
                 "message": (
                     "Preview only; no transformer type, grid element, cubicle, "
-                    "or switch was created. Tables 10 and 12 are present in "
-                    "the database but remain unmapped to PowerFactory."
+                    "or switch was created. Saturation and full Table 10 core/limb mapping remain unsupported."
                 ),
             }
             if not confirmation:
@@ -1848,23 +1974,37 @@ class EvEMTBenchMixin:
                 "Transformer type",
                 "after completing transformer type initialization",
             )
+            retained_zero_sequence = retained_zero_derived = None
+            if "zero_sequence" in item:
+                zero = item["zero_sequence"]
+                commit_type_attributes(zero["type_attributes"], "zero sequence", direct=True)
+                retained_zero_sequence = cls._verify_attributes(
+                    created_type, zero["type_attributes"], "Transformer zero sequence")
+                retained_zero_derived = cls._verify_attributes(
+                    created_type, zero["derived_type_attributes"], "Transformer zero sequence",
+                    "after deriving uk0 and ur0")
+                cls._verify_attributes(created_type, attributes, "Transformer type",
+                                       "after zero-sequence assignment")
             if str(created_type.GetAttribute("loc_name")) != type_name:
                 raise RuntimeError(
                     f"PowerFactory did not retain type name: {type_name}"
                 )
             item["full_name"] = created_type.GetFullName()
 
-            _, _, created_transformer, _ = cls._create_connected_element(
+            element_attributes = {
+                "typ_id": created_type,
+                "outserv": int(bool(out_of_service)),
+            }
+            if "zero_sequence" in item:
+                element_attributes.update(item["zero_sequence"]["element_attributes"])
+            _, _, created_transformer, retained_element = cls._create_connected_element(
                 app,
                 "ElmTr2",
                 "Transformer",
                 transformer_name,
                 (high_bus_name, low_bus_name),
                 grid_name,
-                attributes={
-                    "typ_id": created_type,
-                    "outserv": int(bool(out_of_service)),
-                },
+                attributes=element_attributes,
                 connection_attributes=("bushv", "buslv"),
             )
 
@@ -1879,9 +2019,20 @@ class EvEMTBenchMixin:
                     f"'{transformer_name}'"
                 ),
             })
+            if "zero_sequence" in item:
+                retained_element["typ_id"] = created_type.GetFullName()
+                result.update(retained_zero_sequence_attributes=retained_zero_sequence,
+                              retained_zero_sequence_derived_attributes=retained_zero_derived,
+                              retained_element_attributes=retained_element)
             return result
 
         except Exception as exc:
+            if "zero_sequence" in item and created_type is not None and grid is not None:
+                survivors = cls._find_named_contents(grid, transformer_name, "ElmTr2")
+                if survivors:
+                    return failure(str(exc), rolled_back=False, type_created=True,
+                                   remaining_type=type_name, remaining_transformer=survivors[0].GetFullName(),
+                                   item=item)
             return failure(
                 str(exc),
                 **cls._rollback_equipment_type(
@@ -1934,6 +2085,13 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
 
         database_loader = _database_loader or cls._load_evemtbench_line_database
         plan_builder = _plan_builder or cls._evemtbench_line_plan
@@ -2303,6 +2461,13 @@ class EvEMTBenchMixin:
             return result
 
         for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
+
+        for field_name, value in (
             ("external_grid_name", external_grid_name),
             ("bus_name", bus_name),
         ):
@@ -2459,10 +2624,13 @@ class EvEMTBenchMixin:
         out_of_service: bool = False,
         confirmation: str = "",
         open_digsilent: bool = True,
+        load_model: str = "constant_power",
+        type_name: str = "",
     ) -> dict[str, Any]:
         """Preview or create a seeded Table 5 ElmLod."""
         load_name = str(load_name or "").strip()
         bus_name = str(bus_name or "").strip()
+        created_type = created_type_folder = equipment_folder = type_folder = None
 
         def failure(message, **extra):
             result = {
@@ -2473,6 +2641,23 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
+
+        if load_model not in ("constant_power", "zip"):
+            return failure("load_model must be constant_power or zip")
+        if not isinstance(type_name, str):
+            return failure("type_name must be a string")
+        type_name = type_name.strip()
+        if load_model == "zip" and (not type_name or len(type_name) > cls._max_loc_name_length):
+            return failure(f"ZIP type_name must contain 1 to {cls._max_loc_name_length} characters")
+        if load_model == "constant_power" and type_name:
+            return failure("type_name is only supported for load_model=zip")
 
         for field_name, value in (
             ("load_name", load_name),
@@ -2502,6 +2687,7 @@ class EvEMTBenchMixin:
                 voltage,
                 load_name,
                 seed,
+                load_model,
             )
         except Exception as exc:
             return failure(str(exc))
@@ -2516,6 +2702,22 @@ class EvEMTBenchMixin:
             app = cls._get_application(open_digsilent)
             if app.GetActiveProject() is None:
                 raise RuntimeError("No PowerFactory project is active")
+            if load_model == "zip":
+                equipment_folder = app.GetProjectFolder("equip")
+                if equipment_folder is None:
+                    raise RuntimeError("Equipment Type Library is unavailable")
+                folders = cls._find_named_contents(equipment_folder, "Load Types", "IntPrjfolder")
+                if len(folders) > 1:
+                    raise RuntimeError("Multiple Load Types folders were found")
+                type_folder = folders[0] if folders else None
+                if cls._find_named_contents(equipment_folder, type_name, "TypLod"):
+                    raise RuntimeError(f"Load type already exists: {type_name}")
+                item["type_destination"] = {
+                    "equipment_folder": equipment_folder.GetFullName(),
+                    "load_types_folder": type_folder.GetFullName() if type_folder else None,
+                    "create_folder": type_folder is None,
+                    "type_name": type_name,
+                }
             grid = cls._select_grid(app, grid_name)
             if cls._find_named_contents(grid, load_name, "ElmLod"):
                 raise RuntimeError(
@@ -2538,6 +2740,8 @@ class EvEMTBenchMixin:
                 confirmation_prefix,
                 {
                     "component": "load",
+                    "load_model": load_model,
+                    "type_name": type_name,
                     "catalog_id": database["catalog_id"],
                     "resolved_item": item,
                     "voltage_kv": voltage,
@@ -2555,6 +2759,8 @@ class EvEMTBenchMixin:
                 "success": True,
                 "applied": False,
                 "load_created": False,
+                "type_created": False,
+                "load_model": load_model,
                 "voltage_class": voltage_class,
                 "seed": seed,
                 "catalog_id": database["catalog_id"],
@@ -2569,7 +2775,7 @@ class EvEMTBenchMixin:
                 "item": item,
                 "confirmation_required": required_confirmation,
                 "message": (
-                    "Preview only; no load, cubicle, or switch was created. "
+                    "Preview only; no type, load, cubicle, or switch was created. "
                     "Table 5 power intervals were sampled reproducibly."
                 ),
             }
@@ -2583,10 +2789,35 @@ class EvEMTBenchMixin:
                 )
 
             creating = True
+            retained_type = retained_derived = None
+            if load_model == "zip":
+                if type_folder is None:
+                    type_folder = equipment_folder.CreateObject("IntPrjfolder", "Load Types")
+                    if type_folder is None:
+                        raise RuntimeError("Could not create Load Types folder")
+                    created_type_folder = type_folder
+                created_type = type_folder.CreateObject("TypLod", type_name)
+                if created_type is None:
+                    raise RuntimeError(f"Could not create load type: {type_name}")
+                if created_type.GetClassName() != "TypLod":
+                    raise RuntimeError("PowerFactory created an unexpected type class")
+                # Native assignment matches the Lab PC write/readback validation.
+                for attribute, value in item["type_attributes"].items():
+                    setattr(created_type, attribute, value)
+                    cls._verify_attributes(created_type, {attribute: value}, "ZIP load type")
+                created_type.WriteChangesToDb()
+                retained_type = cls._verify_attributes(
+                    created_type, item["type_attributes"], "ZIP load type", "after database write")
+                retained_derived = cls._verify_attributes(
+                    created_type, item["derived_type_attributes"], "ZIP load type", "derived coefficients")
+                if str(created_type.GetAttribute("loc_name")) != type_name:
+                    raise RuntimeError("PowerFactory did not retain the load type name")
             attributes = {
                 **item["powerfactory_attributes"],
                 "outserv": int(bool(out_of_service)),
             }
+            if created_type is not None:
+                attributes["typ_id"] = created_type
             _, _, created, actual = cls._create_connected_element(
                 app,
                 "ElmLod",
@@ -2607,12 +2838,32 @@ class EvEMTBenchMixin:
                     f"'{bus_name}'"
                 ),
             })
+            if created_type is not None:
+                # Avoid serializing a live PowerFactory DataObject in the response.
+                actual["typ_id"] = created_type.GetFullName()
+                result.update(type_created=True, created_type=created_type.GetFullName(),
+                              retained_type_attributes=retained_type,
+                              retained_derived_attributes=retained_derived)
             return result
         except Exception as exc:
             message = str(exc)
             extra = {"item": item}
             if creating:
                 extra["rolled_back"] = "rolled_back=True" in message
+            if load_model == "zip":
+                # Never remove a type still referenced by a failed element rollback.
+                survivors = cls._find_named_contents(grid, load_name, "ElmLod") if creating else []
+                if survivors:
+                    extra.update(rolled_back=False, type_created=created_type is not None,
+                                 remaining_type=type_name if created_type is not None else None,
+                                 remaining_load=survivors[0].GetFullName())
+                else:
+                    rollback = cls._rollback_equipment_type(
+                        equipment_folder, created_type, created_type_folder,
+                        type_name, "TypLod", "Load Types")
+                    if rollback["rolled_back"] is None:
+                        rollback.pop("rolled_back")
+                    extra.update(rollback)
             return failure(message, **extra)
 
     @classmethod
@@ -2651,6 +2902,13 @@ class EvEMTBenchMixin:
             }
             result.update(extra)
             return result
+
+        for field_name, value in (
+            ("out_of_service", out_of_service),
+            ("open_digsilent", open_digsilent),
+        ):
+            if not isinstance(value, bool):
+                return failure(f"{field_name} must be a boolean")
 
         for field_name, value in (
             ("machine_name", machine_name),

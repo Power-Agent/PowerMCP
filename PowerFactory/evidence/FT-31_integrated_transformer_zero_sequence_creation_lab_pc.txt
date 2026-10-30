@@ -1,0 +1,112 @@
+FT-31: Integrated opt-in YNd11 zero-sequence transformer creation
+==============================================================
+
+Classification: compiled evidence record containing extracts of user-supplied
+creation and readback responses. Not an independently rerun or continuous MCP
+transcript. Account identifiers are replaced with <user>. Confirmation tokens
+are not reproduced or independently verified against the saved client files.
+
+Environment: Lab PC, PowerFactory 2026; service pack not captured in this output.
+Code under test: patch 0116 on feat/powerfactory-transformer-zero-sequence.
+No post-patch commit hash supplied. Automated Lab PC run reported:
+189 passed, 458 subtests passed in 9.02s.
+
+Activation and operation sequence reported by the contributor:
+- create_study_case activated existing Case 1 in configured project test.
+- Active project: \<user>.IntUser\test.IntPrj
+- Active case: \<user>.IntUser\test.IntPrj\Study Cases.IntPrjfolder\Case 1.IntCase
+- A fresh preview was reviewed before one confirmed creation request.
+- The client reported copying confirmation_required directly from that preview.
+- Both subsequent readback queries returned exactly one matching object.
+- No attribute errors or rollback information were reported.
+- No calculations, existing-equipment edits or grid-setting changes were reported.
+
+Unified request (confirmation omitted):
+{
+  "component_type": "transformer",
+  "parameters": {
+    "voltage_class": "110/20",
+    "rated_power_mva": 20,
+    "nominal_frequency_hz": 60,
+    "vector_group": "YNd",
+    "clock_number": 11,
+    "transformer_name": "MCP YNd Z0 Integration 01",
+    "type_name": "MCP YNd Z0 Type Integration 01",
+    "high_voltage_bus_name": "MCP Confirmation HV 110",
+    "low_voltage_bus_name": "MCP Confirmation MV 20",
+    "grid_name": "MCP Confirmation Check 20261013",
+    "seed": 42,
+    "out_of_service": true,
+    "open_digsilent": true,
+    "zero_sequence_model": "ynd11_equivalent",
+    "r0_r1_ratio": 2.15,
+    "x0_x1_ratio": 0.925
+  }
+}
+
+Creation response extract:
+{
+  "success": true,
+  "applied": true,
+  "type_created": true,
+  "transformer_created": true,
+  "zero_sequence_model": "ynd11_equivalent",
+  "catalog_id": "evemtbench-transformers-tables-10-12-v1",
+  "retained_zero_sequence_attributes": {
+    "r0pu": 0.01022594328969717,
+    "x0pu": 0.10423660278320312
+  },
+  "retained_zero_sequence_derived_attributes": {
+    "ur0tr": 1.0225943326950073,
+    "uk0tr": 10.473699569702148
+  }
+}
+
+Created type:
+\<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type Library.IntPrjfolder\Transformer Types.IntPrjfolder\MCP YNd Z0 Type Integration 01.TypTr2
+Created transformer:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network Data.IntPrjfolder\MCP Confirmation Check 20261013.ElmNet\MCP YNd Z0 Integration 01.ElmTr2
+
+Type readback values (query success=true, total_count=1):
+{
+  "strn": 20.0,
+  "frnom": 60.0,
+  "utrn_h": 110.0,
+  "utrn_l": 20.0,
+  "tr2cn_h": "YN",
+  "tr2cn_l": "D",
+  "nt2ag": 11.0,
+  "r1pu": 0.004756252747029066,
+  "x1pu": 0.11268821358680725,
+  "r0pu": 0.01022594328969717,
+  "x0pu": 0.10423660278320312,
+  "ur0tr": 1.0225943326950073,
+  "uk0tr": 10.473699569702148
+}
+
+Transformer readback values (query success=true, total_count=1):
+{
+  "typ_id": "<l3>\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Transformer Types.IntPrjfolder\\MCP YNd Z0 Type Integration 01.TypTr2</l3>",
+  "outserv": 1,
+  "neutConfig": 0,
+  "cgnd_h": 0,
+  "re0tr_h": 0.0,
+  "xe0tr_h": 0.0
+}
+
+The creation response's retained_element_attributes contained the same type
+path without the <l3> display markup and the same service/grounding values.
+Retained R0/R1 and X0/X1 agree with 2.15 and 0.925 within floating-point
+precision. The solid HV-neutral connection is explicit; the LV winding is D.
+
+Scope and limitations:
+- This covers unified routing, successful preview/confirmation creation,
+  retained type impedance and derived values, connection/type assignment,
+  out-of-service status and HV-neutral grounding readback.
+- Objects were intentionally retained out of service; cleanup was not requested.
+  No cleanup or failure-path rollback is claimed by this successful operation.
+- FT-30 contains the separate isolated Complete Method sensitivity/I0-blocking
+  test, not a calculation on the integrated transformer recorded here.
+- No independent absolute fault-current reference, physical core/limb mapping,
+  zero-sequence magnetizing, internal-delta YNyn, saturation, RMS or EMT validation.
+- Table 10 remains only partially mapped; Table 12 remains unsupported.

@@ -273,6 +273,12 @@ create_evemtbench_component(
 
 An empty `confirmation` keeps the request in preview mode. Repeat the same
 request with the exact returned `confirmation_required` value to apply it.
+
+For all six component types, `out_of_service` and `open_digsilent` require
+actual JSON booleans (`true` or `false`; `True` or `False` in Python).
+Strings such as `"false"`, numbers such as `0` or `1`, and `null` are rejected
+before connecting to PowerFactory. Omit either option to use its documented
+default.
 The unified tool delegates validation, seeded sampling, creation, retained-value
 checks, and rollback to the existing specialized creator without changing its
 behavior. Only the unified create and list tools are exposed through MCP.
@@ -361,15 +367,62 @@ The performance values use PowerFactory's native Python property assignment;
 each value is checked immediately and again after the database write. If element
 creation fails, the new type, element, cubicles, and switches are rolled back.
 
-Table 10 zero-sequence and Table 12 saturation data are stored and returned by
-the catalog tool, but are not written until their PowerFactory attribute
-mappings are validated. The `Block` class and other component families remain
-catalog-only for the same reason. The caller must explicitly choose a clock
+Full Table 10 core/limb and Table 12 saturation mappings remain unsupported.
+The restricted zero-sequence equivalent below is an opt-in exception. The
+`Block` class remains catalog-only. The caller must explicitly choose a clock
 number because Table 11 specifies vector-group families rather than one clock
 number for every generated transformer.
 
 See [references/evemtbench.md](evemtbench.md) for the source mapping
 and limitations.
+
+### Opt-in YNd11 zero-sequence impedance equivalent
+
+For **20 MVA, 110/20 kV, 60 Hz, YNd11 only**, add these fields to the
+transformer creation `parameters` (not a complete creation request):
+
+```json
+{
+    "zero_sequence_model": "ynd11_equivalent",
+    "r0_r1_ratio": 2.15,
+    "x0_x1_ratio": 0.925
+}
+```
+
+The default `zero_sequence_model="unchanged"` preserves the previous creation
+path; ratios are rejected unless the opt-in model is selected. The equivalent
+requires finite numeric R0/R1 in [1.5, 2.8] and X0/X1 in [0.85, 1.0], taken
+from Table 10's three-limb numerical rule. No physical three-limb/core model
+is configured or claimed. Ratios are explicit engineering choices, not sampled.
+Other ratings, classes, frequencies, vector groups and clock numbers are rejected.
+
+The creator derives R1/X1 from the same sampled Table 11 data as before, then
+writes `r0pu = r1pu * r0_r1_ratio` and `x0pu = x1pu * x0_x1_ratio`. It checks
+derived `ur0tr` and `uk0tr`, and leaves positive-sequence data unchanged.
+For the new element only, it explicitly sets `neutConfig=0`, `cgnd_h=0`,
+`re0tr_h=0`, `xe0tr_h=0`: no external neutral conductor, connected HV star
+point, zero internal neutral impedance. Existing elements are not edited.
+Model, ratios, derived parameters, grounding and destination are confirmation-bound.
+Type/connection failures roll back new objects; a type is retained if failed
+element cleanup leaves a transformer behind, with survivors reported.
+
+Lab PC write/readback and Complete Method sensitivity/I0-blocking checks passed
+on a separate temporary network: [FT-30](../evidence/FT-30_transformer_zero_sequence_ynd_lab_pc.txt).
+These do not validate absolute fault-current accuracy, core/limb construction,
+zero-sequence magnetizing models, internal-delta YNyn cases, saturation or RMS/EMT.
+The integrated opt-in creator also passed Lab PC creation and readback checks:
+[FT-31](../evidence/FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt).
+The new transformer remained out of service, with the requested type and solid
+HV-neutral grounding retained. No calculation was run on that integrated
+transformer; the fault-response checks used the separate FT-30 network.
+
+[FT-32](../evidence/FT-32_transformer_earth_fault_reference_lab_pc.txt) adds an
+independent absolute-current comparison for a separate unloaded, lossless YNd11
+equivalent, including a source-only control and 20-ohm neutral-resistance case.
+All four comparisons passed the predeclared 0.5% relative / 0.00001 kA absolute
+tolerance; the record includes the complete JSON, script and rerun instructions.
+This is not an absolute-current certification of the original lossy type or
+integrated transformer, and does not extend the creator's configuration scope.
 
 ---
 
@@ -534,8 +587,51 @@ create_evemtbench_component(
 Repeat the call with the exact returned `confirmation_required` value to create
 the balanced `ElmLod`, cubicle, and closed circuit breaker. The tool verifies
 `plini`, `qlini`, the bus connection, and the service state and rolls back new
-objects if creation fails. The Table 5 ZIP coefficients remain catalog-only
-until their PowerFactory attribute mapping is live-validated.
+objects if creation fails. This remains the default `load_model="constant_power"`
+path: no load type is created or assigned, and seeded P/Q values are unchanged.
+
+### Opt-in ZIP load-flow model
+
+Add `"load_model": "zip"` and an explicit, unused `"type_name"` to the load's
+`parameters`. For example, add these to the preview above:
+
+```json
+{
+    "load_model": "zip",
+    "type_name": "Research ZIP Load Type"
+}
+```
+
+These are additional parameters, not a complete request. Repeat the complete
+preview request with its exact confirmation string to create a new `TypLod`
+and connected `ElmLod`. Existing types are never reused or edited. The `Load
+Types` folder is created only on confirmation if needed. Model, type name,
+destination, coefficients, and exponents are bound into the confirmation plan.
+
+For P and Q independently, a separate seeded stream samples Z uniformly over
+its feasible interval, then I uniformly over its conditional feasible interval,
+and derives P = 1 - Z - I. All coefficients stay in the published ranges,
+including negative values. This is not independent uniform sampling of all six
+terms, nor a claim to reproduce the paper's joint distribution.
+
+`aP`/`aQ` receive constant-power coefficients, `bP`/`bQ` constant-current
+coefficients, and PowerFactory derives `cP`/`cQ` for constant impedance.
+Exponents are explicitly set to 0, 1, and 2. Writable and derived attributes
+are verified after the database write. Failures roll back new objects;
+incomplete cleanup is reported, and a type is preserved if failed load
+cleanup leaves an element behind.
+
+This maps **balanced steady-state load flow only**. Enable **Consider Voltage
+Dependency of Loads** in `ComLdf` to use ZIP behavior. The creator does not
+alter calculation settings, dynamic percentages, time constants, or voltage
+limits. RMS/EMT behavior remains unvalidated. Supplying `type_name` in
+constant-power mode is rejected rather than silently ignored.
+
+The Lab PC mapping and separate diagnostic voltage-response checks are in
+[FT-28](../evidence/FT-28_load_zip_mapping_lab_pc.txt). Integrated unified-tool
+creation and retained-value verification of an out-of-service ZIP load passed
+on the Lab PC; see [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
+No calculation was run on that integrated load. RMS/EMT validation remains pending.
 
 ---
 
@@ -721,7 +817,10 @@ Return the sampled values and confirmation phrase without creating anything.
 ## Automated tests and validation reports
 
 The EvEMTBench catalogs and builders are implemented in `evemtbench.py` and
-inherited by `DIgSILENTAgent`; the public MCP tool names and arguments are unchanged.
+inherited by `DIgSILENTAgent`. The public MCP interface now uses only
+`list_evemtbench_components(component_type, filters)` and
+`create_evemtbench_component(component_type, parameters)`; specialized MCP
+tools have been removed. Existing clients must migrate and refresh their tool list.
 Equipment-type rollback and confirmation hashing share helpers in that module.
 
 Grid-bootstrap confirmation is bound to the active project and study case,
