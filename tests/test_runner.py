@@ -183,6 +183,7 @@ def test_temporary_sys_path_serializes_overlapping_launches(tmp_path):
     original = sys.path[:]
     first_entered = threading.Event()
     release_first = threading.Event()
+    second_started = threading.Event()
     second_entered = threading.Event()
     first_path = str(tmp_path / "first")
     second_path = str(tmp_path / "second")
@@ -194,6 +195,7 @@ def test_temporary_sys_path_serializes_overlapping_launches(tmp_path):
 
     def second():
         assert first_entered.wait(timeout=2)
+        second_started.set()
         with runner._temporary_sys_path(second_path):
             second_entered.set()
 
@@ -203,6 +205,7 @@ def test_temporary_sys_path_serializes_overlapping_launches(tmp_path):
         first_thread.start()
         assert first_entered.wait(timeout=2)
         second_thread.start()
+        assert second_started.wait(timeout=2)
         assert not second_entered.wait(timeout=0.05)
         release_first.set()
         first_thread.join(timeout=2)
