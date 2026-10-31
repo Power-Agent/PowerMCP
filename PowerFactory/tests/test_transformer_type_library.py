@@ -717,19 +717,20 @@ class EvEMTBenchZeroSequenceTest(unittest.TestCase):
                     transformer_name="Transformer", type_name="Type",
                     high_voltage_bus_name="HV", low_voltage_bus_name="LV", **self.options())
         changes = [dict(voltage_class="110/11"), dict(rated_power_mva=25),
-                   dict(nominal_frequency_hz=50), dict(vector_group="YNyn"),
+                   dict(nominal_frequency_hz=55), dict(vector_group="YNyn"),
                    dict(clock_number=5), dict(zero_sequence_model="other"),
                    dict(zero_sequence_model="unchanged")]
         for field, values in (("r0_r1_ratio", (None, True, "2.15", float("nan"), float("inf"), 1.49, 2.81)),
                               ("x0_x1_ratio", (None, True, "0.925", -1, 0.84, 1.01))):
             changes.extend({field: value} for value in values)
         with patch.object(agent, "_get_application") as connect:
-            for change in changes:
-                with self.subTest(change=change):
-                    arguments = dict(base)
-                    arguments.update(change)
-                    result = agent.create_evemtbench_component("transformer", arguments)
-                    self.assertFalse(result["success"], result)
+            for frequency in (50.0, 60.0):
+                for change in changes:
+                    with self.subTest(frequency=frequency, change=change):
+                        arguments = dict(base, nominal_frequency_hz=frequency)
+                        arguments.update(change)
+                        result = agent.create_evemtbench_component("transformer", arguments)
+                        self.assertFalse(result["success"], result)
             connect.assert_not_called()
 
     def test_changed_ratio_model_or_destination_invalidates_confirmation(self):
@@ -784,6 +785,7 @@ class EvEMTBenchZeroSequenceTest(unittest.TestCase):
         self.assertEqual(listing["creation_parameters"]["zero_sequence_model"]["default"], "unchanged")
         self.assertTrue(listing["creation_parameters"]["r0_r1_ratio"]["nullable"])
         self.assertIn("partial_table_10_mapping", listing)
+        self.assertEqual(listing["partial_table_10_mapping"]["nominal_frequencies_hz"], [50.0, 60.0])
         self.assertEqual(listing["unmapped_source_tables"], [10, 12])
 
     def test_derived_zero_sequence_verification_failure_cleans_new_folder(self):
@@ -809,6 +811,64 @@ class EvEMTBenchZeroSequenceTest(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["message"], "database unavailable")
         self.assertEqual(self.transformer_types(folder), [])
+
+    def test_50hz_plan_preserves_samples_and_default_mode_for_multiple_seeds(self):
+        agent = agent_module.DIgSILENTAgent
+        for seed in range(20):
+            with self.subTest(seed=seed):
+                args = ("110/20", 20.0, 50.0, "YNd", 11, "Type", seed)
+                default = agent._evemtbench_transformer_plan(*args)
+                optin = agent._evemtbench_transformer_plan(*args, **self.options())
+                control = agent._evemtbench_transformer_plan(
+                    "110/20", 20.0, 60.0, "YNd", 11, "Type", seed, **self.options())
+                self.assertNotIn("zero_sequence", default)
+                self.assertEqual(default["powerfactory_attributes"], optin["powerfactory_attributes"])
+                self.assertEqual(optin["powerfactory_attributes"]["frnom"], 50.0)
+                self.assertEqual(optin["zero_sequence"], control["zero_sequence"])
+
+    def test_50hz_unified_creation_retains_frequency_impedance_grounding_and_outserv(self):
+        folder, grid, hv, lv, app = self.network()
+        options = self.options(nominal_frequency_hz=50.0, out_of_service=True)
+        preview = self.call(app, **options)
+        self.assertTrue(preview["success"], preview)
+        self.assertFalse(preview["applied"])
+        self.assertIn("50Hz", preview["confirmation_required"])
+        self.assertEqual(self.transformer_types(folder), [])
+        result = self.call(app, confirmation=preview["confirmation_required"], **options)
+        self.assertTrue(result["success"], result)
+        typ, element = self.transformer_types(folder)[0], grid["ElmTr2"][0]
+        self.assertEqual(typ.GetAttribute("frnom"), 50.0)
+        self.assertEqual(element.GetAttribute("outserv"), 1)
+        self.assertIs(element.GetAttribute("typ_id"), typ)
+        for key, value in preview["item"]["zero_sequence"]["type_attributes"].items():
+            self.assertAlmostEqual(typ.GetAttribute(key), value)
+        for key, value in preview["item"]["zero_sequence"]["derived_type_attributes"].items():
+            self.assertAlmostEqual(typ.GetAttribute(key), value)
+        for key, value in preview["item"]["zero_sequence"]["element_attributes"].items():
+            self.assertEqual(element.GetAttribute(key), value)
+
+    def test_changing_frequency_invalidates_zero_sequence_confirmation(self):
+        for initial, changed in ((60., 50.), (50., 60.)):
+            with self.subTest(initial=initial):
+                folder, grid, hv, lv, app = self.network()
+                preview = self.call(app, **self.options(nominal_frequency_hz=initial))
+                result = self.call(app, confirmation=preview["confirmation_required"],
+                                   **self.options(nominal_frequency_hz=changed))
+                self.assertFalse(result["success"])
+                self.assertIn("confirmation must exactly match", result["message"])
+                self.assertEqual(self.transformer_types(folder), [])
+                self.assertEqual(grid["ElmTr2"], [])
+
+    def test_50hz_readback_failure_rolls_back(self):
+        folder, grid, hv, lv, app = self.network(with_type_folder=False)
+        folder.reject_attribute = "r0pu"
+        options = self.options(nominal_frequency_hz=50.0)
+        preview = self.call(app, **options)
+        result = self.call(app, confirmation=preview["confirmation_required"], **options)
+        self.assertFalse(result["success"])
+        self.assertTrue(result["rolled_back"])
+        self.assertEqual(folder["IntPrjfolder"], [])
+        self.assertEqual(grid["ElmTr2"], [])
 
 
 if __name__ == "__main__":

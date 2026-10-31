@@ -2,6 +2,8 @@
 
 Latest follow-up records:
 
+- [FT-34](FT-34_integrated_50hz_transformer_creation_lab_pc.txt): integrated 50 Hz creation/readback, with [compiled JSON extracts](FT-34_integrated_50hz_transformer_creation_lab_pc.json); new transformer retained out of service, no calculation.
+- [FT-33](FT-33_ynd11_two_frequency_reference_lab_pc.txt): 50/60 Hz lossless YNd11 reference checks, with [complete JSON](FT-33_ynd11_two_frequency_reference_lab_pc.json) and [standalone script](scripts/lab_transformer_two_frequency_reference_check.py).
 - [FT-32](FT-32_transformer_earth_fault_reference_lab_pc.txt): independent lossless YNd11 current reference, with [complete JSON](FT-32_transformer_earth_fault_reference_lab_pc.json) and [standalone script](scripts/lab_transformer_earth_fault_reference_check.py).
 - [FT-31](FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt): successful unified-tool YNd11 zero-sequence creation and readback, with the transformer out of service.
 - [FT-30](FT-30_transformer_zero_sequence_ynd_lab_pc.txt): YNd11 type writes and isolated earth-fault sensitivity/zero-sequence blocking checks on the Lab PC.
@@ -57,6 +59,8 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-30 | `FT-30_transformer_zero_sequence_ynd_lab_pc.txt` | Compiled evidence record; rounded summary of user-supplied Lab PC results |
 | FT-31 | `FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt` | Compiled evidence record containing user-supplied creation and readback extracts |
 | FT-32 | `FT-32_transformer_earth_fault_reference_lab_pc.txt` | Compiled evidence record with complete account-sanitized JSON and reproducible script |
+| FT-33 | `FT-33_ynd11_two_frequency_reference_lab_pc.txt` | Compiled evidence record with complete account-sanitized two-frequency JSON and script |
+| FT-34 | `FT-34_integrated_50hz_transformer_creation_lab_pc.txt` | Compiled record with creation/readback JSON extracts from supplied client transcript |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -152,3 +156,16 @@ lossless temporary YNd11 equivalent. All four transformer comparisons and the
 source-only control passed; restoration and cleanup were confirmed. This does
 not certify absolute currents for the original lossy type or integrated
 transformer, and does not widen the creator's supported configurations.
+
+FT-33 extends the separate lossless reference checks to 50 Hz, retaining 60 Hz
+as a regression control. Both source-only controls and all eight fault scenarios
+passed; original context restoration, source-type checks and cleanup passed
+after each frequency. This does not certify original lossy-type or integrated
+transformer currents. FT-33 retains its historical pending-integration status.
+
+FT-34 records subsequent successful 50 Hz unified-creator execution and retained
+type, impedance, grounding and connection checks. The grid stayed at its existing
+50 Hz and the new transformer remained out of service. Initial absolute-path
+read queries failed; name-and-class queries then returned the intended objects.
+No calculation, cleanup or failure-path rollback is claimed by this successful
+creation. The complete preview is not archived in the supplied JSON extracts.

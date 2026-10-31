@@ -378,7 +378,7 @@ and limitations.
 
 ### Opt-in YNd11 zero-sequence impedance equivalent
 
-For **20 MVA, 110/20 kV, 60 Hz, YNd11 only**, add these fields to the
+For **20 MVA, 110/20 kV, 50 or 60 Hz, YNd11 only**, add these fields to the
 transformer creation `parameters` (not a complete creation request):
 
 ```json
@@ -423,6 +423,17 @@ All four comparisons passed the predeclared 0.5% relative / 0.00001 kA absolute
 tolerance; the record includes the complete JSON, script and rerun instructions.
 This is not an absolute-current certification of the original lossy type or
 integrated transformer, and does not extend the creator's configuration scope.
+
+[FT-33](../evidence/FT-33_ynd11_two_frequency_reference_lab_pc.txt) records
+successful lossless reference checks at both nominal frequencies, with fixed
+per-unit inputs, all eight fault scenarios and both source-only controls passing.
+Confirmed 50 Hz creation/readback passed on the Lab PC:
+[FT-34](../evidence/FT-34_integrated_50hz_transformer_creation_lab_pc.txt).
+The new type retained 50 Hz and the transformer remained out of service, with
+the intended connections and grounding; no calculation was run.
+The creator does not change grid frequency or
+existing types. Keep test creations out of service and use a fresh confirmation
+for the selected frequency; 50/60 Hz tokens are not interchangeable.
 
 ---
 

@@ -62,7 +62,7 @@ not a claim that every sampled type is suitable for a specific study.
 #### Restricted Table 10 YNd11 equivalent
 
 `zero_sequence_model="ynd11_equivalent"` supports only 20 MVA, 110/20 kV,
-60 Hz, YNd11, with explicit `r0_r1_ratio` and `x0_x1_ratio`. The allowed
+50 or 60 Hz, YNd11, with explicit `r0_r1_ratio` and `x0_x1_ratio`. The allowed
 intervals [1.5, 2.8] and [0.85, 1.0] come from the three-limb numerical rule;
 no physical limb count or core geometry is configured. Default `unchanged`
 does not enable zero-sequence or grounding assignments.
@@ -95,7 +95,19 @@ temporary YNd11 equivalent, with complete JSON and a reproducible script.
 All four comparisons and the source-only control passed, with restoration and
 cleanup confirmed. This does not certify absolute fault currents for the original
 lossy type or integrated transformer, or validate core/limb, magnetizing,
-saturation or RMS/EMT models. Supported creator configurations are unchanged.
+saturation or RMS/EMT models. FT-32 itself did not widen supported configurations.
+[FT-33](../evidence/FT-33_ynd11_two_frequency_reference_lab_pc.txt) repeats the
+lossless reference at 60 and 50 Hz: all eight fault scenarios and both source-only
+controls passed, with retained grid/type frequencies, restoration and cleanup.
+The cases keep per-unit impedance inputs fixed at each nominal frequency; this
+is not a physical frequency sweep of one transformer. The opt-in creator now
+accepts 50 Hz at the same rating, voltage class and vector group; integrated
+50 Hz creation/readback passed on the Lab PC, recorded in
+[FT-34](../evidence/FT-34_integrated_50hz_transformer_creation_lab_pc.txt).
+The new transformer remained out of service; type frequency, impedance ratios,
+grounding and bus connections were retained, with no calculation run.
+Catalog discovery
+reports the supported set as `partial_table_10_mapping.nominal_frequencies_hz`.
 `unmapped_source_tables` still includes 10 and 12 because they are not fully
 mapped; `partial_table_10_mapping` exposes the restricted capability separately.
 
