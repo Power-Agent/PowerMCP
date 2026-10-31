@@ -91,6 +91,8 @@ for label in component_types:
             raise SystemExit("installed-wheel transformer listing changed the default zero-sequence mode")
         if not inputs["r0_r1_ratio"].get("nullable") or not result.get("partial_table_10_mapping"):
             raise SystemExit("installed-wheel transformer listing omitted partial zero-sequence discovery")
+        if result["partial_table_10_mapping"].get("nominal_frequencies_hz") != [50.0, 60.0]:
+            raise SystemExit("installed-wheel transformer listing omitted 50/60 Hz equivalent support")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "

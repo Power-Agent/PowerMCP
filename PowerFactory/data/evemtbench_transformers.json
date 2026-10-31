@@ -44,12 +44,12 @@
       "default": "unchanged",
       "voltage_class": "110/20",
       "rated_power_mva": 20.0,
-      "nominal_frequency_hz": 60.0,
+      "nominal_frequencies_hz": [50.0, 60.0],
       "vector_group": "YNd",
       "clock_number": 11,
       "required_ratios": ["r0_r1_ratio", "x0_x1_ratio"],
       "scope": "explicit R0/X0 equivalent with solid HV grounding; uses three-limb numerical ranges only",
-      "limitations": "physical limb/core, internal delta, magnetizing model, saturation, RMS/EMT and absolute fault-current accuracy remain unvalidated"
+      "limitations": "lossless reference checks passed at 50/60 Hz; integrated 50 Hz creation/readback passed (FT-34), without calculation; physical limb/core, internal delta, magnetizing model, saturation, RMS/EMT and original lossy-type absolute fault currents remain unvalidated"
     }
   },
   "vector_groups": {

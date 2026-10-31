@@ -189,7 +189,10 @@ Values are 5th, 50th, and 95th percentiles of generated cables.
 ## Transformer zero-sequence and limb data - Table 10
 
 The executable opt-in `ynd11_equivalent` is restricted to 20 MVA, 110/20 kV,
-60 Hz YNd11 with explicit ratios from the three-limb numerical intervals.
+50 or 60 Hz YNd11 with explicit ratios from the three-limb numerical intervals.
+The two-frequency lossless reference passed (FT-33); integrated 50 Hz creation
+and readback also passed (FT-34), with the new transformer out of service and
+no calculation run.
 This is an impedance equivalent, not a physical limb/core implementation.
 Other rows below remain catalog data; see [mapping limits](evemtbench.md#restricted-table-10-ynd11-equivalent).
 

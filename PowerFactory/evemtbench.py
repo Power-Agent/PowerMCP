@@ -1439,9 +1439,10 @@ class EvEMTBenchMixin:
         if zero_sequence_model == "unchanged" and (r0_r1_ratio is not None or x0_x1_ratio is not None):
             raise RuntimeError("Zero-sequence ratios require zero_sequence_model=ynd11_equivalent")
         if zero_sequence_model == "ynd11_equivalent":
-            if (voltage_class, rated_power_mva, nominal_frequency_hz, vector_group, clock_number) != (
-                    "110/20", 20.0, 60.0, "YNd", 11):
-                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 60 Hz YNd11")
+            if ((voltage_class, rated_power_mva, vector_group, clock_number) != (
+                    "110/20", 20.0, "YNd", 11)
+                    or nominal_frequency_hz not in (50.0, 60.0)):
+                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 50 or 60 Hz YNd11")
         database = cls._load_evemtbench_database()
         source = database["classes"][voltage_class]
         rng = random.Random(seed)
@@ -1559,7 +1560,7 @@ class EvEMTBenchMixin:
                     "Explicit impedance equivalent only; no physical limb/core model is configured.",
                     "Uses Table 10 three-limb numeric intervals without claiming limb/core validation.",
                     "HV star point is connected with zero neutral impedance; delta side has no star point.",
-                    "No independent absolute fault-current reference or RMS/EMT validation.",
+                    "Independent lossless reference only; original lossy-type absolute currents and RMS/EMT remain unvalidated.",
                     "Other ratings, frequencies, vector groups, internal-delta and magnetizing models are unsupported.",
                 ],
             }
