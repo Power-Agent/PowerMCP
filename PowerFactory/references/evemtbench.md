@@ -248,6 +248,16 @@ settings. The grid stayed at 50 Hz and no simulation was run on that load.
 This does not validate its capacitive-Q RMS response. No claim is made that
 this changes the paper's model or validates the original integrated load.
 
+[FT-37](../evidence/FT-37_zip_rms_multiseed_lab_pc.txt) separately validates six
+sampled ZIP cases (inductive seeds 0/1/2, capacitive seeds 4/7/15), each with a
+matched constant-power control, at 20 kV / 50 Hz. All twelve settled-response
+checks passed with complete traces, restoration and cleanup. Pure creator plans
+are applied to temporary copies; this does not simulate the retained FT-36 load
+or exercise public creation. Feeder impedance is scaled per sampled P0 as an
+engineering diagnostic choice. Six seeds do not validate every mixture, recovery
+dynamics, nonzero time constants, other voltages/frequencies, unbalanced RMS or
+EMT. Defaults and supported-mode restrictions remain unchanged.
+
 ### Table 13 synchronous-machine mapping
 
 The seventh executable database is

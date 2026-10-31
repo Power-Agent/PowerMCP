@@ -18,6 +18,58 @@ SPEC.loader.exec_module(probe)
 
 
 class RmsZipEvidenceTest(unittest.TestCase):
+    def test_multiseed_traces_reproduce_all_twelve_analyses(self):
+        spec = importlib.util.spec_from_file_location(
+            "zip_rms_multiseed", EVIDENCE / "scripts/lab_zip_rms_multiseed_check.py")
+        multi = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(multi)
+        report = json.loads((EVIDENCE / "FT-37_zip_rms_multiseed_lab_pc.json").read_text(encoding="utf-8"))
+        self.assertTrue(report["success"])
+        self.assertTrue(report["restored"])
+        self.assertTrue(report["cleanup_ok"])
+        self.assertEqual(report["remaining_objects"], [])
+        plans, _ = multi.sampled_plans(EVIDENCE.parents[1])
+        self.assertEqual(report["selected_seeds"], [0, 1, 2, 4, 7, 15])
+        self.assertEqual(len(report["runs"]), 12)
+        self.assertEqual([r["seed"] for r in report["runs"]],
+                         [p["seed"] for p in plans for _ in range(2)])
+        for index, run in enumerate(report["runs"]):
+            with self.subTest(seed=run["seed"], mode=run["mode"]):
+                self.assertEqual(run["mode"], ("nonlinear_zip", "constant_power_control")[index % 2])
+                self.assertEqual(run["sampled_plan"], plans[index // 2])
+                self.assertTrue(run["success"])
+                self.assertTrue(run["restored"])
+                self.assertTrue(run["cleanup_ok"])
+                self.assertEqual(run["remaining_objects"], [])
+                self.assertNotIn("error", run)
+                self.assertEqual(run["nominal_frequency_hz"], 50)
+                self.assertEqual(len(run["trace"]), 503)
+                self.assertTrue(all(math.isfinite(v) for s in run["trace"] for v in s.values()))
+                self.assertGreater(run["p0_mw"], 0)
+                self.assertEqual(run["q0_mvar"] > 0, run["seed"] in (0, 1, 2))
+                analysis = multi.analyze(run["trace"], run["retained_type"], run["mode"],
+                                         run["loadflow"], run["p0_mw"], run["q0_mvar"])
+                self.assert_analysis_equal(analysis, run["analysis"])
+                self.assertTrue(analysis["control_passed"])
+                self.assertTrue(analysis["matches_zip"])
+                self.assertEqual(analysis["matches_constant_power"], run["mode"] == "constant_power_control")
+                self.assertFalse(analysis["matches_initial_constant_impedance"])
+
+    def test_multiseed_analysis_rejects_changed_capacitive_trace(self):
+        spec = importlib.util.spec_from_file_location(
+            "zip_rms_multiseed", EVIDENCE / "scripts/lab_zip_rms_multiseed_check.py")
+        multi = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(multi)
+        report = json.loads((EVIDENCE / "FT-37_zip_rms_multiseed_lab_pc.json").read_text(encoding="utf-8"))
+        run = next(r for r in report["runs"] if r["seed"] == 7 and r["mode"] == "nonlinear_zip")
+        for sample in run["trace"]:
+            if 1 <= sample["time_s"] < 3:
+                sample["q_mvar"] *= 1.1
+        analysis = multi.analyze(run["trace"], run["retained_type"], run["mode"],
+                                 run["loadflow"], run["p0_mw"], run["q0_mvar"])
+        self.assertFalse(analysis["control_passed"])
+        self.assertFalse(analysis["matches_zip"])
+
     def assert_analysis_equal(self, actual, expected):
         self.assertIs(type(actual), type(expected))
         if isinstance(expected, dict):

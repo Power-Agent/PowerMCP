@@ -2,6 +2,7 @@
 
 Latest follow-up records:
 
+- [FT-37](FT-37_zip_rms_multiseed_lab_pc.txt): six sampled ZIP cases covering both Q signs plus six constant-power controls, with [complete JSON](FT-37_zip_rms_multiseed_lab_pc.json) and [standalone script](scripts/lab_zip_rms_multiseed_check.py). Settled balanced 20 kV / 50 Hz response only; not public creator integration.
 - [FT-36](FT-36_integrated_rms_zip_creation_lab_pc.txt): successful `zip_rms` creation/readback, with [supplied compiled JSON capture](FT-36_integrated_rms_zip_creation_lab_pc.json); new load retained out of service, without simulation.
 - [FT-35](FT-35_zip_rms_diagnostic_lab_pc.txt): isolated 50 Hz RMS comparison, with [complete traces/JSON](FT-35_zip_rms_diagnostic_lab_pc.json) and [standalone script](scripts/lab_zip_rms_diagnostic.py). Creator settings behaved as constant impedance; the explicit nonlinear diagnostic matched ZIP.
 - [FT-34](FT-34_integrated_50hz_transformer_creation_lab_pc.txt): integrated 50 Hz creation/readback, with [compiled JSON extracts](FT-34_integrated_50hz_transformer_creation_lab_pc.json); new transformer retained out of service, no calculation.
@@ -65,6 +66,7 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-34 | `FT-34_integrated_50hz_transformer_creation_lab_pc.txt` | Compiled record with creation/readback JSON extracts from supplied client transcript |
 | FT-35 | `FT-35_zip_rms_diagnostic_lab_pc.txt` | Compiled record with complete account-sanitized RMS JSON and standalone script |
 | FT-36 | `FT-36_integrated_rms_zip_creation_lab_pc.txt` | Compiled contributor capture; saved-output payloads and manually transcribed responses distinguished in the record |
+| FT-37 | `FT-37_zip_rms_multiseed_lab_pc.txt` | Contributor-supplied complete account-sanitized JSON, standalone script and offline trace-reproduction checks |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -154,17 +156,29 @@ coefficient set at 20 kV / 50 Hz with positive P/Q and zero time constants;
 it does not validate the unchanged creator settings as RMS ZIP. The new
 `zip_rms` mode's subsequent creation/readback passed in FT-36, without simulation
 of the new load. Transient recovery,
-capacitive-Q RMS response, other sampled cases, frequency response and EMT
-remain unvalidated. FT-28/FT-29 retain their original load-flow-only scope.
+frequency response and EMT remain unvalidated. FT-37 separately extends settled
+response to six sampled cases, including capacitive Q. FT-28/FT-29 retain their
+original load-flow-only scope.
 
 FT-36 confirms retained sampled coefficients, RMS settings, operating point,
 new type/bus assignment and out-of-service state in a grid already at 50 Hz.
-The sampled Q is capacitive, but no capacitive-Q RMS response is validated.
+The sampled Q is capacitive, but FT-36 does not validate its RMS response.
 The supplied file preserves catalog/preview/creation/type-readback payloads
 from saved output; other context/load/grid responses were transcribed by the
 Lab assistant. Its classification is compiled evidence, not a continuous raw
 capture. A corrected local evidence checker passed after initial field-location
 errors; those checker errors were not a PowerFactory creation failure.
+
+FT-37 records twelve isolated runs: sampled ZIP seeds 0, 1, 2 (inductive Q)
+and 4, 7, 15 (capacitive Q), each paired with a constant-power control using the
+same nominal P/Q. All settled comparisons passed; all 6036 samples are archived.
+Each run restored context, checked its source type unchanged and cleaned up
+without survivors. The offline test reproduces all twelve analyses with tight
+roundoff tolerance and rejects a changed capacitive trace. This uses pure
+creator plans on temporary copied types, not the public creation workflow or
+the retained FT-36 load. Six seeds do not validate the full sampled domain;
+transient recovery, nonzero time constants and other operating modes remain
+outside scope. No creator restriction or default changes.
 
 FT-31 records subsequent successful unified-tool creation of a dedicated YNd11
 type and out-of-service transformer with the restricted zero-sequence equivalent.

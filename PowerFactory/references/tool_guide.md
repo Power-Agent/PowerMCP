@@ -688,6 +688,15 @@ settings and sampled P/Q were retained, the new load stayed out of service and
 the grid stayed at 50 Hz. No simulation was run; capacitive-Q RMS response is
 not validated by that successful creation.
 
+[FT-37](../evidence/FT-37_zip_rms_multiseed_lab_pc.txt) subsequently passed six
+sampled ZIP cases with both inductive and capacitive Q, each paired with a
+constant-power control. Complete traces reproduce all twelve analyses offline;
+restoration and cleanup passed throughout. This is settled balanced 20 kV /
+50 Hz validation of temporary models using pure creator plans, not a public
+creator integration test or simulation of the FT-36 load. The full sampled
+domain, transient dynamics and other operating modes remain unvalidated.
+No creator defaults, restrictions or command settings change.
+
 ---
 
 ## EvEMTBench Synchronous-Machine Database and Creator
