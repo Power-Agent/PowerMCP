@@ -4,6 +4,7 @@ import ast
 import importlib.util
 import inspect
 import json
+import math
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +18,37 @@ SPEC.loader.exec_module(probe)
 
 
 class RmsZipEvidenceTest(unittest.TestCase):
+    def assert_analysis_equal(self, actual, expected):
+        self.assertIs(type(actual), type(expected))
+        if isinstance(expected, dict):
+            self.assertEqual(actual.keys(), expected.keys())
+            for key in expected:
+                self.assert_analysis_equal(actual[key], expected[key])
+        elif isinstance(expected, list):
+            self.assertEqual(len(actual), len(expected))
+            for value, reference in zip(actual, expected):
+                self.assert_analysis_equal(value, reference)
+        elif isinstance(expected, float):
+            # Python versions can accumulate settled-window means differently.
+            self.assertTrue(math.isclose(actual, expected, rel_tol=1e-12, abs_tol=1e-12),
+                            f"{actual!r} != {expected!r} within roundoff tolerance")
+        else:
+            self.assertEqual(actual, expected)
+
+    def test_analysis_comparison_tolerates_only_float_roundoff(self):
+        expected = {"windows": [{"p_mw": 0.9006952645048028}],
+                    "passed": True, "count": 3, "mode": "zip", "error": None}
+        actual = dict(expected, windows=[{"p_mw": 0.9006952645048024}])
+        self.assert_analysis_equal(actual, expected)
+        for changed in (dict(expected, windows=[{"p_mw": 0.9006953}]),
+                        dict(expected, passed=False), dict(expected, passed=1),
+                        dict(expected, count=3.0), dict(expected, mode="constant"),
+                        dict(expected, error="failure"), dict(expected, extra=0),
+                        dict(expected, windows=[]),
+                        dict(expected, windows=[{"p_mw": float("nan")}])):
+            with self.assertRaises(AssertionError):
+                self.assert_analysis_equal(changed, expected)
+
     def test_integrated_capture_preserves_rms_settings_and_readback_scope(self):
         supplied = json.loads((EVIDENCE / "FT-36_integrated_rms_zip_creation_lab_pc.json")
                               .read_text(encoding="utf-8"))
@@ -59,8 +91,8 @@ class RmsZipEvidenceTest(unittest.TestCase):
             self.assertTrue(run["cleanup_ok"])
             self.assertEqual(run["remaining_objects"], [])
             self.assertEqual(len(run["trace"]), 503)
-            self.assertEqual(probe.analyze(run["trace"], run["retained_type"],
-                                          run["mode"], run["loadflow"]), run["analysis"])
+            self.assert_analysis_equal(probe.analyze(run["trace"], run["retained_type"],
+                                                   run["mode"], run["loadflow"]), run["analysis"])
         creator, nonlinear, constant = report["runs"]
         self.assertFalse(creator["analysis"]["matches_zip"])
         self.assertTrue(creator["analysis"]["matches_initial_constant_impedance"])
