@@ -1,3 +1,4 @@
+import math
 import unittest
 from fnmatch import fnmatchcase
 from unittest.mock import patch
@@ -869,6 +870,70 @@ class EvEMTBenchZeroSequenceTest(unittest.TestCase):
         self.assertTrue(result["rolled_back"])
         self.assertEqual(folder["IntPrjfolder"], [])
         self.assertEqual(grid["ElmTr2"], [])
+
+    def test_ratio_endpoints_preview_confirm_and_bind_at_both_frequencies(self):
+        for frequency in (50., 60.):
+            for r_ratio in (1.5, 2.8):
+                for x_ratio in (.85, 1.):
+                    with self.subTest(frequency=frequency, r=r_ratio, x=x_ratio):
+                        folder, grid, hv, lv, app = self.network()
+                        options = self.options(nominal_frequency_hz=frequency,
+                                               r0_r1_ratio=r_ratio, x0_x1_ratio=x_ratio,
+                                               out_of_service=True)
+                        preview = self.call(app, **options)
+                        self.assertTrue(preview["success"], preview)
+                        self.assertFalse(preview["applied"])
+                        zero = preview["item"]["zero_sequence"]
+                        self.assertEqual(zero["r0_r1_ratio"], r_ratio)
+                        self.assertEqual(zero["x0_x1_ratio"], x_ratio)
+                        self.assertEqual(self.transformer_types(folder), [])
+                        self.assertEqual(grid["ElmTr2"], [])
+                        # Changing either valid endpoint needs a fresh token.
+                        for field, alternative in (
+                                ("r0_r1_ratio", 2.8 if r_ratio == 1.5 else 1.5),
+                                ("x0_x1_ratio", 1. if x_ratio == .85 else .85)):
+                            changed = dict(options, **{field: alternative})
+                            rejected = self.call(app, confirmation=preview["confirmation_required"],
+                                                 **changed)
+                            self.assertFalse(rejected["success"], rejected)
+                            self.assertIn("confirmation must exactly match", rejected["message"])
+                            self.assertEqual(self.transformer_types(folder), [])
+                            self.assertEqual(grid["ElmTr2"], [])
+                        result = self.call(app, confirmation=preview["confirmation_required"],
+                                           **options)
+                        self.assertTrue(result["success"], result)
+                        typ, element = self.transformer_types(folder)[0], grid["ElmTr2"][0]
+                        self.assertEqual(typ.GetAttribute("frnom"), frequency)
+                        self.assertEqual(element.GetAttribute("outserv"), 1)
+                        self.assertIs(element.GetAttribute("typ_id"), typ)
+                        self.assertAlmostEqual(typ.GetAttribute("r0pu") / typ.GetAttribute("r1pu"),
+                                               r_ratio)
+                        self.assertAlmostEqual(typ.GetAttribute("x0pu") / typ.GetAttribute("x1pu"),
+                                               x_ratio)
+                        for field, value in zero["derived_type_attributes"].items():
+                            self.assertAlmostEqual(typ.GetAttribute(field), value)
+
+    def test_adjacent_floats_outside_ratio_bounds_rejected_before_connection(self):
+        agent = agent_module.DIgSILENTAgent
+        outside = (
+            ("r0_r1_ratio", math.nextafter(1.5, -math.inf)),
+            ("r0_r1_ratio", math.nextafter(2.8, math.inf)),
+            ("x0_x1_ratio", math.nextafter(.85, -math.inf)),
+            ("x0_x1_ratio", math.nextafter(1., math.inf)),
+        )
+        with patch.object(agent, "_get_application") as connect:
+            for frequency in (50., 60.):
+                for field, value in outside:
+                    with self.subTest(frequency=frequency, field=field, value=value):
+                        options = dict(voltage_class="110/20", rated_power_mva=20.,
+                                       nominal_frequency_hz=frequency, vector_group="YNd",
+                                       clock_number=11, transformer_name="Transformer",
+                                       type_name="Type", high_voltage_bus_name="HV",
+                                       low_voltage_bus_name="LV", **self.options())
+                        options[field] = value
+                        result = agent.create_evemtbench_component("transformer", options)
+                        self.assertFalse(result["success"], result)
+            connect.assert_not_called()
 
 
 if __name__ == "__main__":
