@@ -284,6 +284,52 @@ def test_mismatched_dynamic_channel_is_rejected_without_sampling(dyntools, outfi
     assert "expected 3 to match the time vector" in result["message"]
 
 
+
+def test_export_dynamic_validation_snapshot_uses_full_resolution_channels(
+    dyntools, outfile
+):
+    result = psse_mcp.export_dynamic_validation_snapshot(
+        str(outfile),
+        channel_map={"bus:101:voltage": {"source": 1, "unit": "pu"}},
+        case_id="savnw",
+        study_type="fault_response",
+        disturbance_id="bus101_3ph_fault",
+        event_time_s=0.0,
+        engine_version="PSS/E 36.2",
+        simulation_settings={"step_size": 0.01},
+    )
+    assert result["status"] == "success", result
+    snapshot = result["snapshot"]
+    assert snapshot["engine"] == "psse"
+    assert snapshot["engine_version"] == "PSS/E 36.2"
+    assert snapshot["simulation_settings"]["step_size"] == 0.01
+    assert snapshot["channels"]["bus:101:voltage"]["unit"] == "pu"
+    assert snapshot["channels"]["bus:101:voltage"]["time_s"] == DATA["time"]
+    assert snapshot["channels"]["bus:101:voltage"]["values"] == DATA[1]
+
+
+def test_export_dynamic_validation_snapshot_rejects_bad_channel_map(
+    dyntools, outfile
+):
+    result = psse_mcp.export_dynamic_validation_snapshot(
+        str(outfile), channel_map={"voltage": {"source": "one", "unit": "pu"}},
+        case_id="savnw", study_type="fault_response",
+        disturbance_id="fault", event_time_s=0.0,
+    )
+    assert result["status"] == "error"
+    assert "integer source channel" in result["message"]
+    assert dyntools.engine_starts == 0
+
+    result = psse_mcp.export_dynamic_validation_snapshot(
+        str(outfile), channel_map={"voltage": {"source": 1}},
+        case_id="savnw", study_type="fault_response",
+        disturbance_id="fault", event_time_s=0.0,
+    )
+    assert result["status"] == "error"
+    assert "explicit unit" in result["message"]
+    assert dyntools.engine_starts == 0
+
+
 def test_missing_dynamic_time_vector_is_rejected(dyntools, outfile):
     data = {1: [1.0, 2.0, 3.0]}
 

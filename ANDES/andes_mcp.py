@@ -9,7 +9,7 @@ from math import pi
 from pathlib import Path
 from contextlib import redirect_stdout, redirect_stderr
 from mcp.server.mcpserver import MCPServer as FastMCP
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
@@ -338,6 +338,102 @@ def run_time_domain_simulation(step_size: float = 0.01, t_end: float = 10.0) -> 
             "status": "error",
             "message": str(e)
         }
+
+@mcp.tool()
+def export_dynamic_validation_snapshot(
+    channel_map: Dict[str, Dict[str, Any]],
+    case_id: str,
+    study_type: str,
+    disturbance_id: str,
+    event_time_s: float,
+    engine_version: Optional[str] = None,
+    simulation_settings: Optional[Dict[str, Any]] = None,
+    max_points: int = 100000,
+    max_cells: int = 1000000,
+) -> Dict[str, Any]:
+    """Export selected full-resolution ANDES TDS trajectories as a portable snapshot.
+
+    channel_map maps canonical physical IDs to explicit selectors:
+    {"bus:5:voltage": {"source": "x", "index": 0, "unit": "pu"}}.
+    Differential states use source="x"; algebraic variables use source="y".
+    """
+    if "current_system" not in system_state:
+        return {"status": "error", "message": "No ANDES system is loaded"}
+    try:
+        from powermcp.dynamic_validation_adapters import snapshot_from_andes_system
+        from powermcp.dynamic_validation_serialization import dynamic_snapshot_to_dict
+
+        snapshot = snapshot_from_andes_system(
+            system_state["current_system"],
+            channel_map=channel_map,
+            case_id=case_id,
+            study_type=study_type,
+            disturbance_id=disturbance_id,
+            event_time_s=event_time_s,
+            engine_version=engine_version,
+            simulation_settings=simulation_settings,
+            max_points=max_points,
+            max_cells=max_cells,
+        )
+        return {"status": "success", "snapshot": dynamic_snapshot_to_dict(snapshot)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+@mcp.tool()
+def compare_dynamic_trajectories(
+    left_snapshot: Dict[str, Any],
+    right_snapshot: Dict[str, Any],
+    absolute_tolerance: float = 1e-6,
+    relative_tolerance: float = 1e-5,
+    minimum_overlap_s: float = 0.0,
+    max_points_per_channel: int = 100000,
+    channel_tolerances: Optional[Dict[str, List[float]]] = None,
+) -> Dict[str, Any]:
+    """Compare portable PSS/E/ANDES snapshots and return JSON plus Markdown evidence.
+
+    Callers obtain snapshots from the engine-specific export tools. This tool
+    compares already-completed runs; it does not launch or orchestrate engines.
+    """
+    try:
+        from powermcp.dynamic_validation import compare_dynamic_snapshots
+        from powermcp.dynamic_validation_reporting import (
+            build_dynamic_validation_artifact,
+            dynamic_validation_json,
+            dynamic_validation_markdown,
+        )
+        from powermcp.dynamic_validation_serialization import dynamic_snapshot_from_dict
+
+        left = dynamic_snapshot_from_dict(left_snapshot)
+        right = dynamic_snapshot_from_dict(right_snapshot)
+        settings = {
+            "absolute_tolerance": absolute_tolerance,
+            "relative_tolerance": relative_tolerance,
+            "minimum_overlap_s": minimum_overlap_s,
+            "max_points_per_channel": max_points_per_channel,
+            "channel_tolerances": channel_tolerances,
+        }
+        report = compare_dynamic_snapshots(
+            left, right,
+            absolute_tolerance=absolute_tolerance,
+            relative_tolerance=relative_tolerance,
+            minimum_overlap_s=minimum_overlap_s,
+            max_points_per_channel=max_points_per_channel,
+            channel_tolerances=channel_tolerances,
+        )
+        artifact = build_dynamic_validation_artifact(
+            left, right, report, comparison_settings=settings
+        )
+        return {
+            "status": "success",
+            "passed": report.passed,
+            "artifact": artifact,
+            "json_report": dynamic_validation_json(artifact),
+            "markdown_report": dynamic_validation_markdown(artifact),
+        }
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
 
 @mcp.tool()
 def run_eigenvalue_analysis(file_path: str) -> Dict[str, Any]:
