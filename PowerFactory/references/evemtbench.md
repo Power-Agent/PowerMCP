@@ -208,7 +208,33 @@ Integrated unified-tool creation and retained-value verification passed on
 the Lab PC with the new load out of service; see
 [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
 The voltage sweep used a separate diagnostic network, not the integrated load.
-RMS/EMT ZIP behavior remains unvalidated.
+`zip` does not configure RMS behavior. In the isolated
+[FT-35](../evidence/FT-35_zip_rms_diagnostic_lab_pc.txt) test, its copied type
+behaved as constant impedance during the RMS dip, not the ZIP polynomial.
+
+#### Explicit opt-in RMS ZIP configuration
+
+`load_model="zip_rms"` requires a new `type_name`, a 20 kV bus and a destination
+grid already at 50 Hz. It reuses the existing seeded power and ZIP coefficient
+streams and explicitly adds `loddy=100`, `i_nln=1`, and zero
+`t1`, `tpf`, `tqf`, `tpu`, `tqu`, `kpf`, `kqf` on the new type.
+These settings are diagnostic choices, not Table 5 dynamic parameters.
+The default remains `constant_power`; `zip` retains its load-flow-only behavior.
+No existing type, grid frequency, load-flow or RMS command is changed.
+
+FT-35 records three isolated runs with complete JSON and a standalone script.
+The explicit nonlinear copy matched settled ZIP P/Q before, during and after
+the voltage dip; the constant-power control also passed. Each case restored
+context and cleaned up. This is evidence for one coefficient set with positive
+P/Q, not validation of all sampled mixtures or capacitive-Q RMS response.
+Transient recovery, nonzero time constants, frequency response, other voltages
+or frequencies, unbalanced RMS and EMT remain unvalidated. Integrated
+`zip_rms` creation/readback passed in
+[FT-36](../evidence/FT-36_integrated_rms_zip_creation_lab_pc.txt), retaining the
+new load out of service with its sampled capacitive Q and all explicit type
+settings. The grid stayed at 50 Hz and no simulation was run on that load.
+This does not validate its capacitive-Q RMS response. No claim is made that
+this changes the paper's model or validates the original integrated load.
 
 ### Table 13 synchronous-machine mapping
 

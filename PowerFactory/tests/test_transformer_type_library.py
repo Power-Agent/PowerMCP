@@ -45,6 +45,8 @@ DEFAULTS = {
         "outserv": 0,
     },
     "TypLod": {
+        "loddy": 0, "i_nln": 0, "t1": 0.0, "tpf": 0.0, "tqf": 0.0,
+        "tpu": 0.0, "tqu": 0.0, "kpf": 0.0, "kqf": 0.0,
         "aP": 0.0, "bP": 0.0, "aQ": 0.0, "bQ": 0.0,
         "kpu0": 0.0, "kpu1": 1.0, "kpu": 2.0,
         "kqu0": 0.0, "kqu1": 1.0, "kqu": 2.0,

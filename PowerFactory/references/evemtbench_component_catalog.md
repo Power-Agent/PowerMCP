@@ -396,7 +396,7 @@ creator and must not be represented as a complete motor database.
 |---|---|---|---|
 | Events/faults | yes | partial, existing tools | not planned as a library type |
 | External grids | yes | validated on PowerFactory 2026 SP1 | implemented |
-| Loads | yes | power mapped (`plini`, `qlini`); opt-in ZIP `TypLod` for load flow | constant power default; RMS/EMT ZIP unvalidated |
+| Loads | yes | power mapped; opt-in `zip` for load flow; restricted `zip_rms` type settings for 20 kV / 50 Hz | constant power default; isolated diagnostic FT-35 and creation/readback FT-36 passed; integrated-load RMS response/dynamics/EMT unvalidated |
 | Underground cables | yes | sequence equivalent validated on SP1 | implemented |
 | Overhead lines/conductors | yes | sequence equivalent validated on SP1 | implemented |
 | Transformers | yes, Tables 10-12 | Table 11; restricted opt-in Table 10 YNd11 equivalent | full core/limb and Table 12 unsupported |

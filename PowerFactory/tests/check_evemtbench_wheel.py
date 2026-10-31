@@ -80,6 +80,11 @@ for label in component_types:
         inputs = result["creation_parameters"]
         if inputs["load_model"].get("default") != "constant_power" or inputs["type_name"].get("default") != "":
             raise SystemExit("installed-wheel load listing omitted optional ZIP creation inputs")
+        mapping = result.get("powerfactory", {})
+        if "zip_rms" not in mapping.get("supported_load_models", []):
+            raise SystemExit("installed-wheel load listing omitted restricted RMS ZIP mode")
+        if mapping.get("rms_zip_model", {}).get("type_attributes", {}).get("loddy") != 100:
+            raise SystemExit("installed-wheel RMS ZIP mapping omitted explicit RMS settings")
     if label == "transformer":
         inputs = result["creation_parameters"]
         if inputs["zero_sequence_model"].get("default") != "unchanged":

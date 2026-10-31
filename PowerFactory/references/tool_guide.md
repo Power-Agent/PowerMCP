@@ -633,6 +633,50 @@ creation and retained-value verification of an out-of-service ZIP load passed
 on the Lab PC; see [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
 No calculation was run on that integrated load. RMS/EMT validation remains pending.
 
+### Explicit opt-in RMS ZIP model
+
+Use `"load_model": "zip_rms"` with a new `"type_name"` to create the separate
+restricted RMS configuration. This mode requires a 20 kV bus in a grid already
+at 50 Hz; it never changes grid frequency. It keeps the same seeded power and
+coefficient samples as `zip`, adding these explicit settings on the new type:
+
+```json
+{
+  "loddy": 100,
+  "i_nln": 1,
+  "t1": 0.0,
+  "tpf": 0.0,
+  "tqf": 0.0,
+  "tpu": 0.0,
+  "tqu": 0.0,
+  "kpf": 0.0,
+  "kqf": 0.0
+}
+```
+
+These are tested diagnostic settings, not paper-derived dynamic parameters.
+Preview includes `rms_configuration`, resolved grid frequency, limitations,
+type destination and all coefficient/exponent/RMS values in the confirmation
+plan. Confirm only the exact fresh preview; changing model, settings or
+destination requires a new confirmation. Retained settings are verified and
+new objects are rolled back on failure, with survivors reported.
+
+[FT-35](../evidence/FT-35_zip_rms_diagnostic_lab_pc.txt) found the unchanged
+`zip` type's RMS response matched constant impedance, while an explicit
+nonlinear copy matched settled ZIP response in the isolated 50 Hz test.
+`success=true` in that diagnostic is not a claim that creator defaults provide
+RMS ZIP: `creator_rms_zip_validated=false` records the actual finding.
+
+The result covers one coefficient set with positive P/Q and zero time constants,
+not every sampled mixture, capacitive-Q RMS behavior or transient recovery.
+No load-flow/RMS commands are modified by the creator. EMT, frequency response,
+nonzero time constants, other frequencies/voltages and unbalanced RMS are
+unvalidated. Integrated `zip_rms` creation/readback passed in
+[FT-36](../evidence/FT-36_integrated_rms_zip_creation_lab_pc.txt): explicit RMS
+settings and sampled P/Q were retained, the new load stayed out of service and
+the grid stayed at 50 Hz. No simulation was run; capacitive-Q RMS response is
+not validated by that successful creation.
+
 ---
 
 ## EvEMTBench Synchronous-Machine Database and Creator

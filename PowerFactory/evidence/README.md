@@ -2,6 +2,8 @@
 
 Latest follow-up records:
 
+- [FT-36](FT-36_integrated_rms_zip_creation_lab_pc.txt): successful `zip_rms` creation/readback, with [supplied compiled JSON capture](FT-36_integrated_rms_zip_creation_lab_pc.json); new load retained out of service, without simulation.
+- [FT-35](FT-35_zip_rms_diagnostic_lab_pc.txt): isolated 50 Hz RMS comparison, with [complete traces/JSON](FT-35_zip_rms_diagnostic_lab_pc.json) and [standalone script](scripts/lab_zip_rms_diagnostic.py). Creator settings behaved as constant impedance; the explicit nonlinear diagnostic matched ZIP.
 - [FT-32](FT-32_transformer_earth_fault_reference_lab_pc.txt): independent lossless YNd11 current reference, with [complete JSON](FT-32_transformer_earth_fault_reference_lab_pc.json) and [standalone script](scripts/lab_transformer_earth_fault_reference_check.py).
 - [FT-31](FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt): successful unified-tool YNd11 zero-sequence creation and readback, with the transformer out of service.
 - [FT-30](FT-30_transformer_zero_sequence_ynd_lab_pc.txt): YNd11 type writes and isolated earth-fault sensitivity/zero-sequence blocking checks on the Lab PC.
@@ -57,6 +59,8 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-30 | `FT-30_transformer_zero_sequence_ynd_lab_pc.txt` | Compiled evidence record; rounded summary of user-supplied Lab PC results |
 | FT-31 | `FT-31_integrated_transformer_zero_sequence_creation_lab_pc.txt` | Compiled evidence record containing user-supplied creation and readback extracts |
 | FT-32 | `FT-32_transformer_earth_fault_reference_lab_pc.txt` | Compiled evidence record with complete account-sanitized JSON and reproducible script |
+| FT-35 | `FT-35_zip_rms_diagnostic_lab_pc.txt` | Compiled record with complete account-sanitized RMS JSON and standalone script |
+| FT-36 | `FT-36_integrated_rms_zip_creation_lab_pc.txt` | Compiled contributor capture; saved-output payloads and manually transcribed responses distinguished in the record |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -138,7 +142,25 @@ See [FT-28](FT-28_load_zip_mapping_lab_pc.txt).
 FT-29 records subsequent successful unified-tool creation and retained-value
 checks for a dedicated ZIP type and out-of-service load. No calculation was
 run on that load; the voltage-response test remains the separate FT-28 test.
-RMS and EMT ZIP validation are still pending.
+FT-29 itself does not establish RMS or EMT ZIP behavior.
+
+FT-35 subsequently distinguishes current creator settings from an explicitly
+configured nonlinear RMS ZIP diagnostic. It validates settled response for one
+coefficient set at 20 kV / 50 Hz with positive P/Q and zero time constants;
+it does not validate the unchanged creator settings as RMS ZIP. The new
+`zip_rms` mode's subsequent creation/readback passed in FT-36, without simulation
+of the new load. Transient recovery,
+capacitive-Q RMS response, other sampled cases, frequency response and EMT
+remain unvalidated. FT-28/FT-29 retain their original load-flow-only scope.
+
+FT-36 confirms retained sampled coefficients, RMS settings, operating point,
+new type/bus assignment and out-of-service state in a grid already at 50 Hz.
+The sampled Q is capacitive, but no capacitive-Q RMS response is validated.
+The supplied file preserves catalog/preview/creation/type-readback payloads
+from saved output; other context/load/grid responses were transcribed by the
+Lab assistant. Its classification is compiled evidence, not a continuous raw
+capture. A corrected local evidence checker passed after initial field-location
+errors; those checker errors were not a PowerFactory creation failure.
 
 FT-31 records subsequent successful unified-tool creation of a dedicated YNd11
 type and out-of-service transformer with the restricted zero-sequence equivalent.
