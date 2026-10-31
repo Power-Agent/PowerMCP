@@ -202,7 +202,15 @@ class TestAllTools(unittest.IsolatedAsyncioTestCase):
             mock_project = MagicMock()
             mock_project.temp_folder = output_dir
             output_file = Path(output_dir) / "short.psout"
-            mock_project.start.side_effect = lambda: output_file.write_text("fresh output")
+
+            def write_output_with_old_filesystem_timestamp():
+                output_file.write_text("fresh output")
+                # Simulate a filesystem clock/mtime discrepancy: the file is
+                # new relative to the pre-run snapshot, but its timestamp is
+                # older than the process wall clock.
+                os.utime(output_file, ns=(1_000_000_000, 1_000_000_000))
+
+            mock_project.start.side_effect = write_output_with_old_filesystem_timestamp
             mock_project.run_status.side_effect = [
                 (None, None),  # preflight idle
                 ("Build", None),

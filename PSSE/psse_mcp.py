@@ -1033,5 +1033,57 @@ def read_dynamic_output(
         }
 
 
+@mcp.tool()
+def export_dynamic_validation_snapshot(
+    outfile: str,
+    channel_map: Dict[str, Dict[str, Any]],
+    case_id: str,
+    study_type: str,
+    disturbance_id: str,
+    event_time_s: float,
+    outvrsn: int = 0,
+    max_points: int = 100000,
+    max_cells: int = 1000000,
+    engine_version: Optional[str] = None,
+    simulation_settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Export selected full-resolution PSS/E channels as a portable snapshot.
+
+    channel_map maps canonical physical IDs to explicit source channel numbers
+    and units, e.g. {"bus:5:voltage": {"source": 1, "unit": "pu"}}.
+    """
+    try:
+        if not isinstance(channel_map, dict) or not channel_map:
+            raise ValueError("channel_map must be a non-empty mapping")
+        source_channels = []
+        for canonical_id, spec in channel_map.items():
+            if not isinstance(canonical_id, str) or not canonical_id.strip():
+                raise ValueError("canonical channel IDs must be non-empty strings")
+            if not isinstance(spec, dict):
+                raise ValueError(f"channel_map[{canonical_id!r}] must be a mapping")
+            source = spec.get("source")
+            if isinstance(source, bool) or not isinstance(source, int) or source < 1:
+                raise ValueError(f"channel_map[{canonical_id!r}] requires a positive integer source channel")
+            if not isinstance(spec.get("unit"), str) or not spec["unit"].strip():
+                raise ValueError(f"channel_map[{canonical_id!r}] requires an explicit unit")
+            source_channels.append(source)
+        result = read_dynamic_output(
+            outfile, channels=source_channels, outvrsn=outvrsn,
+            max_points=max_points, max_cells=max_cells,
+        )
+        from powermcp.dynamic_validation_adapters import snapshot_from_psse_output
+        from powermcp.dynamic_validation_serialization import dynamic_snapshot_to_dict
+
+        snapshot = snapshot_from_psse_output(
+            result, channel_map=channel_map, case_id=case_id,
+            study_type=study_type, disturbance_id=disturbance_id,
+            event_time_s=event_time_s, engine_version=engine_version,
+            simulation_settings=simulation_settings,
+        )
+        return {"status": "success", "snapshot": dynamic_snapshot_to_dict(snapshot)}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

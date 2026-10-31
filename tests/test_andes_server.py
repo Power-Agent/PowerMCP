@@ -67,6 +67,7 @@ def test_run_time_domain_simulation_completes(andes_mcp):
     assert "t_array" in sim
 
 
+
 def test_run_eigenvalue_analysis_returns_modes(andes_mcp):
     r = andes_mcp.run_eigenvalue_analysis(str(KUNDUR_FULL))
     assert r["status"] == "success", r

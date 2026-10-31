@@ -77,17 +77,19 @@ async def _snapshot_project_outputs(project: Any) -> Optional[Dict[str, tuple]]:
 async def _project_output_changed(
     project: Any,
     baseline: Optional[Dict[str, tuple]],
-    run_started_ns: int,
 ) -> bool:
-    """Return whether this run produced a non-empty, freshly modified output."""
+    """Return whether this run created or changed a non-empty output file."""
     if baseline is None:
         return False
     current = await _snapshot_project_outputs(project)
     if current is None:
         return False
+    # Compare against the pre-run snapshot rather than wall-clock mtimes.
+    # Filesystem timestamp resolution and clock skew can make a freshly
+    # written output appear older than time.time_ns(), even though its
+    # metadata differs from the baseline captured immediately before start.
     return any(
         metadata[1] > 0
-        and metadata[0] >= run_started_ns
         and (path not in baseline or baseline[path] != metadata)
         for path, metadata in current.items()
     )
@@ -143,7 +145,6 @@ async def run_project_to_completion(
 
     project = await robust_executor.run_safe(pscad.project, project_name)
     baseline_outputs = await _snapshot_project_outputs(project)
-    run_started_ns = time.time_ns()
     await robust_executor.run_safe(project.start)
     started_at = time.monotonic()
     startup_grace_seconds = min(5.0, timeout_seconds / 2.0)
@@ -256,7 +257,7 @@ async def run_project_to_completion(
                 elif (
                     saw_building
                     and baseline_available
-                    and await _project_output_changed(project, baseline_outputs, run_started_ns)
+                    and await _project_output_changed(project, baseline_outputs)
                 ):
                     # A short Run phase may occur entirely between polls. A new
                     # or modified output file is independent evidence that the
