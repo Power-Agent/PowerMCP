@@ -697,6 +697,16 @@ creator integration test or simulation of the FT-36 load. The full sampled
 domain, transient dynamics and other operating modes remain unvalidated.
 No creator defaults, restrictions or command settings change.
 
+[FT-38](../evidence/FT-38_zip_rms_e2e_lab_pc.txt) adds real unified MCP creation
+through settled RMS simulation of the exact created loads/types for one
+inductive and one capacitive seed (0 and 4). Both runs passed with 503 samples
+each; original context restoration and cleanup passed without survivors. Full
+result, four-response capture and final state are archived. The standalone
+script's activation guard skips an already-active exact case but still verifies
+isolation and rejects required activation failures. The server's separate
+`run_rms_simulation` tool is not exercised. Two seeds do not validate the whole
+sampled domain or transient dynamics; creator defaults/restrictions do not change.
+
 ---
 
 ## EvEMTBench Synchronous-Machine Database and Creator

@@ -2,6 +2,7 @@
 
 Latest follow-up records:
 
+- [FT-38](FT-38_zip_rms_e2e_lab_pc.txt): real unified MCP preview/confirmation through RMS simulation of the actual two created loads, with [complete result](FT-38_zip_rms_e2e_lab_pc.json), [capture](FT-38_zip_rms_e2e_capture_lab_pc.json), [final state](FT-38_zip_rms_e2e_state_lab_pc.json) and [staged script](scripts/lab_zip_rms_e2e_check.py). Inductive/capacitive settled response passed; restoration and cleanup confirmed.
 - [FT-37](FT-37_zip_rms_multiseed_lab_pc.txt): six sampled ZIP cases covering both Q signs plus six constant-power controls, with [complete JSON](FT-37_zip_rms_multiseed_lab_pc.json) and [standalone script](scripts/lab_zip_rms_multiseed_check.py). Settled balanced 20 kV / 50 Hz response only; not public creator integration.
 - [FT-36](FT-36_integrated_rms_zip_creation_lab_pc.txt): successful `zip_rms` creation/readback, with [supplied compiled JSON capture](FT-36_integrated_rms_zip_creation_lab_pc.json); new load retained out of service, without simulation.
 - [FT-35](FT-35_zip_rms_diagnostic_lab_pc.txt): isolated 50 Hz RMS comparison, with [complete traces/JSON](FT-35_zip_rms_diagnostic_lab_pc.json) and [standalone script](scripts/lab_zip_rms_diagnostic.py). Creator settings behaved as constant impedance; the explicit nonlinear diagnostic matched ZIP.
@@ -67,6 +68,7 @@ PowerFactory account identifiers are replaced with `<user>` in committed records
 | FT-35 | `FT-35_zip_rms_diagnostic_lab_pc.txt` | Compiled record with complete account-sanitized RMS JSON and standalone script |
 | FT-36 | `FT-36_integrated_rms_zip_creation_lab_pc.txt` | Compiled contributor capture; saved-output payloads and manually transcribed responses distinguished in the record |
 | FT-37 | `FT-37_zip_rms_multiseed_lab_pc.txt` | Contributor-supplied complete account-sanitized JSON, standalone script and offline trace-reproduction checks |
+| FT-38 | `FT-38_zip_rms_e2e_lab_pc.txt` | Complete account-sanitized successful E2E result/capture/state; corrected staged script and prompt; preceding failures disclosed separately |
 
 UT-01 was refreshed on 19 September 2026 against PR #77 commit `2aeb38b`. The FT records retain their original dates and document separate live PowerFactory verification.
 
@@ -179,6 +181,19 @@ creator plans on temporary copied types, not the public creation workflow or
 the retained FT-36 load. Six seeds do not validate the full sampled domain;
 transient recovery, nonzero time constants and other operating modes remain
 outside scope. No creator restriction or default changes.
+
+FT-38 separately joins real unified-tool preview/confirmation and actual-object
+RMS response for seeds 0 (inductive) and 4 (capacitive). Both 503-sample runs
+passed; the created types stayed unchanged. The already-active case guard
+skipped redundant activation for both runs, while exact grid/scenario isolation
+remained checked. Restoration and cleanup passed without survivors. The original
+capture byte hash was verified before account sanitization; the archived hash
+field is historical, not a hash of the sanitized file. Full result/capture/state
+are included, along with the staged script, FT-37 helper and creation prompt.
+Earlier activation, misplaced-token and capture-checker failures are disclosed
+in the record and are not passing evidence. Only two seeds and settled balanced
+50 Hz / 20 kV response are covered; no full-domain/transient/EMT claims or
+creator default/restriction changes follow.
 
 FT-31 records subsequent successful unified-tool creation of a dedicated YNd11
 type and out-of-service transformer with the restricted zero-sequence equivalent.

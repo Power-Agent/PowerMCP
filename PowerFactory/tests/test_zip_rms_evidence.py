@@ -5,10 +5,11 @@ import importlib.util
 import inspect
 import json
 import math
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 EVIDENCE = Path(__file__).resolve().parents[1] / "evidence"
 SPEC = importlib.util.spec_from_file_location(
@@ -18,6 +19,128 @@ SPEC.loader.exec_module(probe)
 
 
 class RmsZipEvidenceTest(unittest.TestCase):
+    def load_e2e(self):
+        modules = []
+        for label, filename in (("ft38_helper", "lab_zip_rms_multiseed_check.py"),
+                                ("ft38_e2e", "lab_zip_rms_e2e_check.py")):
+            spec = importlib.util.spec_from_file_location(label, EVIDENCE / "scripts" / filename)
+            module = importlib.util.module_from_spec(spec)
+            with patch.dict(sys.modules, {"lab_zip_rms_multiseed_check": modules[0]} if modules else {}):
+                spec.loader.exec_module(module)
+            modules.append(module)
+        return modules[1]
+
+    def test_e2e_capture_state_and_actual_created_traces(self):
+        e2e = self.load_e2e()
+        report = json.loads((EVIDENCE / "FT-38_zip_rms_e2e_lab_pc.json").read_text(encoding="utf-8"))
+        capture = json.loads((EVIDENCE / "FT-38_zip_rms_e2e_capture_lab_pc.json").read_text(encoding="utf-8"))
+        state = json.loads((EVIDENCE / "FT-38_zip_rms_e2e_state_lab_pc.json").read_text(encoding="utf-8"))
+        self.assertEqual(capture, report["capture"])
+        self.assertEqual(json.loads(report["capture_text"]), capture)
+        # Historical original-byte hash, not a hash of the sanitized archive.
+        self.assertEqual(report["capture_sha256"],
+                         "9a0846cf7b3b0444f70cc9d0f6b4f1eac6058eb49b6ddeccf86fb6bae5c44414")
+        self.assertTrue(state["closed"])
+        self.assertTrue(state["ready"])
+        self.assertTrue(state["result_file"].endswith("ZIP_RMS_E2E_20261031T163348Z_1997c5f1.json"))
+        self.assertEqual({k: v for k, v in state.items() if k not in ("closed", "result_file")},
+                         {k: v for k, v in report["state"].items() if k not in ("closed", "result_file")})
+        for flag in ("success", "restored", "cleanup_ok"):
+            self.assertTrue(report[flag])
+        self.assertEqual(report["remaining_objects"], [])
+        self.assertEqual(report["cleanup_errors"], [])
+        self.assertNotIn("error", report)
+        e2e.check_capture(report["state"], capture)
+        self.assertEqual([r["seed"] for r in report["runs"]], [0, 4])
+        for run in report["runs"]:
+            with self.subTest(seed=run["seed"]):
+                creation = capture[str(run["seed"])]["creation"]
+                self.assertEqual(run["created_load"], creation["created_load"])
+                self.assertEqual(run["created_type"], creation["created_type"])
+                self.assertTrue(run["success"])
+                self.assertTrue(run["created_type_unchanged"])
+                self.assertTrue(run["returned_out_of_service"])
+                self.assertNotIn("error", run)
+                self.assertEqual(len(run["trace"]), 503)
+                self.assertTrue(all(math.isfinite(v) for s in run["trace"] for v in s.values()))
+                self.assertEqual(run["q0_mvar"] > 0, run["seed"] == 0)
+                for key, value in creation["item"]["powerfactory_attributes"].items():
+                    self.assertEqual(run[{"plini": "p0_mw", "qlini": "q0_mvar"}[key]], value)
+                for key, expected in {**creation["item"]["type_attributes"],
+                                      **creation["item"]["derived_type_attributes"]}.items():
+                    e2e.h.check(run["retained_type"][key], expected, key)
+                activation = run["case_activation"]
+                self.assertFalse(activation["activation_needed"])
+                self.assertEqual(activation["before"], state["case"])
+                self.assertEqual(activation["after"], state["case"])
+                self.assertEqual(activation["target"], state["case"])
+                analysis = e2e.h.analyze(run["trace"], run["retained_type"], "nonlinear_zip",
+                                         run["loadflow"], run["p0_mw"], run["q0_mvar"])
+                self.assert_analysis_equal(analysis, run["analysis"])
+                self.assertTrue(analysis["control_passed"])
+                self.assertFalse(analysis["matches_constant_power"])
+                self.assertFalse(analysis["matches_initial_constant_impedance"])
+
+    def test_e2e_rejects_changed_capture_and_capacitive_response(self):
+        e2e = self.load_e2e()
+        report = json.loads((EVIDENCE / "FT-38_zip_rms_e2e_lab_pc.json").read_text(encoding="utf-8"))
+        capture = report["capture"]
+        capture["0"]["creation"]["confirmation_required"] = "incorrect token"
+        with self.assertRaisesRegex(RuntimeError, "Confirmation changed"):
+            e2e.check_capture(report["state"], capture)
+        run = report["runs"][1]
+        for sample in run["trace"]:
+            if 1 <= sample["time_s"] < 3:
+                sample["q_mvar"] *= 1.1
+        analysis = e2e.h.analyze(run["trace"], run["retained_type"], "nonlinear_zip",
+                                 run["loadflow"], run["p0_mw"], run["q0_mvar"])
+        self.assertFalse(analysis["control_passed"])
+
+    def test_e2e_active_case_skips_redundant_activation_on_both_runs(self):
+        e2e = self.load_e2e()
+        app, case = MagicMock(), MagicMock()
+        case.GetFullName.return_value = "temporary.IntCase"
+        case.Activate.return_value = 1
+        app.GetActiveStudyCase.return_value = case
+        app.GetActiveScenario.return_value = None
+        with patch.object(e2e.h, "active_grids", return_value=["temporary.ElmNet"]) as grids:
+            for _ in range(2):
+                self.assertFalse(e2e.activate_case(app, case, "temporary.ElmNet")["activation_needed"])
+        case.Activate.assert_not_called()
+        self.assertEqual(grids.call_count, 2)
+
+    def test_e2e_required_activation_is_verified_and_failures_still_rejected(self):
+        e2e = self.load_e2e()
+        app, case, other = MagicMock(), MagicMock(), MagicMock()
+        case.GetFullName.return_value = "temporary.IntCase"
+        other.GetFullName.return_value = "other.IntCase"
+        app.GetActiveStudyCase.side_effect = [other, case]
+        case.Activate.return_value = 0
+        self.assertTrue(e2e.activate_case(app, case)["activation_needed"])
+        case.Activate.assert_called_once_with()
+        app.GetActiveStudyCase.side_effect = None
+        app.GetActiveStudyCase.return_value = other
+        with self.assertRaisesRegex(RuntimeError, "activation mismatch"):
+            e2e.activate_case(app, case)
+        case.Activate.return_value = 1
+        with self.assertRaisesRegex(RuntimeError, "Activate returned 1"):
+            e2e.activate_case(app, case)
+
+    def test_e2e_matching_case_does_not_bypass_grid_or_scenario_isolation(self):
+        e2e = self.load_e2e()
+        app, case = MagicMock(), MagicMock()
+        case.GetFullName.return_value = "temporary.IntCase"
+        app.GetActiveStudyCase.return_value = case
+        app.GetActiveScenario.return_value = None
+        with patch.object(e2e.h, "active_grids", return_value=["temporary.ElmNet", "production.ElmNet"]):
+            with self.assertRaisesRegex(RuntimeError, "isolation failed"):
+                e2e.activate_case(app, case, "temporary.ElmNet")
+        app.GetActiveScenario.return_value = MagicMock()
+        with patch.object(e2e.h, "active_grids", return_value=["temporary.ElmNet"]):
+            with self.assertRaisesRegex(RuntimeError, "isolation failed"):
+                e2e.activate_case(app, case, "temporary.ElmNet")
+        case.Activate.assert_not_called()
+
     def test_multiseed_traces_reproduce_all_twelve_analyses(self):
         spec = importlib.util.spec_from_file_location(
             "zip_rms_multiseed", EVIDENCE / "scripts/lab_zip_rms_multiseed_check.py")

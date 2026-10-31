@@ -258,6 +258,17 @@ engineering diagnostic choice. Six seeds do not validate every mixture, recovery
 dynamics, nonzero time constants, other voltages/frequencies, unbalanced RMS or
 EMT. Defaults and supported-mode restrictions remain unchanged.
 
+[FT-38](../evidence/FT-38_zip_rms_e2e_lab_pc.txt) closes the tested integration
+gap for seeds 0 and 4: actual unified MCP preview/confirmation created new ZIP
+RMS loads/types, followed by isolated interactive simulation of those exact
+objects. Both inductive and capacitive cases matched settled ZIP response;
+1006 complete samples, capture and final state are archived. Original context
+restoration and cleanup passed. The corrected already-active-case guard is
+regression tested; required activation failures and isolation checks remain.
+This does not simulate the older FT-36 load, exercise the server's separate
+RMS command, or validate the full sampled domain or transient dynamics.
+Defaults, supported voltages/frequencies and zero-time-constant scope stay fixed.
+
 ### Table 13 synchronous-machine mapping
 
 The seventh executable database is

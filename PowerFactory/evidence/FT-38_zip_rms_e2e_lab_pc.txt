@@ -1,0 +1,96 @@
+FT-38: Unified MCP ZIP creation through actual-object RMS settled response
+
+Contributor-supplied Lab PC evidence, successful attempt MCP ZIP E2E baeae8e8.
+Date: 2026-10-31. Successful result: ZIP_RMS_E2E_20261031T163348Z_1997c5f1.json.
+
+Archived complete artifacts:
+- FT-38_zip_rms_e2e_lab_pc.json: result, full embedded tool responses/text,
+  original state snapshot, retained type/load identities, both complete traces,
+  window analyses, restoration and cleanup.
+- FT-38_zip_rms_e2e_capture_lab_pc.json: separate complete four-response capture.
+- FT-38_zip_rms_e2e_state_lab_pc.json: final closed state and result-file path.
+- scripts/lab_zip_rms_e2e_check.py: corrected standalone staged orchestrator.
+- scripts/lab_zip_rms_multiseed_check.py: unchanged shared FT-37 helper.
+- scripts/FT-38_mcp_creation_prompt.txt: staged creation prompt, including nested
+  parameters.confirmation; supplemental run instructions appear below.
+
+Only the account identifier is replaced with LAB_USER in archived JSON/scripts
+and prompt. JSON field values, all samples and historical hashes are otherwise
+preserved; repository files use normalized text line endings. capture_text is
+preserved as a JSON string, with the same account substitution. Separate capture
+and state match the corresponding embedded content; final state differs only by
+closed=true and result_file. No original source file is modified.
+
+Original supplied source SHA-256 (before sanitization/newline normalization):
+Result: 22f2935dde30e1e69aa55bd2fd53b4bb35126a73780f3da5149326dff464269a
+Capture: 9a0846cf7b3b0444f70cc9d0f6b4f1eac6058eb49b6ddeccf86fb6bae5c44414
+State: 022c79bb9327447eb6644cf0a48a0ea4a7dd46504f650a9b8076092b0e118c96
+The original capture byte hash was independently verified against the result's
+capture_sha256. That field remains historical: it is NOT the hash of the
+account-sanitized archive. Offline regression checks semantic equality of the
+separate/embedded archive captures rather than claiming original byte identity.
+No executed-script byte hash was captured on the Lab PC. The archived script
+has the corrected activation logic and defaults to PHASE=prepare; the operator
+selected PHASE=run for the successful simulation. It is not a byte attestation
+of the operator's external file.
+
+Workflow: standalone preparation creates an isolated temporary case/grid and
+engineering feeder, records existing context, then restores Case 1. MCP first
+activates test / Case 1, then the prepared case, checks destinations and uses
+create_evemtbench_component("load", parameters) for each preview and exact
+confirmation. Both real loads/types are created out of service. MCP is stopped;
+interactive ComPython verifies the complete responses against saved plans and
+live identities/connections, then simulates the ACTUAL creator-made loads/types.
+It never copies or substitutes the simulated loads/types or rewrites their ZIP
+coefficients. Only one test load is energized at a time and each is returned
+out of service. Context is restored before temporary objects are removed.
+
+Seed 0 (inductive): P0=1.252887 MW, Q0=0.545856 Mvar.
+Seed 4 (capacitive): P0=0.443285 MW, Q0=-0.098388 Mvar.
+Both use explicit zip_rms settings, 20 kV, 50 Hz and zero time constants.
+Each simulation has 503 finite samples; 1006 total. Before/dip/recovered windows
+have 40/80/80 samples. Dip voltages approximately 0.919793 and 0.930142 p.u.
+Both full-trace recomputations match the retained ZIP polynomial in all settled
+windows and differ from constant-power and constant-impedance classifications
+over the dip. Maximum absolute P/Q discrepancy on local recomputation is about
+2.23e-16 MW/Mvar, numerical agreement rather than physical accuracy validation.
+Acceptance tolerances remain 0.5% relative and 0.0001 MW/Mvar absolute.
+
+Result: success=true, restored=true, cleanup_ok=true, cleanup_errors=[],
+remaining_objects=[]. Both runs report created_type_unchanged=true and
+returned_out_of_service=true. The activation guard records the intended case
+already active for BOTH runs and correctly skips redundant Activate calls.
+Original Case 1, physical grids and scenario were restored; the temporary case,
+network, feeder type and two verified creator-made types were deleted.
+
+Failures preceding success are disclosed, not counted as passing evidence:
+1. Prior attempt 46ea06f3 stopped at redundant case Activate returned 1 before
+   simulation. It restored/cleaned up and was archived before fresh preparation.
+   Guard now checks exact active-case identity before activation and afterward;
+   required activation errors and grid/scenario isolation remain enforced.
+2. In attempt baeae8e8 an assistant put confirmation at the top level rather
+   than inside parameters; the second call returned another preview. No objects
+   were created then. After project/case reactivation, fresh previews with nested
+   confirmation succeeded. The earlier failure capture was preserved on Lab PC.
+3. A capture checker initially dropped the grid from its expected load path.
+   Correcting that checker allowed complete capture; not a creation failure.
+This record archives the successful complete evidence set, not the earlier raw
+failure files. No passing claim is inferred from those earlier attempts.
+
+Rerun (adapt LAB_USER and helper REPO path first): place both Python scripts
+together, stop MCP, activate test / Case 1, run PHASE=prepare in interactive
+ComPython. Use the archived MCP prompt with the new state, exact nested token,
+and complete capture. Stop MCP, reopen interactive PF, select PHASE=run and
+execute once. Preserve state/capture/results before a new attempt; never reuse
+closed state/tokens. Complete results save under lab_results beside the script.
+Explicit PHASE=cleanup is for reviewed abandoned attempts only, not a pass.
+
+Limits: two seeds, settled balanced 20 kV / 50 Hz response. Two 1 km parallel
+feeders use diagnostic R=30/P0 and X=5/P0 Ohm/km, zero capacitance; one opens
+at 1 s and closes at 3 s, simulation ends at 5 s with 0.01 s step. These settings
+are engineering choices, not paper-derived dynamic parameters. FT-37 supplies
+separate constant-power controls; FT-38 does not add new control runs. No
+full-domain, transient-recovery, nonzero-time-constant, frequency-response,
+unbalanced RMS, other-voltage/frequency or EMT validation. The MCP server's
+separate run_rms_simulation tool is not exercised. This does not simulate the
+older retained FT-36 load. Creator defaults/restrictions remain unchanged.
