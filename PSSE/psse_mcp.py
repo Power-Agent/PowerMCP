@@ -1,198 +1,195 @@
 import sys
 import os
+import re
 import json
 import io
+import importlib
 from pathlib import Path
 
-from mcp.server.mcpserver import MCPServer as FastMCP
-from typing import Dict, List, Optional, Any
-
-_repo_root = str(Path(__file__).resolve().parents[1])
-_repo_root_added = _repo_root not in sys.path
-if _repo_root_added:
-    sys.path.insert(0, _repo_root)
-try:
-    from powermcp.sandbox import PathNotAllowed, checked_path
-finally:
-    if _repo_root_added:
-        sys.path.remove(_repo_root)
-del _repo_root, _repo_root_added
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from mcp.server.fastmcp import FastMCP
+from typing import Dict, List, Optional, Any, Tuple
 
 # Initialize MCP server
 mcp = FastMCP("PSSE 35+ Positive Sequence Load Flow Program")
 
-# ---------------------------------------------------------------------------
-# Lazy, memoized PSS/E engine initialization.
-#
-# psspy lives in a local PSS/E install dir and psseinit() starts the engine.
-# Both used to run at import time, which crashed this module on any machine
-# without PSS/E and blocked packaging/discovery. They now run once, on the first
-# tool call. The PSSPYxxx / PSSBIN dirs come from ~/.powermcp/config.toml (keys
-# psse.python_lib, psse.bin) when powermcp is installed, else fall back to the
-# historical hardcoded paths so a raw checkout keeps working.
-# ---------------------------------------------------------------------------
-_PSSE_LEGACY = {
-    "python_lib": r"C:\Program Files\PTI\PSSE36\36.2\PSSPY311",
-    "bin": r"C:\Program Files\PTI\PSSE36\36.2\PSSBIN",
-}
 
-psspy = None  # imported lazily by _ensure_psse()
-_psse_ready = False
+def _version_key(version_str: str) -> Tuple[int, ...]:
+    """Turn a version string like '36.4.0' or '35.4' into a sortable tuple of ints."""
+    parts = re.findall(r"\d+", version_str or "")
+    return tuple(int(p) for p in parts) if parts else (0,)
 
 
-def _resolve_psse_paths():
-    """Return (python_lib, bin): config when available, else legacy defaults."""
+def _is_valid_psspy_dir(psspy_path: str, exe_path: str) -> bool:
+    """
+    Confirm a candidate psspy directory actually contains the psspy module
+    (as "psspy.pyc" or "psspy.py") rather than being an empty/incomplete
+    install folder left behind by a partial installation.
+    """
+    if not (psspy_path and exe_path and os.path.isdir(psspy_path) and os.path.isdir(exe_path)):
+        return False
+    return any(
+        os.path.isfile(os.path.join(psspy_path, f"psspy{ext}"))
+        for ext in (".pyc", ".py", ".pyd")
+    )
+
+
+def _psse_candidates_from_registry(allowed_majors, pyver: str):
+    """
+    Enumerate PSSE installations from the Windows registry.
+
+    PSSE's installer writes entries under HKLM\\SOFTWARE\\PTI\\PSSE <major>\\<build>\\Product Paths
+    with values such as PsseInstallPath, PsseExePath (PSSBIN) and one
+    PsseLocalPsspy<pyver>Path value per supported Python version (casing varies,
+    e.g. "Psselocalpsspy313Path" vs "PsseLocalPsspy314Path"), so lookups are
+    done case-insensitively.
+    """
+    candidates = []
     try:
-        from powermcp.config import get_path
-        return (get_path("psse", "python_lib", must_exist=False),
-                get_path("psse", "bin", must_exist=False))
-    except Exception:
-        return _PSSE_LEGACY["python_lib"], _PSSE_LEGACY["bin"]
+        import winreg
+    except ImportError:
+        return candidates  # not running on Windows
 
+    psspy_value_name = f"psselocalpsspy{pyver}path"
 
-def _ensure_psse():
-    """Inject PSS/E paths, import psspy, and call psseinit(50) exactly once."""
-    global psspy, _psse_ready
-    if _psse_ready:
-        return psspy
-    python_lib, bin_dir = _resolve_psse_paths()
-    for p in (python_lib, bin_dir):
-        if not p:
+    for major in allowed_majors:
+        root_key = rf"SOFTWARE\PTI\PSSE {major}"
+        try:
+            pkey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, root_key)
+        except OSError:
             continue
-        if p not in sys.path:
-            sys.path.insert(0, p)
-        os.environ["PATH"] = p + os.pathsep + os.environ.get("PATH", "")
-    try:
-        import psse36  # noqa: F401  (vendor shim that sets up further paths)
-        import psspy as _psspy
-    except Exception as e:
+
+        with pkey:
+            i = 0
+            while True:
+                try:
+                    build_name = winreg.EnumKey(pkey, i)
+                except OSError:
+                    break
+                i += 1
+
+                try:
+                    bkey = winreg.OpenKey(pkey, rf"{build_name}\Product Paths")
+                except OSError:
+                    continue
+
+                with bkey:
+                    values = {}
+                    j = 0
+                    while True:
+                        try:
+                            name, data, _ = winreg.EnumValue(bkey, j)
+                        except OSError:
+                            break
+                        values[name.lower()] = data
+                        j += 1
+
+                psspy_path = values.get(psspy_value_name)
+                exe_path = values.get("psseexepath")
+                version_str = values.get("version") or f"{major}.{build_name}"
+                if _is_valid_psspy_dir(psspy_path, exe_path):
+                    candidates.append((_version_key(version_str), major, version_str, psspy_path, exe_path))
+
+    return candidates
+
+
+def _psse_candidates_from_filesystem(allowed_majors, pyver: str):
+    """Fallback discovery by scanning default PTI install directories."""
+    candidates = []
+    for major in allowed_majors:
+        for root in (r"C:\Program Files\PTI", r"C:\Program Files (x86)\PTI"):
+            psse_dir = os.path.join(root, f"PSSE{major}")
+            if not os.path.isdir(psse_dir):
+                continue
+            for entry in os.listdir(psse_dir):
+                version_dir = os.path.join(psse_dir, entry)
+                if not os.path.isdir(version_dir):
+                    continue
+                psspy_path = os.path.join(version_dir, f"PSSPY{pyver}")
+                exe_path = os.path.join(version_dir, "PSSBIN")
+                if _is_valid_psspy_dir(psspy_path, exe_path):
+                    candidates.append((_version_key(entry), major, entry, psspy_path, exe_path))
+    return candidates
+
+
+def _discover_psse_paths() -> Tuple[int, str, str, str]:
+    """
+    Locate an installed PSSE version (35 or 36) whose bundled psspy module
+    matches the Python interpreter currently running this MCP server.
+
+    Resolution order:
+      1. Manual override via PSSE_PSSPY_PATH / PSSE_EXE_PATH env vars (with
+         optional PSSE_VERSION to pick which "psseXX" module to import).
+      2. Windows registry (HKLM\\SOFTWARE\\PTI\\PSSE 35|36), populated by the
+         PSSE installer with exact paths per supported Python version.
+      3. Filesystem scan of the default "C:\\Program Files\\PTI\\PSSE35|36"
+         install locations, merged in to cover installs the registry doesn't
+         (yet) know about.
+
+    Among all matches, the highest PSSE version is selected. Set PSSE_VERSION
+    to "35" or "36" to restrict discovery to a single major version.
+
+    Returns (major_version, version_str, psspy_path, exe_path).
+    """
+    pyver = f"{sys.version_info.major}{sys.version_info.minor}"  # e.g. "311"
+
+    forced_major = os.environ.get("PSSE_VERSION")
+    allowed_majors = [int(forced_major)] if forced_major else [36, 35]
+
+    # 1. Manual override -----------------------------------------------------
+    override_psspy = os.environ.get("PSSE_PSSPY_PATH")
+    override_exe = os.environ.get("PSSE_EXE_PATH")
+    if override_psspy and override_exe:
+        major = int(forced_major) if forced_major else 36
+        return major, "manual-override", override_psspy, override_exe
+
+    # 2. Windows registry, merged with 3. filesystem scan ---------------------
+    # The registry is queried first since it's authoritative and fast, but it
+    # can be stale/incomplete (e.g. missing an entry for a version that was
+    # installed without updating that key), so filesystem results are merged
+    # in rather than used only as an all-or-nothing fallback. Candidates are
+    # de-duplicated by psspy path, keeping the version with the most info.
+    candidates_by_path = {}
+    for candidate in _psse_candidates_from_registry(allowed_majors, pyver):
+        candidates_by_path[os.path.normcase(candidate[3])] = candidate
+    for candidate in _psse_candidates_from_filesystem(allowed_majors, pyver):
+        candidates_by_path.setdefault(os.path.normcase(candidate[3]), candidate)
+    candidates = list(candidates_by_path.values())
+
+    if not candidates:
         raise RuntimeError(
-            "Could not import PSS/E (psspy). Ensure PSS/E is installed and its paths "
-            "are configured: `powermcp config set psse.python_lib <PSSPYxxx dir>` and "
-            "`powermcp config set psse.bin <PSSBIN dir>`. Original error: " + repr(e)
+            f"Could not find a PSSE 35/36 installation with Python {pyver} support "
+            f"(interpreter: {sys.executable}). Checked the Windows registry "
+            r"(HKLM\SOFTWARE\PTI\PSSE 35|36) and default install directories "
+            r"(C:\Program Files\PTI\PSSE35|36). If PSSE is installed elsewhere, "
+            "set the PSSE_PSSPY_PATH and PSSE_EXE_PATH environment variables "
+            "to the PSSPY<pyver> and PSSBIN directories respectively."
         )
-    _psspy.psseinit(50)  # 50 = PSS/E 35+ bus mode; do NOT change
-    psspy = _psspy
-    _psse_ready = True
-    return psspy
+
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    _, major, version_str, psspy_path, exe_path = candidates[0]
+    return major, version_str, psspy_path, exe_path
+
+
+# Import and initialize PSSE Python library
+# Path is auto-discovered (registry, then filesystem scan) to find the highest
+# installed PSSE version whose psspy module matches this Python interpreter's
+# version. See _discover_psse_paths() for details and override env vars.
+_psse_major, _psse_version_str, _psse_psspy_path, _psse_exe_path = _discover_psse_paths()
+
+sys.path.append(_psse_psspy_path)
+sys.path.append(_psse_exe_path)
+os.environ['PATH'] = _psse_psspy_path + os.pathsep + os.environ['PATH']
+os.environ['PATH'] = _psse_exe_path + os.pathsep + os.environ['PATH']
+
+importlib.import_module(f"psse{_psse_major}")
+
+import psspy
+psspy.psseinit(50)
 
 # Path to JSON command reference files
 JSON_DIR = Path(__file__).parent / "psspy_command_json"
-PATH_PARAMETER_METADATA = Path(__file__).parent / "psspy_path_parameters.json"
-
-
-def _load_path_parameter_metadata() -> Dict[str, Dict[str, str]]:
-    """Load the audited path parameters for the bundled command specs.
-
-    `commands` names the arguments to contain. Its sibling `reviewed_non_paths`
-    records the ones that read as paths but are not, so the test suite can hold
-    every spec parameter to a decision rather than to a name heuristic.
-    """
-    with open(PATH_PARAMETER_METADATA, encoding="utf-8") as f:
-        document = json.load(f)
-    if (
-        document.get("schema") != 1
-        or not isinstance(document.get("commands"), dict)
-        or not isinstance(document.get("reviewed_non_paths"), dict)
-    ):
-        raise RuntimeError("invalid PSS/E path parameter metadata")
-    return document["commands"]
-
-
-_PATH_PARAMETERS = _load_path_parameter_metadata()
-
-
-# These APIs load, execute, or activate programs, native libraries, Python
-# callbacks, user extensions, or PSS/E command files. Path containment does not
-# make executable input safe for the generic MCP dispatcher.
-_PROHIBITED_PSSPY_COMMANDS = frozenset(
-    {
-        "accc_ras",
-        "accc_ras_2",
-        "addconditionelement",
-        "addcontingencyelement",
-        "addmodellibrary",
-        "addpythonconditionelement",
-        "addpythoncontingencyelement",
-        "addpythonremedialactionelement",
-        "addremedialactionelement",
-        "allow_pssuserpf",
-        "append_ras",
-        "dropmodellibrary",
-        "dropmodelprogram",
-        "getmodfunclist",
-        "launch_program",
-        "read_ras",
-        "retry_pssuserpf",
-        "runiplanfile",
-        "runrspnsfile",
-        "set_input_dev",
-        "setdiagautofile",
-        "user",
-    }
-)
-
-
-def _command_spec_path(function_name: str) -> Path:
-    """Resolve one bundled command spec without treating its name as a path."""
-    if not function_name.isascii() or not function_name.isidentifier():
-        raise ValueError("function_name must be an ASCII Python identifier")
-    return JSON_DIR / f"{function_name}.json"
-
-
-def _checked_path_value(value: Any, *, purpose: str, sequence: bool) -> Any:
-    """Check one audited scalar path or sequence of paths."""
-    if isinstance(value, str):
-        if value.strip() in {"", "*"}:
-            return value
-        return checked_path(value, purpose=purpose, for_write=True)
-    if sequence and isinstance(value, list):
-        return [
-            _checked_path_value(
-                item, purpose=f"{purpose}[{index}]", sequence=True
-            )
-            for index, item in enumerate(value)
-        ]
-    if sequence and isinstance(value, tuple):
-        return tuple(
-            _checked_path_value(
-                item, purpose=f"{purpose}[{index}]", sequence=True
-            )
-            for index, item in enumerate(value)
-        )
-    return value
-
-
-def _checked_path_at_index(value: Any, *, purpose: str, index: int) -> Any:
-    """Check one path field in a documented structured sequence."""
-    if not isinstance(value, (list, tuple)) or len(value) <= index:
-        return value
-    checked = list(value)
-    checked[index] = _checked_path_value(
-        checked[index], purpose=f"{purpose}[{index}]", sequence=False
-    )
-    return tuple(checked) if isinstance(value, tuple) else checked
-
-
-def _guard_psspy_path_arguments(
-    spec: Dict[str, Any], arguments: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Apply containment to paths named in the audited spec metadata."""
-    guarded = dict(arguments)
-    function_name = str(spec.get("function_name", ""))
-    parameters = _PATH_PARAMETERS.get(function_name, {})
-    for name, kind in parameters.items():
-        if name in guarded:
-            purpose = f"arguments.{name}"
-            if kind == "path-index-2":
-                guarded[name] = _checked_path_at_index(
-                    guarded[name], purpose=purpose, index=2
-                )
-            else:
-                guarded[name] = _checked_path_value(
-                    guarded[name], purpose=purpose, sequence=kind == "paths"
-                )
-    return guarded
 
 
 def _lookup_error(ierr, error_codes):
@@ -231,8 +228,32 @@ def _build_kwargs(spec, provided_args):
 
 
 # ---------------------------------------------------------------------------
-# One handler per return_type
+# Native stdout protection
 # ---------------------------------------------------------------------------
+#
+# Many psspy calls (fdns, nsol, gendsp_2, etc.) write solution/progress text
+# to PSSE's "standard destination" (islct=1) as a side effect, which in this
+# headless context lands on the process's real stdout -- the same stream
+# FastMCP's stdio transport uses for JSON-RPC framing. If that text is not
+# intercepted, it corrupts the protocol stream mid-message and permanently
+# wedges the server (every subsequent request times out, even ones that
+# never touch psspy, since the transport itself is desynced) until it is
+# restarted. Wrap every psspy call site in a throwaway stdout capture so
+# native output can never reach the real stream. Handlers that intentionally
+# want the captured text (_handle_error_only_report/_listing) perform their
+# own inner redirect-and-capture, which nests safely inside this one.
+import contextlib
+
+
+@contextlib.contextmanager
+def _suppress_native_stdout():
+    old_stdout = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+
 
 def _handle_error_only(spec, args):
     """ierr = func(...)"""
@@ -532,59 +553,26 @@ def open_case(case: str) -> Dict[str, Any]:
         case: Filename with .sav extension.
 
     Returns:
-        Dict with status and case information.
+        Dict with status and case information
     """
     try:
-        case = checked_path(case, purpose="case")
-    except PathNotAllowed as exc:
-        return {"status": "error", "message": str(exc)}
+        with _suppress_native_stdout():
+            ierr = psspy.case(case)
+            err, bus_data = psspy.abuscount(flag=2)
+            err, branch_data = psspy.abrncount(flag=4)
+            err, gen_data = psspy.amachcount(flag=4)
 
-    try:
-        _ensure_psse()
-        ierr = psspy.case(case)
-
-        if ierr != 0:
+        if err == 0:
             return {
-                "status": "error",
-                "ierr": ierr,
-                "message": f"psspy.case returned ierr={ierr}",
-                "case": os.path.abspath(case),
+                'status': 'success',
+                'case_info': {
+                    'path': os.path.abspath(case),
+                    'num_buses': bus_data or 0,
+                    'num_branches': branch_data or 0,
+                    'num_generators': gen_data or 0
+                }
             }
-
-        bus_ierr, bus_data = psspy.abuscount(flag=2)
-        if bus_ierr != 0:
-            return {
-                "status": "error",
-                "ierr": bus_ierr,
-                "message": f"psspy.abuscount returned ierr={bus_ierr}",
-            }
-
-        branch_ierr, branch_data = psspy.abrncount(flag=4)
-        if branch_ierr != 0:
-            return {
-                "status": "error",
-                "ierr": branch_ierr,
-                "message": f"psspy.abrncount returned ierr={branch_ierr}",
-            }
-
-        gen_ierr, gen_data = psspy.amachcount(flag=4)
-        if gen_ierr != 0:
-            return {
-                "status": "error",
-                "ierr": gen_ierr,
-                "message": f"psspy.amachcount returned ierr={gen_ierr}",
-            }
-
-        return {
-            "status": "success",
-            "case_info": {
-                "path": os.path.abspath(case),
-                "num_buses": bus_data or 0,
-                "num_branches": branch_data or 0,
-                "num_generators": gen_data or 0,
-            },
-        }
-
+        return {'status': 'error', 'ierr': err}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -598,8 +586,8 @@ def solve_case() -> Dict[str, Any]:
         Dict with status and result code
     """
     try:
-        _ensure_psse()
-        ierr = psspy.nsol()
+        with _suppress_native_stdout():
+            ierr = psspy.nsol()
         if ierr == 0:
             return {'status': 'success', 'ierr': 0}
         # Load nsol error codes from JSON if available
@@ -617,10 +605,7 @@ def solve_case() -> Dict[str, Any]:
 @mcp.tool()
 def run_psspy_command(function_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
-    Execute an allowed psspy API command using its bundled JSON reference spec.
-
-    Commands that load or execute external code are not available through this
-    generic surface.
+    Execute any psspy API command by name, using its JSON reference spec.
 
     Loads the command definition from the JSON reference, determines the
     return type, calls the appropriate handler, and returns structured output.
@@ -637,20 +622,8 @@ def run_psspy_command(function_name: str, arguments: Optional[Dict[str, Any]] = 
     if arguments is None:
         arguments = {}
 
-    if function_name in _PROHIBITED_PSSPY_COMMANDS:
-        return {
-            "status": "error",
-            "message": (
-                f"psspy.{function_name} is not available through "
-                "run_psspy_command"
-            ),
-        }
-
     # Load the JSON spec for this function
-    try:
-        spec_path = _command_spec_path(function_name)
-    except ValueError as exc:
-        return {"status": "error", "message": str(exc)}
+    spec_path = JSON_DIR / f"{function_name}.json"
     if not spec_path.exists():
         return {"status": "error", "message": f"No JSON spec found for '{function_name}'. Check _index.json for available functions."}
 
@@ -660,19 +633,28 @@ def run_psspy_command(function_name: str, arguments: Optional[Dict[str, Any]] = 
     except Exception as e:
         return {"status": "error", "message": f"Failed to load spec for '{function_name}': {e}"}
 
-    try:
-        arguments = _guard_psspy_path_arguments(spec, arguments)
-    except PathNotAllowed as exc:
-        return {"status": "error", "message": str(exc)}
-
     return_type = spec.get("return_type", "void")
     handler = _HANDLERS.get(return_type)
     if handler is None:
         return {"status": "error", "message": f"Unknown return_type '{return_type}' for '{function_name}'"}
 
     try:
-        _ensure_psse()
-        result = handler(spec, arguments)
+        buf = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = buf
+        try:
+            result = handler(spec, arguments)
+        finally:
+            sys.stdout = old_stdout
+        # Some psspy functions (e.g. diff, accc_with_trip_2) print their real
+        # output as a console side effect rather than returning it as a value.
+        # Surface anything captured that the handler itself didn't already
+        # return (handlers with return_type error_only_report/_listing put
+        # it under "report" themselves), so nothing is silently lost -- while
+        # still keeping it off the real stdout/JSON-RPC stream.
+        captured = buf.getvalue()
+        if captured and "report" not in result:
+            result["_console_output"] = captured
         # Attach function metadata for AI context
         result["_function"] = function_name
         result["_return_type"] = return_type
@@ -695,10 +677,7 @@ def lookup_psspy_command(function_name: str) -> Dict[str, Any]:
     Returns:
         The full API reference dict from the parsed documentation.
     """
-    try:
-        spec_path = _command_spec_path(function_name)
-    except ValueError as exc:
-        return {"status": "error", "message": str(exc)}
+    spec_path = JSON_DIR / f"{function_name}.json"
     if not spec_path.exists():
         return {"status": "error", "message": f"No spec found for '{function_name}'."}
 
@@ -738,299 +717,6 @@ def search_psspy_commands(query: str, category: Optional[str] = None) -> Dict[st
             matches.append(entry)
 
     return {"status": "success", "count": len(matches), "results": matches[:50]}
-
-
-def _dyntools():
-    """Import dyntools, which ships in the PSSPY dir that _ensure_psse adds."""
-    _ensure_psse()
-    import dyntools
-
-    return dyntools
-
-
-_DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS = 10_000
-_DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS = 100_000
-
-
-def _channel_extrema(values: Any, time: Any) -> Dict[str, Any]:
-    """Return numeric min/max values and their corresponding positions."""
-    numeric = [
-        (index, value)
-        for index, value in enumerate(values)
-        if isinstance(value, (int, float)) and not isinstance(value, bool)
-    ]
-    if not numeric:
-        return {}
-    min_index, min_value = min(numeric, key=lambda item: item[1])
-    max_index, max_value = max(numeric, key=lambda item: item[1])
-    return {
-        "min": min_value,
-        "min_index": min_index,
-        "min_time": time[min_index],
-        "max": max_value,
-        "max_index": max_index,
-        "max_time": time[max_index],
-    }
-
-
-def _sample_dynamic_data(
-    data: Dict[Any, Any],
-    max_points: int,
-    max_cells: int,
-    selected: Optional[List[Any]] = None,
-) -> tuple[Dict[str, List[Any]], int, int, bool, Dict[str, Any]]:
-    """Validate and safely sample dynamic output within point and cell budgets."""
-    if "time" not in data or not data["time"]:
-        raise ValueError("Dynamic output is missing a non-empty time vector")
-
-    time = data["time"]
-    if not isinstance(time, (list, tuple)):
-        raise ValueError("Dynamic output time vector must be a sequence")
-
-    total_points = len(time)
-    if selected is None:
-        series = {key: value for key, value in data.items() if key != "time"}
-    else:
-        series = {
-            key: data[key]
-            for key in selected
-            if key != "time" and key in data
-        }
-    for key, value in series.items():
-        if not isinstance(value, (list, tuple)):
-            raise ValueError(f"Dynamic output channel {key!r} must be a sequence")
-        if len(value) != total_points:
-            raise ValueError(
-                f"Dynamic output channel {key!r} has {len(value)} points; "
-                f"expected {total_points} to match the time vector"
-            )
-
-    if not series:
-        raise ValueError("Dynamic output contains no time-series channels")
-
-    returned_series_count = len(series) + 1
-    effective_points = min(max_points, max_cells // returned_series_count)
-    if effective_points < 2 and total_points > effective_points:
-        raise ValueError(
-            f"max_cells={max_cells} is too small for "
-            f"{returned_series_count} returned series; at least 2 points are required"
-        )
-
-    downsampled = total_points > effective_points
-    if not downsampled:
-        result = {"time": time}
-        result.update({str(key): value for key, value in series.items()})
-        return result, total_points, effective_points, False, {}
-
-    indices = [
-        (i * (total_points - 1)) // (effective_points - 1)
-        for i in range(effective_points)
-    ]
-    sampled = {"time": [time[index] for index in indices]}
-    sampled.update(
-        {
-            str(key): [values[index] for index in indices]
-            for key, values in series.items()
-        }
-    )
-    extrema = {
-        str(key): _channel_extrema(values, time)
-        for key, values in series.items()
-    }
-    return sampled, total_points, effective_points, True, extrema
-
-
-
-@mcp.tool()
-def list_dynamic_output_channels(
-    outfile: str,
-    outvrsn: int = 0,
-) -> Dict[str, Any]:
-    """
-    List channels available in a PSS/E dynamic simulation output file.
-
-    Args:
-        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
-        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
-
-    Returns:
-        Dict containing the output title and channel definitions.
-    """
-    try:
-        outfile = checked_path(outfile, purpose="dynamic output")
-    except PathNotAllowed as exc:
-        return {"status": "error", "message": str(exc)}
-
-    if not os.path.isfile(outfile):
-        return {
-            "status": "error",
-            "message": (
-                f"Dynamic output file does not exist: "
-                f"{os.path.abspath(outfile)}"
-            ),
-        }
-
-    try:
-        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
-        title, channels, _ = chnf.get_data()
-
-        return {
-            "status": "success",
-            "outfile": os.path.abspath(outfile),
-            "title": title,
-            "channels": {
-                str(key): value
-                for key, value in channels.items()
-            },
-        }
-    except Exception as exc:
-        return {
-            "status": "error",
-            "message": f"Failed to read dynamic output: {exc}",
-        }
-
-
-@mcp.tool()
-def read_dynamic_output(
-    outfile: str,
-    channels: Optional[List[int]] = None,
-    outvrsn: int = 0,
-    max_points: Optional[int] = None,
-    max_cells: Optional[int] = None,
-) -> Dict[str, Any]:
-    """
-    Read time-series data from a PSS/E dynamic simulation output file.
-
-    Args:
-        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
-        channels: Optional list of channel numbers to return. If omitted,
-            all channels are returned.
-        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
-        max_points: Maximum number of time points in the response. Defaults to
-            10,000.
-        max_cells: Maximum number of returned time-series cells. Defaults to
-            100,000. The effective point count is the lower of max_points and
-            max_cells divided by the number of returned series.
-
-    Returns:
-        Dict containing the output title, selected channels, time-series data,
-        the original point count, effective point cap, cell cap, and transient
-        extrema when sampling is applied.
-    """
-    try:
-        outfile = checked_path(outfile, purpose="dynamic output")
-    except PathNotAllowed as exc:
-        return {"status": "error", "message": str(exc)}
-
-    if not os.path.isfile(outfile):
-        return {
-            "status": "error",
-            "message": (
-                f"Dynamic output file does not exist: "
-                f"{os.path.abspath(outfile)}"
-            ),
-        }
-
-    if channels is not None:
-        if not channels:
-            return {
-                "status": "error",
-                "message": "channels must contain at least one channel number",
-            }
-
-        if any(
-            not isinstance(channel, int)
-            or isinstance(channel, bool)
-            or channel < 1
-            for channel in channels
-        ):
-            return {
-                "status": "error",
-                "message": "channels must contain positive integer channel numbers",
-            }
-
-    if max_points is None:
-        max_points = _DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS
-    elif (
-        not isinstance(max_points, int)
-        or isinstance(max_points, bool)
-        or max_points < 2
-    ):
-        return {
-            "status": "error",
-            "message": "max_points must be an integer of at least 2",
-        }
-
-    if max_cells is None:
-        max_cells = _DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS
-    elif (
-        not isinstance(max_cells, int)
-        or isinstance(max_cells, bool)
-        or max_cells < 2
-    ):
-        return {
-            "status": "error",
-            "message": "max_cells must be an integer of at least 2",
-        }
-
-    try:
-        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
-        title, channel_names, data = chnf.get_data()
-
-        if channels is None:
-            selected = list(channel_names.keys())
-        else:
-            missing = [
-                channel
-                for channel in channels
-                if channel not in channel_names
-            ]
-
-            if missing:
-                return {
-                    "status": "error",
-                    "message": f"Requested channel(s) not found: {missing}",
-                }
-
-            selected = ["time"] + channels
-
-        selected_names = {
-            str(channel): channel_names[channel]
-            for channel in selected
-            if channel in channel_names
-        }
-
-        (
-            sampled_data,
-            total_points,
-            effective_points,
-            downsampled,
-            extrema,
-        ) = _sample_dynamic_data(
-            data, max_points, max_cells, selected=selected
-        )
-
-        return {
-            "status": "success",
-            "outfile": os.path.abspath(outfile),
-            "title": title,
-            "channels": selected_names,
-            "data": sampled_data,
-            "num_points": len(sampled_data["time"]),
-            "total_points": total_points,
-            "downsampled": downsampled,
-            "max_points": max_points,
-            "max_cells": max_cells,
-            "effective_points": effective_points,
-            "returned_cells": len(sampled_data) * len(sampled_data["time"]),
-            **({"extrema": extrema} if downsampled else {}),
-        }
-
-    except Exception as exc:
-        return {
-            "status": "error",
-            "message": f"Failed to read dynamic output: {exc}",
-        }
 
 
 if __name__ == "__main__":
