@@ -85,6 +85,11 @@ for label in component_types:
             raise SystemExit("installed-wheel load listing omitted restricted RMS ZIP mode")
         if mapping.get("rms_zip_model", {}).get("type_attributes", {}).get("loddy") != 100:
             raise SystemExit("installed-wheel RMS ZIP mapping omitted explicit RMS settings")
+        rms = mapping["rms_zip_model"]
+        if not all(record in rms.get("validation", "") for record in ("FT-37", "FT-38")):
+            raise SystemExit("installed-wheel RMS ZIP validation status is outdated")
+        if "full sampled domain" not in rms.get("limitations", ""):
+            raise SystemExit("installed-wheel RMS ZIP status omitted sampled-domain limits")
     if label == "transformer":
         inputs = result["creation_parameters"]
         if inputs["zero_sequence_model"].get("default") != "unchanged":

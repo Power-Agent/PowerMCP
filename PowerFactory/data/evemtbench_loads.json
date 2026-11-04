@@ -51,8 +51,8 @@
         "kpf": 0.0, "kqf": 0.0
       },
       "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
-      "validation": "FT-35 separate diagnostic passed for one coefficient set and positive P/Q; FT-36 integrated creation/readback passed without simulation",
-      "limitations": "No general sampled-input, capacitive-Q, transient recovery, nonzero time-constant, frequency-response or EMT validation"
+      "validation": "FT-35 positive-P/Q diagnostic and FT-36 creation/readback passed; FT-37 six sampled ZIP cases covering both Q signs and six constant-power controls passed; FT-38 actual unified-creator loads passed settled RMS response for seeds 0 (inductive) and 4 (capacitive), with restoration and cleanup",
+      "limitations": "Six sampled cases and two end-to-end seeds only, not the full sampled domain; no transient recovery, nonzero time-constant, frequency-response, other voltage/frequency, unbalanced RMS, EMT or server run_rms_simulation validation; the retained FT-36 load was not simulated"
     },
     "mapped_attributes": {
       "active_power_mw": "plini",

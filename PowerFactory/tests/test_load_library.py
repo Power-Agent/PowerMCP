@@ -333,6 +333,53 @@ class EvEMTBenchLoadTest(unittest.TestCase):
 class EvEMTBenchRmsZipTest(unittest.TestCase):
     call = EvEMTBenchLoadTest.call
 
+    def test_current_status_describes_tested_cases_without_widening_scope(self):
+        agent = agent_module.DIgSILENTAgent
+        listing = agent.list_evemtbench_components("load")
+        config = listing["powerfactory"]["rms_zip_model"]
+        for record in ("FT-37", "FT-38"):
+            self.assertIn(record, config["validation"])
+        self.assertIn("six sampled ZIP cases", config["validation"])
+        self.assertIn("seeds 0 (inductive) and 4 (capacitive)", config["validation"])
+        for limitation in ("full sampled domain", "transient recovery", "nonzero time-constant",
+                           "other voltage/frequency", "unbalanced RMS", "EMT", "run_rms_simulation"):
+            self.assertIn(limitation, config["limitations"])
+        self.assertEqual(config["voltage_kv"], 20.)
+        self.assertEqual(config["grid_frequency_hz"], 50.)
+        self.assertEqual(listing["creation_parameters"]["load_model"]["default"], "constant_power")
+        _, plan = agent._evemtbench_load_plan(20., "Load", 4, "zip_rms")
+        status = " ".join(plan["limitations"])
+        self.assertIn("FT-37", status)
+        self.assertIn("FT-38", status)
+        self.assertIn("not the full sampled domain", status)
+        self.assertIn("FT-36; no simulation was run on that load", status)
+        self.assertIn("server run_rms_simulation", status)
+
+    def test_status_refresh_preserves_values_and_legacy_plans_but_requires_fresh_rms_token(self):
+        agent = agent_module.DIgSILENTAgent
+        database = copy.deepcopy(agent._load_evemtbench_load_database())
+        config = database["powerfactory"]["rms_zip_model"]
+        config["validation"] = "Earlier evidence status"
+        config["limitations"] = "Earlier evidence limitations"
+        grid, bus, app = self.network()
+        options = dict(load_model="zip_rms", type_name="RMS")
+        with patch.object(agent, "_load_evemtbench_load_database", return_value=database):
+            previous = self.call(app, **options)
+            legacy = {mode: agent._evemtbench_load_plan(20., "Load", 4, mode)[1]
+                      for mode in ("constant_power", "zip")}
+        fresh = self.call(app, **options)
+        for field in ("powerfactory_attributes", "zip_coefficients", "type_attributes", "derived_type_attributes"):
+            self.assertEqual(previous["item"][field], fresh["item"][field])
+        for mode, previous_plan in legacy.items():
+            self.assertEqual(previous_plan, agent._evemtbench_load_plan(20., "Load", 4, mode)[1])
+        rejected = self.call(app, confirmation=previous["confirmation_required"], **options)
+        self.assertFalse(rejected["success"])
+        self.assertIn("confirmation must exactly match", rejected["message"])
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+        created = self.call(app, confirmation=fresh["confirmation_required"], **options)
+        self.assertTrue(created["success"], created)
+
     def network(self, voltage=20., frequency=50.):
         grid, bus, app = EvEMTBenchLoadTest.network(self, voltage)
         grid.SetAttribute("frnom", frequency)

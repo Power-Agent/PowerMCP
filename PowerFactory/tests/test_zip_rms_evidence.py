@@ -159,7 +159,14 @@ class RmsZipEvidenceTest(unittest.TestCase):
         for index, run in enumerate(report["runs"]):
             with self.subTest(seed=run["seed"], mode=run["mode"]):
                 self.assertEqual(run["mode"], ("nonlinear_zip", "constant_power_control")[index % 2])
-                self.assertEqual(run["sampled_plan"], plans[index // 2])
+                # Historical evidence keeps its original validation prose.
+                recorded, current = dict(run["sampled_plan"]), dict(plans[index // 2])
+                for plan in (recorded, current):
+                    plan.pop("limitations")
+                    plan["rms_configuration"] = dict(plan["rms_configuration"])
+                    for field in ("validation", "limitations"):
+                        plan["rms_configuration"].pop(field)
+                self.assertEqual(recorded, current)
                 self.assertTrue(run["success"])
                 self.assertTrue(run["restored"])
                 self.assertTrue(run["cleanup_ok"])

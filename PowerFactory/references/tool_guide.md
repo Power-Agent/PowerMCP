@@ -707,6 +707,13 @@ isolation and rejects required activation failures. The server's separate
 `run_rms_simulation` tool is not exercised. Two seeds do not validate the whole
 sampled domain or transient dynamics; creator defaults/restrictions do not change.
 
+Discovery and `zip_rms` preview status descriptions now summarize FT-37/FT-38
+without widening those limits. Status text is part of the bound creation plan:
+after this update or a server restart on the new checkout, request a fresh
+`zip_rms` preview instead of reusing a prior confirmation token. Archived tool
+responses retain their historical status wording; they are not current discovery
+metadata. Seeded values, electrical settings and the legacy modes are unchanged.
+
 ---
 
 ## EvEMTBench Synchronous-Machine Database and Creator

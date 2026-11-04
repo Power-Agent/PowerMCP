@@ -1319,9 +1319,10 @@ class EvEMTBenchMixin:
                     "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
                     "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
                     "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
-                    "FT-35 used one coefficient set with positive P/Q; it does not validate all sampled inputs or capacitive-Q RMS response.",
+                    "FT-37 passed six sampled ZIP cases covering inductive/capacitive Q and six constant-power controls; not the full sampled domain.",
                     "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
-                    "Transient recovery dynamics, nonzero time constants, frequency response and EMT are unvalidated.",
+                    "FT-38 passed unified-creator creation through actual-load RMS response for seeds 0 (inductive) and 4 (capacitive), with restoration and cleanup.",
+                    "Transient recovery dynamics, nonzero time constants, frequency response, other voltages/frequencies, unbalanced RMS, EMT and server run_rms_simulation are unvalidated.",
                 ]
         return class_name, item
 

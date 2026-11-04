@@ -399,7 +399,7 @@ creator and must not be represented as a complete motor database.
 |---|---|---|---|
 | Events/faults | yes | partial, existing tools | not planned as a library type |
 | External grids | yes | validated on PowerFactory 2026 SP1 | implemented |
-| Loads | yes | power mapped; opt-in `zip` for load flow; restricted `zip_rms` type settings for 20 kV / 50 Hz | constant power default; isolated diagnostic FT-35 and creation/readback FT-36 passed; integrated-load RMS response/dynamics/EMT unvalidated |
+| Loads | yes | power mapped; opt-in `zip` for load flow; `zip_rms` restricted to balanced settled 20 kV / 50 Hz response with zero time constants | constant power default; FT-37 six sampled ZIP cases with both Q signs plus six controls passed; FT-38 two actual unified-creator loads passed RMS response; full sampled domain, transient dynamics, other operating modes and EMT unvalidated |
 | Underground cables | yes | sequence equivalent validated on SP1 | implemented |
 | Overhead lines/conductors | yes | sequence equivalent validated on SP1 | implemented |
 | Transformers | yes, Tables 10-12 | Table 11; restricted opt-in Table 10 YNd11 equivalent | full core/limb and Table 12 unsupported |
