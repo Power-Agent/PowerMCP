@@ -14,15 +14,41 @@ import sys
 import os
 import json
 import csv
+import math
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+try:
+    from .evemtbench import EvEMTBenchMixin
+except ImportError:
+    # Standalone execution and the installed-wheel smoke loader use this path.
+    import importlib.util
+    _builders_spec = importlib.util.spec_from_file_location(
+        "powerfactory_evemtbench", os.path.join(os.path.dirname(__file__), "evemtbench.py")
+    )
+    _builders_module = importlib.util.module_from_spec(_builders_spec)
+    _builders_spec.loader.exec_module(_builders_module)
+    EvEMTBenchMixin = _builders_module.EvEMTBenchMixin
+
+
+def _add_plot_legend(ax, series_count: int) -> None:
+    """Keep large legends outside the axes so they do not cover the plot."""
+    if series_count > 12:
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.15),
+            ncol=min(6, series_count),
+            fontsize=8,
+        )
+    else:
+        ax.legend(loc="best", fontsize=9)
 
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _repo_root_added = _repo_root not in sys.path
@@ -188,7 +214,7 @@ def _ensure_output_directory(path: str, purpose: str) -> str:
 # DIGSILENT AGENT
 # ══════════════════════════════════════════════════════════════════
 
-class DIgSILENTAgent:
+class DIgSILENTAgent(EvEMTBenchMixin):
     """
     Standalone agent that wraps the PowerFactory Python API.
     All public methods return (success: bool, message: str).
@@ -201,6 +227,131 @@ class DIgSILENTAgent:
     _shared_project: Optional[object] = None
     _create_case_request_cache: dict[str, tuple[bool, str, float]] = {}
     _create_case_request_ttl_sec: int = 3600
+    _max_loc_name_length: int = 40
+    _evemtbench_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_transformers.json",
+    )
+    _evemtbench_line_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_overhead_lines.json",
+    )
+    _evemtbench_cable_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_underground_cables.json",
+    )
+    _evemtbench_external_grid_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_external_grids.json",
+    )
+    _evemtbench_load_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_loads.json",
+    )
+    _evemtbench_synchronous_machine_database_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data",
+        "evemtbench_synchronous_machines.json",
+    )
+    _component_specs = {
+        "bus": {
+            "class_name": "ElmTerm",
+            "label": "Bus",
+            "required": {"nominal_voltage_kv"},
+            "optional": set(),
+            "bus_parameters": (),
+            "bus_details": (),
+            "connections": (),
+            "template": None,
+            "numbers": (
+                ("uknom", "nominal_voltage_kv", "positive", None),
+            ),
+        },
+        "load": {
+            "class_name": "ElmLod",
+            "label": "Load",
+            "required": {"bus_name", "active_power_mw"},
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": None,
+            "numbers": (
+                ("plini", "active_power_mw", "non_negative", None),
+                ("qlini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "generator": {
+            "class_name": "ElmSym",
+            "label": "Generator",
+            "required": {
+                "bus_name",
+                "template_generator",
+                "active_power_mw",
+            },
+            "optional": {"reactive_power_mvar"},
+            "bus_parameters": ("bus_name",),
+            "bus_details": ("bus",),
+            "connections": ("bus1",),
+            "template": (
+                "template_generator",
+                "generator",
+                "synchronous-machine type",
+            ),
+            "numbers": (
+                ("pgini", "active_power_mw", "non_negative", None),
+                ("qgini", "reactive_power_mvar", "finite", 0.0),
+            ),
+        },
+        "line": {
+            "class_name": "ElmLne",
+            "label": "Line",
+            "required": {
+                "bus1_name",
+                "bus2_name",
+                "template_line",
+                "length_km",
+            },
+            "optional": set(),
+            "bus_parameters": ("bus1_name", "bus2_name"),
+            "bus_details": ("bus1", "bus2"),
+            "connections": ("bus1", "bus2"),
+            "template": ("template_line", "line", "line type"),
+            "numbers": (
+                ("dline", "length_km", "positive", None),
+            ),
+        },
+        "transformer": {
+            "class_name": "ElmTr2",
+            "label": "Transformer",
+            "required": {
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+                "template_transformer",
+            },
+            "optional": set(),
+            "bus_parameters": (
+                "high_voltage_bus_name",
+                "low_voltage_bus_name",
+            ),
+            "bus_details": (
+                "high_voltage_bus",
+                "low_voltage_bus",
+            ),
+            "connections": ("bushv", "buslv"),
+            "template": (
+                "template_transformer",
+                "transformer",
+                "transformer type",
+            ),
+            "numbers": (),
+        },
+    }
 
     @classmethod
     def _apply_show_preference(cls, app, open_digsilent: bool = True) -> None:
@@ -288,22 +439,9 @@ class DIgSILENTAgent:
     def connect(self) -> tuple[bool, str]:
         log.section("STEP 1 — Connect to PowerFactory")
         try:
-            global pf
             open_digsilent = bool(getattr(self.cfg, "open_digsilent", 1))
-            if pf is None:
-                _ensure_powerfactory_on_path()
-                import powerfactory as pf
-            if DIgSILENTAgent._shared_app is None:
-                self.app = pf.GetApplicationExt()
-                if self.app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                self._apply_show_preference(self.app, open_digsilent)
-                DIgSILENTAgent._shared_app = self.app
-                log.ok("PowerFactory application obtained and shown")
-            else:
-                self.app = DIgSILENTAgent._shared_app
-                self._apply_show_preference(self.app, open_digsilent)
-                log.ok("Reusing existing PowerFactory application in this process")
+            self.app = self._get_application(open_digsilent)
+            log.ok("PowerFactory application obtained")
         except Exception as e:
             log.error(f"Cannot connect to PowerFactory: {e}")
             return False, str(e)
@@ -335,6 +473,7 @@ class DIgSILENTAgent:
             folder = self.app.GetProjectFolder('study')
             target_name = self.cfg.study_case
             base_name = getattr(self.cfg, "base_study_case", "0. Base")
+            created = False
 
             if folder is not None:
                 # Standard project: study cases folder exists
@@ -350,6 +489,7 @@ class DIgSILENTAgent:
                     if target_name == base_name:
                         base_case.Activate()
                     else:
+                        created = True
                         new_study_case = folder.AddCopy(base_case, target_name)
                         if new_study_case is None:
                             target_case = self._find_study_case_exact(folder, target_name)
@@ -373,7 +513,7 @@ class DIgSILENTAgent:
                 matches[0].Activate()
 
             log.ok(f"Study case activated: {target_name}")
-            return True, "Study case activated"
+            return True, "Study case created and activated" if created else "Study case activated"
         except Exception as e:
             log.error(f"Study case activation failed: {e}")
             return False, str(e)
@@ -717,7 +857,7 @@ class DIgSILENTAgent:
                 ax.set_ylabel('Voltage (pu)', fontsize=11)
                 ax.set_title(f'Bus Voltages — {self.cfg.run_label}', fontsize=13, fontweight='bold')
                 ax.grid(True, alpha=0.3)
-                ax.legend(loc='best', fontsize=9)
+                _add_plot_legend(ax, len(voltage_series))
                 fig.tight_layout()
                 voltage_plot = checked_path(
                     os.path.join(run_dir, f"{safe_label}_voltages.png"),
@@ -784,6 +924,127 @@ class DIgSILENTAgent:
     # ──────────────────────────────────────────────────────────────
 
     @classmethod
+    def export_active_grid_pdf(
+        cls,
+        file_path: str,
+        diagram_name: str = "",
+        open_digsilent: bool = True,
+    ) -> tuple[bool, str]:
+        """Export one single-line diagram from the active project as PDF."""
+        restore_warning = ""
+        try:
+            file_path = checked_path(
+                file_path,
+                purpose="file_path",
+                for_write=True,
+            )
+            if not file_path.lower().endswith(".pdf"):
+                raise RuntimeError("file_path must end with .pdf")
+            if os.path.exists(file_path):
+                raise RuntimeError(f"Output file already exists: {file_path}")
+
+            parent = os.path.dirname(file_path) or os.curdir
+            if not os.path.isdir(parent):
+                raise RuntimeError(f"Output directory not found: {parent}")
+
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveProject() is None:
+                raise RuntimeError("No PowerFactory project is active")
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            graphics_board = app.GetGraphicsBoard()
+            if graphics_board is None:
+                raise RuntimeError("PowerFactory Graphics Board is unavailable")
+
+            pages = list(graphics_board.GetContents("*.SetDeskpage") or [])
+            named_pages = []
+            for page in pages:
+                try:
+                    name = str(page.GetAttribute("loc_name"))
+                except Exception:
+                    name = str(getattr(page, "loc_name", ""))
+                named_pages.append((name, page))
+
+            requested_name = str(diagram_name or "").strip()
+            if requested_name:
+                matches = [
+                    page
+                    for name, page in named_pages
+                    if name == requested_name
+                ]
+                if not matches:
+                    available = ", ".join(
+                        sorted(name for name, _ in named_pages if name)
+                    ) or "none"
+                    raise RuntimeError(
+                        f"Diagram not found: {requested_name}. "
+                        f"Available diagrams: {available}"
+                    )
+                if len(matches) > 1:
+                    raise RuntimeError(
+                        f"Multiple diagrams matched: {requested_name}"
+                    )
+                selected_page = matches[0]
+                selected_name = requested_name
+            else:
+                if not named_pages:
+                    raise RuntimeError(
+                        "No single-line diagram is available in the Graphics Board"
+                    )
+                if len(named_pages) > 1:
+                    available = ", ".join(
+                        sorted(name for name, _ in named_pages if name)
+                    )
+                    raise RuntimeError(
+                        "Multiple single-line diagrams are available; provide "
+                        f"diagram_name. Available diagrams: {available}"
+                    )
+                selected_name, selected_page = named_pages[0]
+
+            previous_diagram = app.GetCurrentDiagram()
+            try:
+                show_code = graphics_board.Show(selected_page)
+                if show_code not in (None, 0):
+                    raise RuntimeError(f"Could not show export diagram: {show_code}")
+
+                export_command = app.GetFromStudyCase("ComWr")
+                if export_command is None:
+                    raise RuntimeError("ComWr export command is unavailable")
+                export_command.SetAttribute("iopt_rd", "pdf")
+                export_command.SetAttribute("iopt_savas", 0)
+                export_command.SetAttribute("f", file_path)
+
+                export_code = export_command.Execute()
+                if export_code not in (None, 0):
+                    raise RuntimeError(
+                        f"ComWr.Execute() returned error code {export_code}"
+                    )
+                if not os.path.isfile(file_path):
+                    raise RuntimeError(
+                        "ComWr reported success but did not create the PDF file"
+                    )
+            finally:
+                if previous_diagram is not None:
+                    try:
+                        restore_code = graphics_board.Show(previous_diagram)
+                        if restore_code not in (None, 0):
+                            raise RuntimeError(f"error code {restore_code}")
+                    except Exception as restore_exc:
+                        restore_warning = (
+                            f" Warning: could not restore previous diagram: {restore_exc}"
+                        )
+
+            log.ok(f"Grid diagram exported to PDF → {file_path}")
+            return True, (
+                f"Grid diagram '{selected_name}' exported to {file_path}"
+                + restore_warning
+            )
+        except Exception as exc:
+            log.error(f"Grid PDF export failed: {exc}")
+            return False, str(exc) + restore_warning
+
+    @classmethod
     def import_project(cls, file_path: str, open_digsilent: bool = True) -> tuple[bool, str]:
         """
         Import a .pfd project file into PowerFactory and activate it.
@@ -798,24 +1059,11 @@ class DIgSILENTAgent:
         (success, message)
         """
         file_path = checked_path(file_path, purpose="file_path")
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         if not os.path.isfile(file_path):
             return False, f"File not found: {file_path}"
 
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             Pfdimport = app.GetFromStudyCase("ComPfdimport")
             if Pfdimport is None:
@@ -867,21 +1115,8 @@ class DIgSILENTAgent:
         -------
         (success, message)
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             objects = app.GetCalcRelevantObjects(object_name)
             if not objects:
@@ -947,8 +1182,438 @@ class DIgSILENTAgent:
             return False, str(e)
 
     # ──────────────────────────────────────────────────────────────
-    # ADD BUS - create a verified ElmTerm in an active grid
+    # COMPONENT MANAGEMENT
     # ──────────────────────────────────────────────────────────────
+
+    @classmethod
+    def create_grid_with_buses(
+        cls,
+        grid_name: str,
+        nominal_frequency_hz: float,
+        buses: list[dict[str, Any]],
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Preview or create one ElmNet and its initial ElmTerm objects."""
+        grid_name = str(grid_name or "").strip()
+        project = None
+        grid = None
+        created_grid = None
+        created_buses = []
+        created_folders = []
+        activated_grid = False
+
+        def failure(message, **extra):
+            result = {
+                "success": False,
+                "applied": False,
+                "grid_created": False,
+                "grid_activated": False,
+                "buses_created": 0,
+                "message": message,
+            }
+            result.update(extra)
+            return result
+
+        if not grid_name:
+            return failure("grid_name must not be empty")
+        if len(grid_name) > cls._max_loc_name_length:
+            return failure(
+                "grid_name must be at most "
+                f"{cls._max_loc_name_length} characters"
+            )
+        if isinstance(nominal_frequency_hz, bool):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        try:
+            frequency = float(nominal_frequency_hz)
+        except (TypeError, ValueError):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        if frequency not in (50.0, 60.0):
+            return failure("nominal_frequency_hz must be 50 or 60")
+        if not isinstance(buses, list) or not buses:
+            return failure("buses must be a non-empty list")
+        if len(buses) > 100:
+            return failure("buses must contain at most 100 entries")
+
+        definitions = []
+        seen_names = set()
+        allowed_fields = {
+            "name",
+            "nominal_voltage_kv",
+            "out_of_service",
+        }
+        for index, bus in enumerate(buses):
+            if not isinstance(bus, dict):
+                return failure(f"buses[{index}] must be an object")
+            missing = {"name", "nominal_voltage_kv"} - set(bus)
+            unexpected = set(bus) - allowed_fields
+            if missing:
+                return failure(
+                    f"buses[{index}] is missing: {', '.join(sorted(missing))}"
+                )
+            if unexpected:
+                return failure(
+                    f"buses[{index}] has unsupported fields: "
+                    + ", ".join(sorted(unexpected))
+                )
+            name = str(bus["name"] or "").strip()
+            if not name:
+                return failure(f"buses[{index}].name must not be empty")
+            if len(name) > cls._max_loc_name_length:
+                return failure(
+                    f"buses[{index}].name must be at most "
+                    f"{cls._max_loc_name_length} characters"
+                )
+            key = name.casefold()
+            if key in seen_names:
+                return failure(f"Duplicate bus name: {name}")
+            seen_names.add(key)
+            raw_voltage = bus["nominal_voltage_kv"]
+            if isinstance(raw_voltage, bool):
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a number"
+                )
+            try:
+                voltage = float(raw_voltage)
+            except (TypeError, ValueError):
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a number"
+                )
+            if not math.isfinite(voltage) or voltage <= 0:
+                return failure(
+                    f"buses[{index}].nominal_voltage_kv must be a finite "
+                    "positive number"
+                )
+            out_of_service = bus.get("out_of_service", False)
+            if not isinstance(out_of_service, bool):
+                return failure(
+                    f"buses[{index}].out_of_service must be a boolean"
+                )
+            definitions.append({
+                "name": name,
+                "nominal_voltage_kv": voltage,
+                "out_of_service": out_of_service,
+            })
+
+        confirmation_prefix = (
+            f"CREATE GRID {grid_name} {frequency:g}Hz WITH "
+            f"{len(definitions)} BUSES"
+        )
+
+        try:
+            app = cls._get_application(open_digsilent)
+            project = app.GetActiveProject()
+            if project is None:
+                raise RuntimeError("No PowerFactory project is active")
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            grid_matches = cls._find_named_contents(
+                project,
+                grid_name,
+                "ElmNet",
+            )
+            if len(grid_matches) > 1:
+                raise RuntimeError(f"Multiple grids matched: {grid_name}")
+            grid = grid_matches[0] if grid_matches else None
+            active_grid_names = {
+                item.GetFullName()
+                for item in (app.GetCalcRelevantObjects("*.ElmNet") or [])
+            }
+            grid_is_active = (
+                grid is not None and grid.GetFullName() in active_grid_names
+            )
+            if grid is not None:
+                actual_frequency = float(grid.GetAttribute("frnom"))
+                if not math.isclose(
+                    actual_frequency,
+                    frequency,
+                    rel_tol=1e-6,
+                    abs_tol=1e-6,
+                ):
+                    raise RuntimeError(
+                        f"Existing grid frequency is {actual_frequency:g} Hz; "
+                        f"expected {frequency:g} Hz"
+                    )
+
+            reused_buses = []
+            pending_buses = []
+            if grid is None:
+                pending_buses = list(definitions)
+            else:
+                for definition in definitions:
+                    matches = cls._find_named_contents(
+                        grid,
+                        definition["name"],
+                        "ElmTerm",
+                    )
+                    if len(matches) > 1:
+                        raise RuntimeError(
+                            "Multiple buses matched: " + definition["name"]
+                        )
+                    if not matches:
+                        pending_buses.append(definition)
+                        continue
+                    existing = matches[0]
+                    actual_voltage = float(existing.GetAttribute("uknom"))
+                    actual_outserv = bool(int(existing.GetAttribute("outserv")))
+                    if not math.isclose(
+                        actual_voltage,
+                        definition["nominal_voltage_kv"],
+                        rel_tol=1e-6,
+                        abs_tol=1e-6,
+                    ):
+                        raise RuntimeError(
+                            f"Existing bus '{definition['name']}' is "
+                            f"{actual_voltage:g} kV; expected "
+                            f"{definition['nominal_voltage_kv']:g} kV"
+                        )
+                    if actual_outserv != definition["out_of_service"]:
+                        raise RuntimeError(
+                            f"Existing bus '{definition['name']}' has "
+                            f"out_of_service={actual_outserv}; expected "
+                            f"{definition['out_of_service']}"
+                        )
+                    reused_buses.append(existing.GetFullName())
+
+            data_folder = None
+            model_folder = None
+            destination_plan = None
+            if grid is None:
+                data_folders = cls._find_named_contents(
+                    project, "Network Data", "IntPrjfolder",
+                )
+                if len(data_folders) > 1:
+                    raise RuntimeError("Multiple Network Data folders were found")
+                data_folder = data_folders[0] if data_folders else None
+                if data_folder is None:
+                    model_folders = cls._find_named_contents(
+                        project, "Network Model", "IntPrjfolder",
+                    )
+                    if len(model_folders) > 1:
+                        raise RuntimeError("Multiple Network Model folders were found")
+                    model_folder = model_folders[0] if model_folders else None
+                destination_plan = {
+                    "data_folder": (
+                        data_folder.GetFullName() if data_folder is not None else None
+                    ),
+                    "parent": (
+                        data_folder.GetFullName() if data_folder is not None
+                        else model_folder.GetFullName() if model_folder is not None
+                        else project.GetFullName()
+                    ),
+                    "create_network_model": data_folder is None and model_folder is None,
+                    "create_network_data": data_folder is None,
+                }
+
+            required_confirmation = cls._creation_confirmation_token(
+                confirmation_prefix,
+                {
+                    "project": project.GetFullName(),
+                    "study_case": app.GetActiveStudyCase().GetFullName(),
+                    "grid_name": grid_name,
+                    "nominal_frequency_hz": frequency,
+                    "buses": definitions,
+                    "resolved_grid": grid.GetFullName() if grid is not None else None,
+                    "grid_will_be_created": grid is None,
+                    "grid_will_be_activated": not grid_is_active,
+                    "buses_to_create": pending_buses,
+                    "reused_buses": reused_buses,
+                    "destination_plan": destination_plan,
+                },
+            )
+
+            result = {
+                "success": True,
+                "applied": False,
+                "grid_created": False,
+                "grid_activated": False,
+                "buses_created": 0,
+                "grid_will_be_created": grid is None,
+                "grid_will_be_activated": not grid_is_active,
+                "grid_name": grid_name,
+                "nominal_frequency_hz": frequency,
+                "bus_count": len(definitions),
+                "buses": definitions,
+                "buses_to_create": [
+                    definition["name"] for definition in pending_buses
+                ],
+                "reused_buses": reused_buses,
+                "destination_plan": destination_plan,
+                "confirmation_required": required_confirmation,
+                "message": (
+                    "Preview only; no grid, folder, or bus was created."
+                ),
+            }
+            if not confirmation:
+                return result
+            if confirmation != required_confirmation:
+                return failure(
+                    f"confirmation must exactly match: {required_confirmation}"
+                )
+            if grid is not None and not pending_buses and grid_is_active:
+                result.update({
+                    "message": "Grid and all requested buses already exist",
+                    "grid": grid.GetFullName(),
+                })
+                return result
+
+            if grid is None:
+                if data_folder is None:
+                    if model_folder is None:
+                        model_folder = project.CreateObject(
+                            "IntPrjfolder",
+                            "Network Model",
+                        )
+                        if model_folder is None:
+                            raise RuntimeError(
+                                "Could not create Network Model folder"
+                            )
+                        created_folders.append((project, model_folder))
+                    data_folder = model_folder.CreateObject(
+                        "IntPrjfolder",
+                        "Network Data",
+                    )
+                    if data_folder is None:
+                        raise RuntimeError("Could not create Network Data folder")
+                    created_folders.append((model_folder, data_folder))
+
+                grid = data_folder.CreateObject("ElmNet", grid_name)
+                if grid is None:
+                    raise RuntimeError(f"Could not create grid: {grid_name}")
+                created_grid = grid
+                cls._set_and_verify_attributes(
+                    grid,
+                    {"frnom": frequency},
+                    "Grid",
+                )
+                if str(grid.GetAttribute("loc_name")) != grid_name:
+                    raise RuntimeError(
+                        f"PowerFactory did not retain grid name: {grid_name}"
+                    )
+
+            if not grid_is_active:
+                activation_code = grid.Activate()
+                if activation_code not in (None, 0):
+                    raise RuntimeError(
+                        "Could not activate grid: "
+                        f"{grid_name} (error code {activation_code})"
+                    )
+                activated_grid = True
+                active_grid_names = {
+                    item.GetFullName()
+                    for item in (app.GetCalcRelevantObjects("*.ElmNet") or [])
+                }
+                if grid.GetFullName() not in active_grid_names:
+                    raise RuntimeError(
+                        "Grid activation did not make the grid "
+                        f"calculation-relevant: {grid_name}"
+                    )
+
+            for definition in pending_buses:
+                bus = grid.CreateObject("ElmTerm", definition["name"])
+                if bus is None:
+                    raise RuntimeError(
+                        f"Could not create bus: {definition['name']}"
+                    )
+                created_buses.append(bus)
+                cls._set_and_verify_attributes(
+                    bus,
+                    {
+                        "uknom": definition["nominal_voltage_kv"],
+                        "outserv": int(definition["out_of_service"]),
+                    },
+                    "Bus",
+                )
+                if str(bus.GetAttribute("loc_name")) != definition["name"]:
+                    raise RuntimeError(
+                        "PowerFactory did not retain bus name: "
+                        + definition["name"]
+                    )
+
+            if created_grid is not None:
+                message = (
+                    f"Created and activated grid '{grid_name}' with "
+                    f"{len(created_buses)} bus(es)"
+                )
+            elif activated_grid and not created_buses:
+                message = f"Activated existing grid '{grid_name}'"
+            else:
+                message = (
+                    f"Added {len(created_buses)} bus(es) to grid "
+                    f"'{grid_name}'"
+                )
+
+            result.update({
+                "applied": True,
+                "grid_created": created_grid is not None,
+                "grid_activated": activated_grid,
+                "buses_created": len(created_buses),
+                "grid": grid.GetFullName(),
+                "created_buses": [
+                    bus.GetFullName() for bus in created_buses
+                ],
+                "message": message,
+            })
+            return result
+
+        except Exception as exc:
+            for bus in reversed(created_buses):
+                try:
+                    bus.Delete()
+                except Exception:
+                    pass
+            if activated_grid:
+                try:
+                    grid.Deactivate()
+                except Exception:
+                    pass
+            if created_grid is not None:
+                try:
+                    created_grid.Delete()
+                except Exception:
+                    pass
+            for parent, folder in reversed(created_folders):
+                try:
+                    if not (folder.GetContents("*", 0) or []):
+                        folder.Delete()
+                except Exception:
+                    pass
+
+            remaining = []
+            try:
+                if created_grid is not None and cls._find_named_contents(
+                    project,
+                    grid_name,
+                    "ElmNet",
+                ):
+                    remaining.append(grid_name)
+                elif grid is not None:
+                    for bus in created_buses:
+                        name = str(bus.GetAttribute("loc_name"))
+                        if cls._find_named_contents(grid, name, "ElmTerm"):
+                            remaining.append(name)
+                for parent, folder in created_folders:
+                    name = str(folder.GetAttribute("loc_name"))
+                    if cls._find_named_contents(parent, name, "IntPrjfolder"):
+                        remaining.append(name)
+                if activated_grid and created_grid is None:
+                    active_names = {
+                        item.GetFullName()
+                        for item in (
+                            app.GetCalcRelevantObjects("*.ElmNet") or []
+                        )
+                    }
+                    if grid.GetFullName() in active_names:
+                        remaining.append(f"{grid_name} (active)")
+            except Exception:
+                remaining.append("rollback verification failed")
+            return failure(
+                str(exc),
+                rolled_back=not remaining,
+                remaining_objects=remaining,
+            )
+
     @staticmethod
     def _select_grid(app, grid_name: str):
         grids = app.GetCalcRelevantObjects("*.ElmNet") or []
@@ -989,14 +1654,11 @@ class DIgSILENTAgent:
     @staticmethod
     def _select_bus(grid, bus_name: str):
         requested = str(bus_name or "").strip()
-        buses = grid.GetContents("*.ElmTerm", 1) or []
-
-        matches = [
-            bus
-            for bus in buses
-            if str(bus.GetAttribute("loc_name")).casefold()
-            == requested.casefold()
-        ]
+        matches = DIgSILENTAgent._find_named_contents(
+            grid,
+            requested,
+            "ElmTerm",
+        )
 
         if not matches:
             raise RuntimeError(
@@ -1062,6 +1724,29 @@ class DIgSILENTAgent:
 
     @staticmethod
     def _set_and_verify_attributes(element, expected, component_label):
+        for attribute, value in expected.items():
+            element.SetAttribute(attribute, value)
+            DIgSILENTAgent._verify_attributes(
+                element,
+                {attribute: value},
+                component_label,
+                "immediately after assignment",
+            )
+
+        return DIgSILENTAgent._verify_attributes(
+            element,
+            expected,
+            component_label,
+            "after all assignments",
+        )
+
+    @staticmethod
+    def _verify_attributes(
+        element,
+        expected,
+        component_label,
+        stage="",
+    ):
         import math
 
         labels = {
@@ -1075,9 +1760,6 @@ class DIgSILENTAgent:
             "typ_id": f"{component_label.lower()} type",
         }
 
-        for attribute, value in expected.items():
-            element.SetAttribute(attribute, value)
-
         actual = {}
         for attribute, expected_value in expected.items():
             actual_value = element.GetAttribute(attribute)
@@ -1088,8 +1770,8 @@ class DIgSILENTAgent:
                     matches = math.isclose(
                         float(actual_value),
                         expected_value,
-                        rel_tol=1e-9,
-                        abs_tol=1e-9,
+                        rel_tol=1e-6,
+                        abs_tol=1e-6,
                     )
                 elif hasattr(expected_value, "GetFullName"):
                     matches = (
@@ -1105,27 +1787,39 @@ class DIgSILENTAgent:
             if not matches:
                 raise RuntimeError(
                     "PowerFactory did not retain the "
-                    f"{labels[attribute]}"
+                    f"{labels.get(attribute, attribute)}: "
+                    f"expected {expected_value!r}, got {actual_value!r}"
+                    + (f" {stage}" if stage else "")
                 )
 
         return actual
 
-    @staticmethod
+    @classmethod
     def _rollback_connected_element(
+        cls,
         grid,
         buses,
         element,
         cubicles,
         class_name: str,
         element_name: str,
-        cubicle_names,
     ) -> bool:
         if not isinstance(buses, (list, tuple)):
             buses = (buses,)
         if not isinstance(cubicles, (list, tuple)):
             cubicles = (cubicles,)
-        if not isinstance(cubicle_names, (list, tuple)):
-            cubicle_names = (cubicle_names,)
+        try:
+            retained_element_name = (
+                str(element.GetAttribute("loc_name"))
+                if element is not None
+                else element_name
+            )
+            retained_cubicle_names = tuple(
+                str(cubicle.GetAttribute("loc_name"))
+                for cubicle in cubicles
+            )
+        except Exception:
+            return False
 
         for created_object in (element, *cubicles):
             if created_object is not None:
@@ -1135,25 +1829,53 @@ class DIgSILENTAgent:
                     pass
 
         try:
-            remaining_elements = (
-                grid.GetContents(f"*.{class_name}", 1) or []
-            )
-            element_exists = any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == element_name.casefold()
-                for obj in remaining_elements
-            )
+            element_exists = bool(cls._find_named_contents(
+                grid,
+                retained_element_name,
+                class_name,
+            ))
             cubicle_exists = any(
-                any(
-                    str(obj.GetAttribute("loc_name")).casefold()
-                    == cubicle_name.casefold()
-                    for obj in (
-                        bus.GetContents("*.StaCubic", 1) or []
-                    )
+                cls._find_named_contents(
+                    bus,
+                    cubicle_name,
+                    "StaCubic",
                 )
-                for bus, cubicle_name in zip(buses, cubicle_names)
+                for bus, cubicle_name in zip(
+                    buses,
+                    retained_cubicle_names,
+                )
             )
             return not element_exists and not cubicle_exists
+        except Exception:
+            return False
+
+    @classmethod
+    def _generated_cubicle_names(cls, element_name: str, count: int):
+        return tuple(
+            (
+                f"{element_name} Cubicle"
+                + (f" {index}" if count > 1 else "")
+            )[:cls._max_loc_name_length]
+            for index in range(1, count + 1)
+        )
+
+    @classmethod
+    def _is_generated_cubicle(cls, cubicle, expected_name: str) -> bool:
+        try:
+            if (
+                str(cubicle.GetAttribute("loc_name")).strip()
+                != expected_name.strip()
+            ):
+                return False
+            contents = cubicle.GetContents("*", 0) or []
+            if len(contents) != 1:
+                return False
+            switch = contents[0]
+            return (
+                switch.GetClassName() == "StaSwitch"
+                and str(switch.GetAttribute("loc_name")) == "Switch"
+                and switch.GetAttribute("aUsage") == "cbk"
+            )
         except Exception:
             return False
 
@@ -1171,14 +1893,7 @@ class DIgSILENTAgent:
     ):
         grid = cls._select_grid(app, grid_name)
 
-        existing_elements = (
-            grid.GetContents(f"*.{class_name}", 1) or []
-        )
-        if any(
-            str(obj.GetAttribute("loc_name")).casefold()
-            == element_name.casefold()
-            for obj in existing_elements
-        ):
+        if cls._find_named_contents(grid, element_name, class_name):
             raise RuntimeError(
                 f"{element_label} already exists in the selected grid: "
                 f"{element_name}"
@@ -1203,20 +1918,16 @@ class DIgSILENTAgent:
                 "The two terminals must use different buses"
             )
 
-        cubicle_names = tuple(
-            f"{element_name} Cubicle"
-            + (f" {index}" if len(buses) > 1 else "")
-            for index in range(1, len(buses) + 1)
+        cubicle_names = cls._generated_cubicle_names(
+            element_name,
+            len(buses),
         )
 
         for bus, cubicle_name in zip(buses, cubicle_names):
-            existing_cubicles = (
-                bus.GetContents("*.StaCubic", 1) or []
-            )
-            if any(
-                str(obj.GetAttribute("loc_name")).casefold()
-                == cubicle_name.casefold()
-                for obj in existing_cubicles
+            if cls._find_named_contents(
+                bus,
+                cubicle_name,
+                "StaCubic",
             ):
                 raise RuntimeError(
                     f"Cubicle already exists on bus: {cubicle_name}"
@@ -1302,7 +2013,6 @@ class DIgSILENTAgent:
                     tuple(cubicles),
                     class_name,
                     element_name,
-                    cubicle_names,
                 )
                 message += f" | rolled_back={rolled_back}"
 
@@ -1319,24 +2029,13 @@ class DIgSILENTAgent:
         if layout is None:
             raise RuntimeError("Diagram Layout Tool is unavailable")
 
-        start_elements = app.GetFromStudyCase(
-            "Set - SGL Layout - K-neighbourhood.SetSelect"
-        )
-        if start_elements is None:
-            raise RuntimeError(
-                "Diagram Layout Tool start-element set is unavailable"
-            )
+        def restore_state():
+            desktop.Freeze()
 
-        existing_start_elements = list(start_elements.All() or [])
-
+        desktop.Unfreeze()
         try:
-            start_elements.Clear()
-            start_elements.AddRef(component)
-
-            desktop.Unfreeze()
-
             layout.iAction = 1
-            layout.insertionMode = 0
+            layout.insertionMode = 1
 
             result = layout.Execute()
             if result not in (0, None):
@@ -1344,10 +2043,14 @@ class DIgSILENTAgent:
                     f"Diagram Layout Tool failed with error code {result}"
                 )
             app.Rebuild()
-        finally:
-            start_elements.Clear()
-            for existing in existing_start_elements:
-                start_elements.AddRef(existing)
+        except BaseException:
+            try:
+                restore_state()
+            except Exception:
+                pass
+            raise
+        else:
+            restore_state()
 
         graphics = cls._find_component_graphics(app, component)
         if not graphics:
@@ -1404,48 +2107,27 @@ class DIgSILENTAgent:
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
 
-        schemas = {
-            "bus": ({"nominal_voltage_kv"}, set()),
-            "load": (
-                {"bus_name", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "generator": (
-                {"bus_name", "template_generator", "active_power_mw"},
-                {"reactive_power_mvar"},
-            ),
-            "line": (
-                {
-                    "bus1_name",
-                    "bus2_name",
-                    "template_line",
-                    "length_km",
-                },
-                set(),
-            ),
-            "transformer": (
-                {
-                    "high_voltage_bus_name",
-                    "low_voltage_bus_name",
-                    "template_transformer",
-                },
-                set(),
-            ),
-        }
-
-        if kind not in schemas:
+        spec = cls._component_specs.get(kind)
+        if spec is None:
             return (
                 False,
                 f"Unsupported component type: {component_type}. "
-                f"Supported types: {', '.join(schemas)}",
+                f"Supported types: {', '.join(cls._component_specs)}",
             )
 
         if not isinstance(parameters, dict):
             return False, "parameters must be an object"
         if not name:
             return False, "component_name must not be empty"
+        if len(name) > cls._max_loc_name_length:
+            return (
+                False,
+                "component_name must be at most "
+                f"{cls._max_loc_name_length} characters",
+            )
 
-        required, optional = schemas[kind]
+        required = spec["required"]
+        optional = spec["optional"]
         supplied = set(parameters)
         missing = sorted(required - supplied)
         unexpected = sorted(supplied - required - optional)
@@ -1464,14 +2146,26 @@ class DIgSILENTAgent:
             )
 
         def required_text(key):
-            value = str(parameters[key] or "").strip()
+            raw_value = parameters[key]
+            value = "" if raw_value is None else str(raw_value).strip()
             if not value:
                 raise RuntimeError(f"{key} must not be empty")
             return value
 
-        def number(key, *, positive=False, non_negative=False):
+        def number(
+            key,
+            *,
+            positive=False,
+            non_negative=False,
+            default=None,
+        ):
+            raw_value = parameters.get(key)
+            if raw_value is None and default is not None:
+                raw_value = default
+            if isinstance(raw_value, bool):
+                raise RuntimeError(f"{key} must be a number")
             try:
-                value = float(parameters.get(key, 0.0))
+                value = float(raw_value)
             except (TypeError, ValueError) as exc:
                 raise RuntimeError(f"{key} must be a number") from exc
             if positive and (not math.isfinite(value) or value <= 0):
@@ -1483,74 +2177,33 @@ class DIgSILENTAgent:
             return value
 
         try:
-            template = None
+            class_name = spec["class_name"]
+            label = spec["label"]
+            buses = tuple(
+                required_text(parameter)
+                for parameter in spec["bus_parameters"]
+            )
+            connections = spec["connections"]
             outserv = int(bool(out_of_service))
-
-            if kind == "bus":
-                class_name, label = "ElmTerm", "Bus"
-                buses, connections = (), ()
-                attributes = {
-                    "uknom": number("nominal_voltage_kv", positive=True),
-                    "outserv": outserv,
-                }
-            elif kind == "load":
-                class_name, label = "ElmLod", "Load"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                attributes = {
-                    "plini": number("active_power_mw", non_negative=True),
-                    "qlini": number("reactive_power_mvar"),
-                    "outserv": outserv,
-                }
-            elif kind == "generator":
-                class_name, label = "ElmSym", "Generator"
-                buses, connections = (required_text("bus_name"),), ("bus1",)
-                template = (
-                    required_text("template_generator"),
-                    "generator",
-                    "synchronous-machine type",
+            attributes = {"outserv": outserv}
+            for attribute, parameter, rule, default in spec["numbers"]:
+                attributes[attribute] = number(
+                    parameter,
+                    positive=rule == "positive",
+                    non_negative=rule == "non_negative",
+                    default=default,
                 )
-                attributes = {
-                    "pgini": number("active_power_mw", non_negative=True),
-                    "qgini": number("reactive_power_mvar"),
-                    "outserv": outserv,
-                }
-            elif kind == "line":
-                class_name, label = "ElmLne", "Line"
-                buses = (
-                    required_text("bus1_name"),
-                    required_text("bus2_name"),
-                )
-                connections = ("bus1", "bus2")
-                template = (
-                    required_text("template_line"),
-                    "line",
-                    "line type",
-                )
-                attributes = {
-                    "dline": number("length_km", positive=True),
-                    "outserv": outserv,
-                }
-            else:
-                class_name, label = "ElmTr2", "Transformer"
-                buses = (
-                    required_text("high_voltage_bus_name"),
-                    required_text("low_voltage_bus_name"),
-                )
-                connections = ("bushv", "buslv")
-                template = (
-                    required_text("template_transformer"),
-                    "transformer",
-                    "transformer type",
-                )
-                attributes = {"outserv": outserv}
 
             if len(buses) == 2 and buses[0].casefold() == buses[1].casefold():
                 raise RuntimeError(f"{label} buses must be different")
 
             app = cls._get_application(open_digsilent)
             template_query = ""
-            if template:
-                template_query, template_label, type_label = template
+            if spec["template"]:
+                template_parameter, template_label, type_label = (
+                    spec["template"]
+                )
+                template_query = required_text(template_parameter)
                 attributes["typ_id"] = cls._get_template_type(
                     app,
                     template_query,
@@ -1586,52 +2239,40 @@ class DIgSILENTAgent:
 
             full_name = created.GetFullName()
             service_state = bool(int(actual["outserv"]))
-            if kind == "bus":
+            if not buses:
                 voltage = float(actual["uknom"])
                 grid_label = str(grid.GetAttribute("loc_name"))
                 log.ok(
                     f"Created bus '{name}' in grid '{grid_label}' "
                     f"at {voltage} kV"
                 )
-                details = f"nominal_voltage_kv={voltage}"
-            elif kind == "load":
-                log.ok(f"Created load '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | "
-                    f"active_power_mw={float(actual['plini'])} | "
-                    f"reactive_power_mvar={float(actual['qlini'])}"
-                )
-            elif kind == "generator":
-                log.ok(f"Created generator '{name}' on bus '{buses[0]}'")
-                details = (
-                    f"bus={buses[0]} | template={template_query} | "
-                    f"active_power_mw={float(actual['pgini'])} | "
-                    f"reactive_power_mvar={float(actual['qgini'])}"
-                )
-            elif kind == "line":
+            elif len(buses) == 1:
                 log.ok(
-                    f"Created line '{name}' between "
-                    f"'{buses[0]}' and '{buses[1]}'"
-                )
-                details = (
-                    f"bus1={buses[0]} | bus2={buses[1]} | "
-                    f"template={template_query} | "
-                    f"length_km={float(actual['dline'])}"
+                    f"Created {kind} '{name}' on bus '{buses[0]}'"
                 )
             else:
                 log.ok(
-                    f"Created transformer '{name}' between "
+                    f"Created {kind} '{name}' between "
                     f"'{buses[0]}' and '{buses[1]}'"
                 )
-                details = (
-                    f"high_voltage_bus={buses[0]} | "
-                    f"low_voltage_bus={buses[1]} | "
-                    f"template={template_query}"
+
+            details = [
+                f"{detail_name}={bus_name}"
+                for detail_name, bus_name in zip(
+                    spec["bus_details"],
+                    buses,
                 )
+            ]
+            if template_query:
+                details.append(f"template={template_query}")
+            details.extend(
+                f"{parameter}={float(actual[attribute])}"
+                for attribute, parameter, _, _ in spec["numbers"]
+            )
 
             return (
                 True,
-                f"Created {kind}: {full_name} | {details} | "
+                f"Created {kind}: {full_name} | {' | '.join(details)} | "
                 f"out_of_service={service_state} | "
                 f"graphics={graphics_status}",
             )
@@ -1650,38 +2291,43 @@ class DIgSILENTAgent:
         confirmation: str = "",
         open_digsilent: bool = True,
         update_graphics: bool = False,
-    ) -> tuple[bool, str]:
+    ) -> dict[str, Any]:
         """Preview or delete one exactly named supported grid component."""
-        component_types = {
-            "bus": ("ElmTerm", ()),
-            "load": ("ElmLod", ("bus1",)),
-            "generator": ("ElmSym", ("bus1",)),
-            "line": ("ElmLne", ("bus1", "bus2")),
-            "transformer": ("ElmTr2", ("bushv", "buslv")),
-        }
         kind = str(component_type or "").strip().lower()
         name = str(component_name or "").strip()
+        deleted = False
+        graphics_status = {
+            "requested": bool(update_graphics),
+            "matched": 0,
+            "deleted": 0,
+            "remaining": [],
+            "refresh": "not_requested",
+        }
 
-        if kind not in component_types:
-            return False, (
+        def result(success: bool, message: str) -> dict[str, Any]:
+            return {
+                "success": success,
+                "deleted": deleted,
+                "graphics": graphics_status,
+                "message": message,
+            }
+
+        spec = cls._component_specs.get(kind)
+        if spec is None:
+            return result(False, (
                 "component_type must be one of: "
-                + ", ".join(component_types)
-            )
+                + ", ".join(cls._component_specs)
+            ))
         if not name:
-            return False, "component_name must not be empty"
+            return result(False, "component_name must not be empty")
 
         try:
             app = cls._get_application(open_digsilent)
             grid = cls._select_grid(app, grid_name)
-            class_name, connection_attributes = component_types[kind]
+            class_name = spec["class_name"]
+            connection_attributes = spec["connections"]
 
-            matches = [
-                obj
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-                if str(obj.GetAttribute("loc_name")) == name
-            ]
+            matches = cls._find_named_contents(grid, name, class_name)
             if not matches:
                 raise RuntimeError(
                     f"{kind.capitalize()} not found in the selected grid: "
@@ -1693,12 +2339,17 @@ class DIgSILENTAgent:
                 )
 
             component = matches[0]
+            name = str(component.GetAttribute("loc_name"))
             cubicles = []
 
             if kind == "bus":
-                connected = (
-                    component.GetContents("*.StaCubic", 1) or []
-                )
+                connected = [
+                    cubicle
+                    for cubicle in (
+                        component.GetContents("*.StaCubic", 1) or []
+                    )
+                    if cubicle.GetAttribute("obj_id") is not None
+                ]
                 if connected:
                     raise RuntimeError(
                         "Bus has connected cubicles; delete its connected "
@@ -1710,13 +2361,31 @@ class DIgSILENTAgent:
                     if cubicle is not None and cubicle not in cubicles:
                         cubicles.append(cubicle)
 
-            required = f"DELETE {kind} {name}"
+            expected_cubicle_names = cls._generated_cubicle_names(
+                name,
+                len(connection_attributes),
+            )
+            generated_cubicles = [
+                cubicle
+                for cubicle, expected_name in zip(
+                    cubicles,
+                    expected_cubicle_names,
+                )
+                if cls._is_generated_cubicle(cubicle, expected_name)
+            ]
+            preserved_cubicles = [
+                cubicle
+                for cubicle in cubicles
+                if cubicle not in generated_cubicles
+            ]
+
+            required = f"DELETE {kind} {component.GetFullName()}"
 
             if not confirmation:
-                return True, (
+                return result(True, (
                     f"Preview only: {component.GetFullName()} | "
                     f"confirmation_required={required}"
-                )
+                ))
 
             if confirmation != required:
                 raise RuntimeError(
@@ -1725,7 +2394,7 @@ class DIgSILENTAgent:
 
             cubicle_locations = [
                 (cubicle.GetParent(), cubicle.GetFullName())
-                for cubicle in cubicles
+                for cubicle in generated_cubicles
             ]
 
             graphics = (
@@ -1733,33 +2402,26 @@ class DIgSILENTAgent:
                 if update_graphics
                 else []
             )
+            graphics_status["matched"] = len(graphics)
 
             graphic_locations = [
                 (graphic.GetParent(), graphic.GetFullName())
                 for graphic in graphics
             ]
 
-            if update_graphics:
-                desktop = app.GetDesktop()
-                if desktop is None:
-                    raise RuntimeError(
-                        "No active PowerFactory graphics desktop"
-                    )
-                desktop.Unfreeze()
-
             component.Delete()
 
-            still_exists = any(
-                str(obj.GetAttribute("loc_name")) == name
-                for obj in (
-                    grid.GetContents(f"*.{class_name}", 1) or []
-                )
-            )
+            still_exists = bool(cls._find_named_contents(
+                grid,
+                name,
+                class_name,
+            ))
             if still_exists:
                 raise RuntimeError(
                     "PowerFactory did not delete the component; "
                     "cubicles were left unchanged"
                 )
+            deleted = True
 
             for graphic in graphics:
                 try:
@@ -1767,7 +2429,7 @@ class DIgSILENTAgent:
                 except Exception:
                     pass
 
-            for cubicle in cubicles:
+            for cubicle in generated_cubicles:
                 try:
                     cubicle.Delete()
                 except Exception:
@@ -1795,43 +2457,61 @@ class DIgSILENTAgent:
                 )
             ]
 
+            graphics_status["deleted"] = (
+                len(graphics) - len(remaining_graphics)
+            )
+            graphics_status["remaining"] = remaining_graphics
+            cleanup_errors = []
+
             if remaining_graphics:
-                raise RuntimeError(
-                    "Component deleted, but graphical objects remain: "
+                cleanup_errors.append(
+                    "graphical objects remain: "
                     + ", ".join(remaining_graphics)
                 )
 
             if remaining_cubicles:
-                raise RuntimeError(
-                    "Component deleted, but connected cubicles remain: "
+                cleanup_errors.append(
+                    "connected cubicles remain: "
                     + ", ".join(remaining_cubicles)
                 )
-
-            graphics_refresh = "not_requested"
 
             if update_graphics:
                 try:
                     app.Rebuild()
-                    graphics_refresh = "rebuilt"
+                    graphics_status["refresh"] = "rebuilt"
                 except Exception as exc:
-                    graphics_refresh = f"failed:{exc}"
+                    graphics_status["refresh"] = f"failed:{exc}"
+                    cleanup_errors.append(
+                        f"graphical refresh failed: {exc}"
+                    )
+
+            if cleanup_errors:
+                message = "Component deleted, but " + "; ".join(
+                    cleanup_errors
+                )
+                log.error(f"Component deletion incomplete: {message}")
+                return result(False, message)
 
             message = f"Deleted {kind}: {name}"
+            if preserved_cubicles:
+                message += (
+                    f" | preserved_cubicles={len(preserved_cubicles)}"
+                )
             if update_graphics:
                 message += (
-                    f" | graphics_deleted={len(graphics)}"
-                    f" | graphics_refresh={graphics_refresh}"
+                    f" | graphics_deleted={graphics_status['deleted']}"
+                    f" | graphics_refresh={graphics_status['refresh']}"
                 )
             log.ok(message)
-            return True, message
+            return result(True, message)
 
         except Exception as exc:
             message = str(exc)
             log.error(f"Component deletion failed: {message}")
-            return False, message
+            return result(False, message)
 
     # ──────────────────────────────────────────────────────────────
-    # # LOAD FLOW — run ComLdf on the currently active study case
+    # LOAD FLOW — run ComLdf on the currently active study case
     # ──────────────────────────────────────────────────────────────
 
     @classmethod
@@ -1971,20 +2651,8 @@ class DIgSILENTAgent:
         run_label: str = "run_001",
     ) -> tuple[bool, str]:
         """Run a load flow (ComLdf) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             ldf = app.GetFromStudyCase('ComLdf')
             if ldf is None:
@@ -2013,20 +2681,8 @@ class DIgSILENTAgent:
     @classmethod
     def short_circuit(cls, open_digsilent: bool = True) -> tuple[bool, str]:
         """Run a short-circuit calculation (ComShc) on the currently active study case."""
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
         try:
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             shc = app.GetFromStudyCase('ComShc')
             if shc is None:
@@ -2039,6 +2695,267 @@ class DIgSILENTAgent:
         except Exception as e:
             log.error(f"Short-circuit calculation failed: {e}")
             return False, str(e)
+
+    @classmethod
+    def create_contingency(
+        cls,
+        case_name: str,
+        target_query: str,
+        action: str = "open",
+        time_s: float = 0.0,
+        event_name: str = "Switch Event",
+        folder_name: str = "Fault Cases",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Create one idempotent switch-based contingency definition."""
+        created_case = None
+        created_event = None
+        try:
+            case_name = str(case_name or "").strip()
+            target_query = str(target_query or "").strip()
+            event_name = str(event_name or "").strip()
+            folder_name = str(folder_name or "").strip()
+            if not case_name or not target_query or not event_name or not folder_name:
+                raise ValueError(
+                    "case_name, target_query, event_name, and folder_name are required"
+                )
+
+            action_name = str(action or "").strip().casefold()
+            actions = {"open": 0, "close": 1}
+            if action_name not in actions:
+                raise ValueError("action must be 'open' or 'close'")
+
+            time_s = float(time_s)
+            if not math.isfinite(time_s) or time_s < 0:
+                raise ValueError("time_s must be a finite non-negative number")
+
+            app = cls._get_application(open_digsilent)
+            project = app.GetActiveProject()
+            if project is None:
+                raise RuntimeError("No PowerFactory project is active")
+
+            folders = cls._find_named_contents(
+                project,
+                folder_name,
+                "IntFltcases",
+            )
+            if len(folders) != 1:
+                raise RuntimeError(
+                    f"Expected one contingency folder named '{folder_name}', found {len(folders)}"
+                )
+            folder = folders[0]
+
+            targets = app.GetCalcRelevantObjects(target_query) or []
+            if len(targets) != 1:
+                raise RuntimeError(
+                    f"Expected one target matching '{target_query}', found {len(targets)}"
+                )
+            target = targets[0]
+
+            cases = cls._find_named_contents(folder, case_name, "IntEvt")
+            if len(cases) > 1:
+                raise RuntimeError(f"Multiple contingency cases matched: {case_name}")
+            if cases:
+                fault_case = cases[0]
+            else:
+                fault_case = folder.CreateObject("IntEvt", case_name)
+                if fault_case is None:
+                    raise RuntimeError(f"Could not create contingency case: {case_name}")
+                created_case = fault_case
+
+            events = cls._find_named_contents(fault_case, event_name, "EvtSwitch")
+            if len(events) > 1:
+                raise RuntimeError(f"Multiple switch events matched: {event_name}")
+            if events:
+                event = events[0]
+                matches = (
+                    event.GetAttribute("p_target").GetFullName()
+                    == target.GetFullName()
+                    and int(event.GetAttribute("i_switch")) == actions[action_name]
+                    and math.isclose(float(event.GetAttribute("time")), time_s)
+                    and not bool(event.GetAttribute("outserv"))
+                )
+                if not matches:
+                    raise RuntimeError(
+                        f"Switch event already exists with different settings: {event_name}"
+                    )
+                created = False
+            else:
+                event = fault_case.CreateObject("EvtSwitch", event_name)
+                if event is None:
+                    raise RuntimeError(f"Could not create switch event: {event_name}")
+                created_event = event
+                cls._set_and_verify_attributes(
+                    event,
+                    {
+                        "p_target": target,
+                        "time": time_s,
+                        "i_switch": actions[action_name],
+                        "outserv": 0,
+                    },
+                    "Switch event",
+                )
+                created = True
+
+            def identity(obj):
+                return {
+                    "name": obj.GetAttribute("loc_name"),
+                    "class_name": obj.GetClassName(),
+                    "full_name": obj.GetFullName(),
+                }
+
+            return {
+                "success": True,
+                "message": (
+                    "Contingency switch event created"
+                    if created
+                    else "Contingency switch event already existed"
+                ),
+                "created": created,
+                "case": identity(fault_case),
+                "event": identity(event),
+                "target": identity(target),
+                "action": action_name,
+                "time_s": time_s,
+            }
+        except Exception as e:
+            for label, created_object in (
+                ("switch event", created_event),
+                ("contingency case", created_case),
+            ):
+                if created_object is None:
+                    continue
+                try:
+                    created_object.Delete()
+                except Exception as rollback_error:
+                    log.error(
+                        f"Could not roll back created {label}: {rollback_error}"
+                    )
+            log.error(f"Contingency creation failed: {e}")
+            return {"success": False, "message": str(e)}
+
+    @classmethod
+    def run_contingency_analysis(
+        cls,
+        open_digsilent: bool = True,
+        calculation_method: str = "configured",
+    ) -> dict[str, Any]:
+        """Execute ComSimoutage, optionally selecting its calculation method."""
+        try:
+            modes = {
+                "configured": None,
+                "ac": 0,
+                "dc": 1,
+                "ac_linearised": 2,
+                "linearised_screening": 3,
+            }
+            mode = calculation_method.strip().casefold()
+            if mode not in modes:
+                raise ValueError(
+                    "calculation_method must be one of: "
+                    + ", ".join(modes)
+                )
+
+            app = cls._get_application(open_digsilent)
+            if app.GetActiveStudyCase() is None:
+                raise RuntimeError("No PowerFactory study case is active")
+
+            command = app.GetFromStudyCase("ComSimoutage")
+            if command is None:
+                raise RuntimeError(
+                    "ComSimoutage is unavailable in the active study case; "
+                    "check the PowerFactory licence and command configuration"
+                )
+
+            def attribute(name: str):
+                try:
+                    value = command.GetAttribute(name)
+                    if value is not None:
+                        return value
+                except Exception:
+                    pass
+                return getattr(command, name, None)
+
+            selected_method = modes[mode]
+            previous_method = None
+            if selected_method is not None:
+                previous_method = attribute("iopt_Linear")
+
+            result = None
+            try:
+                if selected_method is not None:
+                    cls._set_and_verify_attributes(
+                        command,
+                        {"iopt_Linear": selected_method},
+                        "Contingency Analysis",
+                    )
+                error_code = command.Execute()
+                succeeded = error_code in (0, None)
+
+                if not succeeded:
+                    log.error(
+                        "Contingency analysis failed: ComSimoutage returned "
+                        f"error code {error_code}"
+                    )
+
+                # Capture the settings used by this run before restoring an
+                # explicit method selection below.
+                result = {
+                    "success": succeeded,
+                    "message": (
+                        "Configured contingency analysis completed"
+                        if succeeded
+                        else f"ComSimoutage returned error code {error_code}"
+                    ),
+                    "execution_code": error_code,
+                    "command": {
+                        "name": attribute("loc_name"),
+                        "class_name": command.GetClassName(),
+                        "full_name": command.GetFullName(),
+                    },
+                    "settings": {
+                        "mode": mode,
+                        "data_source": attribute("dat_src"),
+                        "calculation_method": attribute("iopt_method"),
+                        "linear_method": attribute("iopt_Linear"),
+                        "linear_option": attribute("copt_Linear"),
+                        "combine_ac_dc": attribute("iACDCCombine"),
+                        "dynamic_contingencies": attribute("dynamicCase"),
+                        "mode_restored": True,
+                    },
+                }
+            finally:
+                if selected_method is not None:
+                    try:
+                        cls._set_and_verify_attributes(
+                            command,
+                            {"iopt_Linear": previous_method},
+                            "Contingency Analysis",
+                        )
+                    except Exception as restore_error:
+                        # The run already happened, and its verdict is what the
+                        # caller asked for -- losing it to report a restore
+                        # failure would hide both the outcome and the
+                        # execution code. Keep the result and say the study
+                        # case was left on the explicit mode. Swallowing the
+                        # error here also stops it replacing an exception the
+                        # try block is already propagating.
+                        log.error(
+                            "Could not restore iopt_Linear to "
+                            f"{previous_method!r}: {restore_error}"
+                        )
+                        if result is not None:
+                            result["settings"]["mode_restored"] = False
+
+            # A native failure keeps the same shape as a success, so a caller
+            # can read execution_code instead of parsing the message text.
+            return result
+        except Exception as e:
+            log.error(f"Contingency analysis failed: {e}")
+            return {
+                "success": False,
+                "message": str(e),
+            }
 
     # ──────────────────────────────────────────────────────────────
     # CREATE STUDY CASE — create/activate case without simulation
@@ -2062,11 +2979,6 @@ class DIgSILENTAgent:
         If request_id is provided and repeated, the cached result is returned
         without executing creation/activation logic again.
         """
-        global pf
-        if pf is None:
-            _ensure_powerfactory_on_path()
-            import powerfactory as pf
-
         try:
             case_name = (case_name or "").strip()
             base_study_case = (base_study_case or "").strip() or "0. Base"
@@ -2088,15 +3000,7 @@ class DIgSILENTAgent:
                     log.warn(f"create_study_case replay ignored for request_id='{request_id}'")
                     return ok, replay_msg
 
-            if cls._shared_app is None:
-                app = pf.GetApplicationExt()
-                if app is None:
-                    raise RuntimeError("GetApplicationExt() returned None")
-                cls._apply_show_preference(app, open_digsilent)
-                cls._shared_app = app
-            else:
-                app = cls._shared_app
-                cls._apply_show_preference(app, open_digsilent)
+            app = cls._get_application(open_digsilent)
 
             if cls._shared_project_path != project_path:
                 project = app.ActivateProject(project_path)

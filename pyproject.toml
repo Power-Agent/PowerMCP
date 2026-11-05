@@ -10,20 +10,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "powermcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "PowerMCP contributors" }]
 keywords = ["mcp", "power systems", "energy", "simulation", "pandapower", "pypsa", "powerworld", "opendss", "pss/e"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
 ]
 
@@ -46,10 +47,12 @@ dependencies = [
     "mcp>=2,<3",
     # powerio supplies the conversion server, module model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses the typed PowerIO 0.11.2 module APIs.
+    # PowerMCP uses the typed PowerIO module APIs and their public names
+    # (PioModule.type_name, powerio.diagnostic_records). PowerIO 0.11.8
+    # requires Python 3.11, which sets this package's floor too.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.11.2,<0.12",
+    "powerio[mcp,matrix]>=0.11.8,<0.12",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
@@ -59,7 +62,6 @@ dependencies = [
     "rich>=13",
     "tomli-w>=1.0",
     "tomlkit>=0.13",
-    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -136,7 +138,22 @@ packages = ["powermcp"]
 "PSSE"         = "powermcp/_servers/PSSE"
 "PSLF"         = "powermcp/_servers/PSLF"
 "PowerWorld"   = "powermcp/_servers/PowerWorld"
-"PowerFactory" = "powermcp/_servers/PowerFactory"
+"PowerFactory/Agent_DIgSILENT.py" = "powermcp/_servers/PowerFactory/Agent_DIgSILENT.py"
+"PowerFactory/evemtbench.py" = "powermcp/_servers/PowerFactory/evemtbench.py"
+"PowerFactory/IEEE39.pfd" = "powermcp/_servers/PowerFactory/IEEE39.pfd"
+"PowerFactory/INSTALL.txt" = "powermcp/_servers/PowerFactory/INSTALL.txt"
+"PowerFactory/MCP_PowerFactory.py" = "powermcp/_servers/PowerFactory/MCP_PowerFactory.py"
+"PowerFactory/README.md" = "powermcp/_servers/PowerFactory/README.md"
+"PowerFactory/references" = "powermcp/_servers/PowerFactory/references"
+"PowerFactory/data/evemtbench_transformers.json" = "powermcp/_servers/PowerFactory/data/evemtbench_transformers.json"
+"PowerFactory/data/evemtbench_overhead_lines.json" = "powermcp/_servers/PowerFactory/data/evemtbench_overhead_lines.json"
+"PowerFactory/data/evemtbench_underground_cables.json" = "powermcp/_servers/PowerFactory/data/evemtbench_underground_cables.json"
+"PowerFactory/data/evemtbench_external_grids.json" = "powermcp/_servers/PowerFactory/data/evemtbench_external_grids.json"
+"PowerFactory/data/evemtbench_loads.json" = "powermcp/_servers/PowerFactory/data/evemtbench_loads.json"
+"PowerFactory/data/evemtbench_synchronous_machines.json" = "powermcp/_servers/PowerFactory/data/evemtbench_synchronous_machines.json"
+"PowerFactory/functions_overview.txt" = "powermcp/_servers/PowerFactory/functions_overview.txt"
+"PowerFactory/requirements.txt" = "powermcp/_servers/PowerFactory/requirements.txt"
+"PowerFactory/simulation_config.example.json" = "powermcp/_servers/PowerFactory/simulation_config.example.json"
 "LTSpice"      = "powermcp/_servers/LTSpice"
 "PLEXOSDB"     = "powermcp/_servers/PLEXOSDB"
 
@@ -152,6 +169,9 @@ include = [
 ]
 exclude = [
     "**/__pycache__", "**/*.py[cod]", "**/.pytest_cache",
-    "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests",
+    "PSCAD/tests", "HOPE/tests", "PLEXOSDB/tests", "PSSE/tests",
+    "PSCAD/conftest.py", "surge/conftest.py",
+    "**/PowerFactory/evidence", "**/PowerFactory/POWERFACTORY_MCP_*_REPORT.md",
+    "**/PowerFactory/tests",
     ".venv*", "**/.venv*", ".uv-build-cache", "**/.uv-build-cache",
 ]

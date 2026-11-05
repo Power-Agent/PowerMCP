@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-synchronous-machines-table-13-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [13]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "sampling": {
+    "interval_distribution": "uniform",
+    "intervals_are_closed": true,
+    "seeded": true,
+    "dependency_order_required": true
+  },
+  "rated_voltage_rule": [
+    {"maximum_rated_power_mva": 40.0, "rated_voltage_kv": 6.3},
+    {"maximum_rated_power_mva": 200.0, "rated_voltage_kv": 10.5},
+    {"maximum_rated_power_mva": 800.0, "rated_voltage_kv": 21.0},
+    {"maximum_rated_power_mva": null, "rated_voltage_kv": 27.0}
+  ],
+  "classes": {
+    "salient_pole": {
+      "rated_apparent_power_mva": {"min": 17.5, "max": 700.0},
+      "rated_power_factor": {"min": 0.8, "max": 0.95},
+      "parameters": {
+        "xd_subtransient_pu": {"min": 0.12, "max": 0.3},
+        "xq_subtransient_multiplier_of_xd_subtransient": {"min": 1.0, "max": 3.0},
+        "xd_transient_pu": {"min": 0.2, "max": 0.45, "minimum_multiplier_of_xd_subtransient": 1.01},
+        "xq_transient_pu": null,
+        "xd_synchronous_pu": {"min": 0.8, "max": 1.4, "minimum_multiplier_of_xd_transient": 1.01},
+        "xq_synchronous_multiplier_of_xd_synchronous": {"min": 0.6, "max": 0.7, "minimum_multiplier_of_xq_subtransient": 1.01},
+        "td_transient_s": {"min": 0.7, "max": 2.2},
+        "tq_transient_s": null,
+        "td_subtransient_s": {"min": 0.02, "max": 0.1},
+        "tq_subtransient_s": {"min": 0.017, "max": 0.035},
+        "zero_sequence_reactance_pu": {"min": 0.05, "max": 0.2},
+        "zero_sequence_resistance_pu": {"value": 0.0},
+        "negative_sequence_reactance_multiplier_of_xd_subtransient": {"min": 0.9, "max": 1.1},
+        "negative_sequence_resistance_pu": {"min": 0.014, "max": 0.06},
+        "acceleration_time_constant_s": {"min": 5.0, "max": 10.0},
+        "saturation_mode": {"value": 3},
+        "saturation_factor_1_0_pu": {"min": 0.064, "max": 0.313},
+        "saturation_factor_1_2_pu": {"min": 0.282, "max": 1.018, "minimum": "saturation_factor_1_0_pu"},
+        "stator_resistance_pu": {"min": 0.0014, "max": 0.006},
+        "leakage_reactance_pu": {"min": 0.12, "maximum": "min(0.9, xd_subtransient_pu, xq_subtransient_pu)"},
+        "reactive_power_max_pu": {"value": 0.48},
+        "reactive_power_min_pu": {"value": -0.41}
+      }
+    },
+    "round_rotor": {
+      "rated_apparent_power_mva": {"min": 25.0, "max": 1200.0},
+      "rated_power_factor": {"min": 0.8, "max": 0.975},
+      "parameters": {
+        "xd_subtransient_pu": {"min": 0.09, "max": 0.22},
+        "xq_subtransient_multiplier_of_xd_subtransient": {"min": 1.0, "max": 1.1},
+        "xd_transient_pu": {"min": 0.14, "max": 0.35, "minimum_multiplier_of_xd_subtransient": 1.01},
+        "xq_transient_multiplier_of_xd_transient": {"min": 0.9, "max": 1.0, "minimum_multiplier_of_xq_subtransient": 1.01},
+        "xd_synchronous_pu": {"min": 1.4, "max": 3.0, "minimum_multiplier_of_xd_transient": 1.01},
+        "xq_synchronous_multiplier_of_xd_synchronous": {"min": 0.9, "max": 1.0, "minimum_multiplier_of_xq_transient": 1.01},
+        "td_transient_s": {"min": 0.8, "max": 1.5},
+        "tq_transient_s": {"min": 0.298, "max": 0.756},
+        "td_subtransient_s": {"min": 0.02, "max": 0.05},
+        "tq_subtransient_s": {"min": 0.01, "max": 0.035},
+        "zero_sequence_reactance_pu": {"min": 0.03, "max": 0.1},
+        "zero_sequence_resistance_pu": {"value": 0.0},
+        "negative_sequence_reactance_multiplier_of_xd_subtransient": {"min": 0.9, "max": 1.1},
+        "negative_sequence_resistance_pu": {"min": 0.005, "max": 0.029},
+        "acceleration_time_constant_s": {"min": 5.0, "max": 10.0},
+        "saturation_mode": {"value": 3},
+        "saturation_factor_1_0_pu": {"min": 0.07, "max": 0.34},
+        "saturation_factor_1_2_pu": {"min": 0.29, "max": 1.12, "minimum": "saturation_factor_1_0_pu"},
+        "stator_resistance_pu": {"min": 0.0016, "max": 0.005},
+        "leakage_reactance_pu": {"min": 0.07, "maximum": "min(0.333, xd_subtransient_pu, xq_subtransient_pu)"},
+        "reactive_power_max_pu": {"value": 0.48},
+        "reactive_power_min_pu": {"value": -0.41}
+      }
+    }
+  },
+  "powerfactory": {
+    "type_class": "TypSym",
+    "element_class": "ElmSym",
+    "status": "round-rotor attributes inspected on PowerFactory 2026 SP1; corrected open-circuit time-input mapping awaits creation retest; salient-pole creation remains disabled because Table 13 omits xq transient data",
+    "rotor_mode": {
+      "round_rotor": 1,
+      "salient_pole": 0
+    },
+    "mapped_attributes": {
+      "rated_apparent_power_mva": "sgn",
+      "rated_voltage_kv": "ugn",
+      "rated_power_factor": "cosn",
+      "stator_resistance_pu": "rstr",
+      "leakage_reactance_pu": "xl",
+      "xd_synchronous_pu": "xd",
+      "xq_synchronous_pu": "xq",
+      "xd_transient_pu": "xds",
+      "xq_transient_pu": "xqs",
+      "xd_subtransient_pu": "xdss",
+      "xq_subtransient_pu": "xqss",
+      "td_transient_s": "tds0",
+      "tq_transient_s": "tqs0",
+      "td_subtransient_s": "tdss0",
+      "tq_subtransient_s": "tqss0",
+      "zero_sequence_reactance_pu": "x0sy",
+      "zero_sequence_resistance_pu": "r0sy",
+      "negative_sequence_reactance_pu": "x2sy",
+      "negative_sequence_resistance_pu": "r2sy",
+      "acceleration_time_constant_s": "tag",
+      "saturation_mode": "isat",
+      "saturation_factor_1_0_pu": "sg10",
+      "saturation_factor_1_2_pu": "sg12",
+      "reactive_power_max_pu": "q_max",
+      "reactive_power_min_pu": "q_min"
+    },
+    "element_attributes": {
+      "type": "typ_id",
+      "bus": "bus1",
+      "active_power_mw": "pgini",
+      "reactive_power_mvar": "qgini",
+      "out_of_service": "outserv"
+    }
+  }
+}

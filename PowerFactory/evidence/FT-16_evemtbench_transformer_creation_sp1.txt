@@ -1,0 +1,113 @@
+Evidence ID: FT-16
+Title: Greenfield EvEMTBench transformer creation and project-library readback
+Date: 10 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0078
+
+Provenance:
+The contributor supplied individual automated-test output and MCP client
+responses from the PowerFactory development PC. This is not a continuous
+terminal capture. The tested working tree had not yet been committed, and no
+independent byte-for-byte revision comparison was performed. The PowerFactory
+account identifier is replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Grid: Grid
+- Existing connection buses: EvEMTBench Test HV 110 and EvEMTBench Test LV 20
+- New transformer configured out of service for validation
+
+Automated validation before the live readback:
+- 81 tests passed
+- 31 subtests passed
+- elapsed time: 3.33 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+The response confirms that the existing case was activated. No study case was
+created or copied.
+
+Read-only creation preview:
+create_evemtbench_transformer was called for:
+- voltage class: 110/20 kV
+- rated power: 20 MVA
+- nominal frequency: 60 Hz
+- vector group: YNd11
+- seed: 42
+- transformer name: EvEMTBench Test Trf 110-20
+- type name: EvEMTBench Test Type 110-20
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, type_created=false and
+transformer_created=false. It sampled these source values:
+- short-circuit voltage: 11.278854 percent
+- winding losses: 95.125054 kW
+- no-load losses: 14.550059 kW
+- no-load current: 0.422321 percent
+
+The exact returned confirmation phrase was:
+CREATE EvEMTBench Test Trf 110-20 WITH EvEMTBench Test Type 110-20 110/20 20MVA YNd11 60Hz seed=42
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, type_created=true and
+transformer_created=true, with the message:
+Created TypTr2 'EvEMTBench Test Type 110-20' and connected ElmTr2 'EvEMTBench Test Trf 110-20'
+
+Created type:
+\<user>.IntUser\test.IntPrj\Library.IntPrjfolder\Equipment Type Library.IntPrjfolder\Transformer Types.IntPrjfolder\EvEMTBench Test Type 110-20.TypTr2
+
+Created transformer:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network Data.IntPrjfolder\Grid.ElmNet\EvEMTBench Test Trf 110-20.ElmTr2
+
+The operation created a new TypTr2 directly rather than requiring an existing
+transformer or transformer type as a template. The existing buses were used as
+connection points.
+
+Project-library readback:
+After restarting the local MCP server and reactivating the existing Case 1,
+get_parameters was called with:
+- object_query: EvEMTBench Test Type 110-20.TypTr2
+- include_project_objects: true
+- include_metadata: false
+
+The response returned success=true, total_count=1 and returned_count=1. The
+created object was found in the project library's Transformer Types folder with
+these stored values:
+- loc_name: EvEMTBench Test Type 110-20
+- nt2ph: 3
+- frnom: 60.0 Hz
+- strn: 20.0 MVA
+- utrn_h: 110.0 kV
+- utrn_l: 20.0 kV
+- r1pu: 0.004756252747029066
+- x1pu: 0.11268821358680725
+- pcutr: 95.12505340576172 kW
+- uktr: 11.278854370117188 percent
+- uktrr: 0.47562527656555176 percent
+- pfe: 14.55005931854248 kW
+- curmg: 0.42232099175453186 percent
+- tr2cn_h: YN
+- tr2cn_l: D
+- nt2ag: 11.0
+
+The derived PowerFactory values agree with the preview values within normal
+single-precision floating-point rounding. In particular, pcutr and uktr were
+recovered through PowerFactory after assigning the equivalent positive-
+sequence r1pu and x1pu representation.
+
+Conclusion and limits:
+This run validates preview/confirmation safety, direct TypTr2 creation,
+connected ElmTr2 creation, positive-sequence impedance conversion, and
+recursive project-library inspection on PowerFactory 2026 SP1. The created
+transformer remained out of service, and no load flow or dynamic simulation was
+run. EvEMTBench Table 10 zero-sequence and Table 12 saturation values remain
+catalogued but unmapped, and this creation workflow has not yet been repeated
+on PowerFactory 2026 SP4.

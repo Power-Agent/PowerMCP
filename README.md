@@ -1,7 +1,7 @@
 # PowerMCP ⚡
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.11%20to%203.14-blue.svg)](https://www.python.org/downloads/)
 
 PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
 
@@ -66,7 +66,7 @@ Check out these helpful tutorials to get started with MCP:
 
 ## 📦 Installation
 
-PowerMCP installs as a single Python package with an interactive CLI. Python 3.10+ is required.
+PowerMCP installs as a single Python package with an interactive CLI. Python 3.11 through 3.14 is supported.
 
 ```bash
 pip install powermcp
@@ -118,7 +118,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 | PSLF | `pslf.python_lib` | `powermcp config set pslf.python_lib "C:\Program Files\GE PSLF\PSLF_PYTHON"` |
 | PowerFactory | `powerfactory.python_path` | `powermcp config set powerfactory.python_path "...\DIgSILENT\PowerFactory 2024\Python\3.11"` |
 | LTSpice | `ltspice.exe` *(auto-detected)* | Found automatically in standard locations — usually no setup needed. Override: `powermcp config set ltspice.exe "C:\Program Files\ADI\LTspice\LTspice.exe"` |
-| HOPE | `hope.repo_root`, `hope.julia_bin` | `powermcp config set hope.repo_root "C:\src\HOPE"` |
+| HOPE | `hope.repo_root`, `hope.julia_bin`, `hope.julia_depot_path` | `powermcp config set hope.repo_root "C:\src\HOPE"` |
 | GenX | `genx.repo_root` | `powermcp config set genx.repo_root "/home/me/GenX.jl"` — the GenX.jl checkout; `GENX_DIR` overrides it |
 | PowerWorld | *(none)* | `esa` auto-discovers a running, licensed Simulator via COM; the `powerworld` extra also installs `numba` (required by esa) |
 | PSCAD | *(none)* | `pip install powermcp[pscad-windows]` provides `mhi-pscad`; PSCAD must be installed |
@@ -128,7 +128,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 ### Case compilation between servers (PowerIO)
 
 PowerIO IR is the exchange format of this repository. PowerMCP runs the
-server shipped in PowerIO 0.11.2 (`powermcp run powerio` is `python -m
+server shipped in PowerIO 0.11.8 (`powermcp run powerio` is `python -m
 powerio.mcp`); that server parses every grid exchange format, emits every
 target, summarizes, diagnoses, normalizes, lowers multiconductor networks, and
 calculates matrices. Its `parse` tool returns serialized **PowerIO IR
@@ -326,3 +326,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Special Thanks
 - All contributors who help make this project better
 - [The Power and AI Initiative (PAI) at Harvard SEAS](https://pai.seas.harvard.edu/)
+- PowerFactory development and validation contributions by Aswin Krishna Poyil
+  at the Institute of Electrical Energy Systems,
+  Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU), with supervision
+  and support from Tobias Lorz and Timon Conrad, who provided the opportunity
+  to pursue this work independently

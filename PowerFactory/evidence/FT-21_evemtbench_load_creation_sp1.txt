@@ -1,0 +1,102 @@
+Evidence ID: FT-21
+Title: EvEMTBench balanced-load creation
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0088
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. The PowerFactory account identifier is replaced
+with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Active grid: MCP Bootstrap Grid
+- Existing bus: MCP Bootstrap MV 20, 20 kV
+- Requested load state: out of service
+
+Most recent captured automated validation for this working tree:
+- 110 tests passed
+- 31 subtests passed
+- elapsed time: 2.46 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Catalog inspection:
+list_evemtbench_load_profiles(voltage_kv=20) returned one profile from catalog
+evemtbench-loads-table-5-v1. The 20 kV profile reported an apparent-power
+range of 0.1 to 1.6 MVA and the power-factor limits 0.8 inductive to 0.95
+capacitive. It identified ElmLod as the target class and plini and qlini as the
+mapped constant-power attributes.
+
+The response also disclosed the Table 5 ZIP-coefficient ranges as catalog-only
+data. Those coefficients were not written because their PowerFactory attribute
+mapping has not been live-validated.
+
+Read-only creation preview:
+create_evemtbench_load was called with:
+- voltage_kv: 20
+- load_name: MCP Bootstrap EvEMTBench Load 20
+- bus_name: MCP Bootstrap MV 20
+- grid_name: MCP Bootstrap Grid
+- seed: 42
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, and load_created=false. It
+identified the requested grid and bus and sampled these reproducible values:
+- apparent power: 1.05914 MVA
+- power factor: 0.95723 capacitive
+- reactive-power angle: -16.817661 degrees
+- active power: 1.013841 MW
+- reactive power: -0.306438 MVAr
+
+The exact returned confirmation phrase was:
+CREATE MCP Bootstrap EvEMTBench Load 20 AT MCP Bootstrap MV 20 20kV seed=42
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, and load_created=true. It reported:
+Created ElmLod 'MCP Bootstrap EvEMTBench Load 20' and connected it to
+'MCP Bootstrap MV 20'
+
+The created object was reported at:
+Network Model\Network Data\MCP Bootstrap Grid\MCP Bootstrap EvEMTBench Load 20.ElmLod
+
+Immediate retained values:
+- plini: 1.013841 MW
+- qlini: -0.306438 MVAr
+- outserv: 1
+
+Independent tool readback:
+get_parameters returned exactly one object for
+MCP Bootstrap EvEMTBench Load 20.ElmLod. Its name, class, and retained active
+and reactive powers matched the preview and creation response exactly. The
+bus1 reference identified a StaCubic below MCP Bootstrap MV 20.ElmTerm, and
+outserv remained 1. Attribute metadata confirmed the expected PowerFactory
+meanings and units for plini, qlini, bus1, and outserv.
+
+Incidental denied request:
+Before the requested PowerFactory sequence, the MCP client attempted one
+PowerMCP-PSCAD list_projects call. It failed at the tool boundary. No PSCAD
+operation ran, and it did not alter the PowerFactory validation sequence.
+
+Conclusion and limits:
+This run validates Table 5 catalog filtering, deterministic seeded sampling,
+the preview and explicit-confirmation boundary, creation of a connected
+balanced constant-power ElmLod, retained active and reactive powers, correct
+terminal connection, and safe out-of-service creation on PowerFactory 2026
+SP1.
+
+No ZIP coefficients were written. No in-service energization, load flow,
+short-circuit calculation, dynamic simulation, graphical-layout update,
+PowerFactory 2026 SP4 validation, or independent revision verification was
+performed.

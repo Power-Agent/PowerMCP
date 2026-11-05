@@ -1,0 +1,119 @@
+Evidence ID: FT-19
+Title: Greenfield bootstrap-to-transformer integration
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0084
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. The PowerFactory account identifier is replaced
+with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Active grid: MCP Bootstrap Grid, 50 Hz
+- Existing buses: MCP Bootstrap HV 110 and MCP Bootstrap MV 20
+- Requested transformer state: out of service
+
+Most recent captured automated validation for this working tree:
+- 98 tests passed
+- 31 subtests passed
+- elapsed time: 1.25 seconds
+
+Bootstrap prerequisite verification:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+list_objects returned one object for each of these exact queries:
+- MCP Bootstrap Grid.ElmNet
+- MCP Bootstrap HV 110.ElmTerm
+- MCP Bootstrap MV 20.ElmTerm
+
+The returned bus paths placed both buses below MCP Bootstrap Grid.ElmNet.
+
+Initial validation stop:
+The first preview request omitted the required nominal_frequency_hz argument.
+Pydantic rejected the request before tool execution. The contributor stopped
+as instructed, and no transformer or transformer type was created by that
+request. The corrected request explicitly used 50.0 Hz to match the grid.
+
+Read-only transformer preview:
+create_evemtbench_transformer was called with:
+- voltage_class: 110/20
+- rated_power_mva: 20
+- nominal_frequency_hz: 50.0
+- vector_group: YNd
+- clock_number: 11
+- transformer_name: MCP Bootstrap EvEMTBench Trf 110-20
+- type_name: MCP Bootstrap EvEMTBench Type 110-20
+- high_voltage_bus_name: MCP Bootstrap HV 110
+- low_voltage_bus_name: MCP Bootstrap MV 20
+- grid_name: MCP Bootstrap Grid
+- seed: 42
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, type_created=false, and
+transformer_created=false. Its target paths identified the requested bootstrap
+grid and both requested buses.
+
+The exact returned confirmation phrase was:
+CREATE MCP Bootstrap EvEMTBench Trf 110-20 WITH MCP Bootstrap EvEMTBench Type 110-20 110/20 20MVA YNd11 50Hz seed=42
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, type_created=true, and
+transformer_created=true. It reported:
+Created TypTr2 'MCP Bootstrap EvEMTBench Type 110-20' and connected ElmTr2
+'MCP Bootstrap EvEMTBench Trf 110-20'
+
+The created objects were reported at:
+- Library\Equipment Type Library\Transformer Types\MCP Bootstrap EvEMTBench Type 110-20.TypTr2
+- Network Model\Network Data\MCP Bootstrap Grid\MCP Bootstrap EvEMTBench Trf 110-20.ElmTr2
+
+Transformer-type readback:
+get_parameters returned one MCP Bootstrap EvEMTBench Type 110-20.TypTr2 with:
+- nt2ph: 3
+- frnom: 50.0 Hz
+- strn: 20.0 MVA
+- utrn_h: 110.0 kV
+- utrn_l: 20.0 kV
+- r1pu: 0.004756252747029066
+- x1pu: 0.11268821358680725
+- pcutr: 95.12505340576172 kW
+- uktr: 11.278854370117188 percent
+- uktrr: 0.47562527656555176 percent
+- pfe: 14.55005931854248 kW
+- curmg: 0.42232099175453186 percent
+- tr2cn_h: YN
+- tr2cn_l: D
+- nt2ag: 11.0
+
+These retained values agree with the requested sampled values within normal
+PowerFactory single-precision readback differences.
+
+Transformer-element readback:
+get_parameters returned one MCP Bootstrap EvEMTBench Trf 110-20.ElmTr2. Its:
+- typ_id referenced MCP Bootstrap EvEMTBench Type 110-20.TypTr2
+- bushv referenced the cubicle below MCP Bootstrap HV 110.ElmTerm
+- buslv referenced the cubicle below MCP Bootstrap MV 20.ElmTerm
+- outserv was 1
+
+Conclusion and limits:
+This run validates the direct integration from an activated greenfield
+bootstrap grid and buses to a newly created EvEMTBench-backed TypTr2 and
+connected ElmTr2. It covers the preview and explicit-confirmation boundary,
+50 Hz propagation, retained positive-sequence and nameplate values, type
+assignment, both terminal connections, and safe out-of-service creation on
+PowerFactory 2026 SP1.
+
+Tables 10 and 12 remained catalogued but unmapped, as disclosed by the tool.
+No in-service energization, external grid, load, load flow, short-circuit
+calculation, dynamic simulation, diagram update, PowerFactory 2026 SP4
+validation, or independent revision verification was performed.

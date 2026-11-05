@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio", minversion="0.11.2")
+pytest.importorskip("powerio", minversion="0.11.8")
 
 import powerio  # noqa: E402
 from powerio.mcp import server as powerio_mcp  # noqa: E402
@@ -65,7 +65,7 @@ mpc.gen = [
 \t1 60 10 0 0 1.0 100 1 100 0;
 ];
 mpc.branch = [
-\t1 2 0.01 0.1 0.0 250 250 250 0 0 1 -360 360;
+\t1 2 0.01 0.1 0.0 250 0 0 0 0 1 -360 360;
 ];
 """
 

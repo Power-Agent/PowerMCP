@@ -1,0 +1,113 @@
+Evidence ID: FT-20
+Title: EvEMTBench external-grid equivalent creation
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0086
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. The PowerFactory account identifier is replaced
+with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Active grid: MCP Bootstrap Grid
+- Existing bus: MCP Bootstrap HV 110, 110 kV
+- Requested external-grid state: out of service
+
+Most recent captured automated validation for this working tree:
+- 104 tests passed
+- 31 subtests passed
+- elapsed time: 3.65 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Catalog inspection:
+list_evemtbench_external_grid_profiles(voltage_kv=110) returned one profile
+from catalog evemtbench-external-grids-table-4-v1. The profile reported the
+EvEMTBench paper's Table 4 ranges for:
+- short-circuit power: 800 to 8000 MVA
+- positive-sequence R/X: 0.1 to 0.2
+- X0/X1: 2.0 to 4.0
+- zero-sequence R/X: 0.1 to 0.2
+- voltage setpoint: 0.98 to 1.02 p.u.
+- initial phase angle: -180 to 180 degrees
+
+Read-only creation preview:
+create_evemtbench_external_grid was called with:
+- voltage_kv: 110
+- external_grid_name: MCP Bootstrap External Grid 110
+- bus_name: MCP Bootstrap HV 110
+- grid_name: MCP Bootstrap Grid
+- seed: 42
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, and
+external_grid_created=false. It identified the requested grid and bus and
+sampled these reproducible values:
+- snss: 5403.872949 MVA
+- rntxn: 0.102501
+- x0tx1: 2.550059
+- r0tx0: 0.122321
+- usetp: 1.009459 p.u.
+- phiini: 63.611815 degrees
+- bustp: SL
+
+The exact returned confirmation phrase was:
+CREATE MCP Bootstrap External Grid 110 AT MCP Bootstrap HV 110 110kV seed=42
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, and external_grid_created=true. It
+reported:
+Created ElmXnet 'MCP Bootstrap External Grid 110' and connected it to
+'MCP Bootstrap HV 110'
+
+The created object was reported at:
+Network Model\Network Data\MCP Bootstrap Grid\MCP Bootstrap External Grid 110.ElmXnet
+
+Immediate retained values:
+- bustp: SL
+- snss: 5403.873046875 MVA
+- rntxn: 0.10250099748373032
+- x0tx1: 2.5500590801239014
+- r0tx0: 0.1223210021853447
+- usetp: 1.0094590187072754 p.u.
+- phiini: 63.611815 degrees
+- outserv: 1
+
+Independent tool readback:
+get_parameters returned exactly one object for
+MCP Bootstrap External Grid 110.ElmXnet. Its name, class, and retained values
+matched the creation response. The bus1 reference identified a StaCubic below
+MCP Bootstrap HV 110.ElmTerm, and outserv remained 1. Attribute metadata
+confirmed the expected PowerFactory meanings and units for bustp, snss,
+rntxn, x0tx1, r0tx0, usetp, phiini, bus1, and outserv.
+
+The retained numeric values agree with the preview values within normal
+PowerFactory single-precision readback differences.
+
+Incidental denied request:
+Before the requested PowerFactory sequence, the MCP client attempted one
+PowerMCP-PSCAD list_projects call. It failed at the tool boundary. No PSCAD
+operation ran, and it did not alter the PowerFactory validation sequence.
+
+Conclusion and limits:
+This run validates Table 4 catalog filtering, deterministic seeded sampling,
+the preview and explicit-confirmation boundary, creation of a connected
+balanced ElmXnet, retained short-circuit and sequence-ratio settings, correct
+terminal connection, and safe out-of-service creation on PowerFactory 2026
+SP1.
+
+No in-service energization, load flow, short-circuit calculation, dynamic
+simulation, graphical-layout update, PowerFactory 2026 SP4 validation, or
+independent revision verification was performed.

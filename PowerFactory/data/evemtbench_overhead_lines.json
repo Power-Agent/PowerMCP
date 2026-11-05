@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "catalog_id": "evemtbench-overhead-lines-tables-3-7-9-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [3, 7, 9]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "nominal_frequencies_hz": [50.0, 60.0],
+  "profiles": ["p05", "p50", "p95"],
+  "powerfactory": {
+    "type_class": "TypLne",
+    "element_class": "ElmLne",
+    "model": "three-phase overhead-line sequence equivalent",
+    "mapped_attributes": {
+      "nominal_voltage_kv": "uline",
+      "rated_current_ka": "sline",
+      "nominal_frequency_hz": "frnom",
+      "positive_sequence_resistance_ohm_per_km": "rline",
+      "positive_sequence_reactance_ohm_per_km": "xline",
+      "positive_sequence_capacitance_uf_per_km": "cline",
+      "zero_sequence_resistance_ohm_per_km": "rline0",
+      "zero_sequence_reactance_ohm_per_km": "xline0",
+      "zero_sequence_capacitance_uf_per_km": "cline0"
+    },
+    "source_capacitance_unit": "nF/km",
+    "powerfactory_capacitance_unit": "uF/km",
+    "capacitance_conversion_factor": 0.001
+  },
+  "classes": {
+    "20": {
+      "source_tables": [3, 7],
+      "nominal_voltage_kv": 20.0,
+      "length_km": {"min": 0.5, "max": 9.5},
+      "rated_current_guidance_ka": {"min": 0.1, "max": 0.65, "source_table": 9},
+      "electrical_profiles": {
+        "p05": {"r1_ohm_per_km": 0.12, "x1_ohm_per_km": 0.35, "c1_nf_per_km": 8.24, "r0_ohm_per_km": 0.27, "x0_ohm_per_km": 1.38, "c0_nf_per_km": 4.09},
+        "p50": {"r1_ohm_per_km": 0.31, "x1_ohm_per_km": 0.39, "c1_nf_per_km": 9.44, "r0_ohm_per_km": 0.45, "x0_ohm_per_km": 1.60, "c0_nf_per_km": 4.45},
+        "p95": {"r1_ohm_per_km": 1.88, "x1_ohm_per_km": 0.44, "c1_nf_per_km": 10.47, "r0_ohm_per_km": 2.02, "x0_ohm_per_km": 1.70, "c0_nf_per_km": 4.83}
+      }
+    },
+    "110": {
+      "source_tables": [3, 7],
+      "nominal_voltage_kv": 110.0,
+      "length_km": {"min": 1.0, "max": 32.0},
+      "electrical_profiles": {
+        "p05": {"r1_ohm_per_km": 0.03, "x1_ohm_per_km": 0.25, "c1_nf_per_km": 9.08, "r0_ohm_per_km": 0.23, "x0_ohm_per_km": 0.78, "c0_nf_per_km": 4.70},
+        "p50": {"r1_ohm_per_km": 0.06, "x1_ohm_per_km": 0.29, "c1_nf_per_km": 12.58, "r0_ohm_per_km": 0.31, "x0_ohm_per_km": 1.07, "c0_nf_per_km": 5.59},
+        "p95": {"r1_ohm_per_km": 0.14, "x1_ohm_per_km": 0.40, "c1_nf_per_km": 14.62, "r0_ohm_per_km": 0.41, "x0_ohm_per_km": 1.24, "c0_nf_per_km": 7.03}
+      }
+    },
+    "345": {
+      "source_tables": [3, 7],
+      "nominal_voltage_kv": 345.0,
+      "length_km": {"min": 1.0, "max": 111.0},
+      "electrical_profiles": {
+        "p05": {"r1_ohm_per_km": 0.01, "x1_ohm_per_km": 0.23, "c1_nf_per_km": 12.49, "r0_ohm_per_km": 0.17, "x0_ohm_per_km": 0.74, "c0_nf_per_km": 5.53},
+        "p50": {"r1_ohm_per_km": 0.02, "x1_ohm_per_km": 0.26, "c1_nf_per_km": 13.82, "r0_ohm_per_km": 0.22, "x0_ohm_per_km": 0.95, "c0_nf_per_km": 6.32},
+        "p95": {"r1_ohm_per_km": 0.05, "x1_ohm_per_km": 0.29, "c1_nf_per_km": 15.70, "r0_ohm_per_km": 0.28, "x0_ohm_per_km": 1.06, "c0_nf_per_km": 7.72}
+      }
+    }
+  },
+  "catalog_only": {
+    "geometry": {
+      "source_tables": [7, 8, 9],
+      "reason": "Tower and conductor geometry is retained in the human-readable catalog but is not written by the TypLne sequence-equivalent creator."
+    }
+  }
+}

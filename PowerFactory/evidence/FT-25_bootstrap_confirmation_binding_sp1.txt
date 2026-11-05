@@ -1,0 +1,64 @@
+Evidence ID: FT-25
+Title: Bootstrap create/reuse confirmation binding
+Date: 13 October 2026
+Classification: Compiled evidence record
+Source: Contributor-supplied MCP responses from the development PC
+Revision: refactor/powerfactory-tests-layout through 971891d plus patch 0104
+
+Environment:
+PowerFactory 2026 SP1, Windows, VS Code MCP client.
+The server was configured to run PowerMCP-tests-layout/PowerFactory/MCP_PowerFactory.py.
+Project: test. Existing study case: Case 1.
+No independent byte-for-byte comparison of the running source was performed.
+Account identifiers in paths are replaced with <user>.
+
+Existing-case activation response:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Preview inputs:
+grid_name: MCP Confirmation Check 20261013
+nominal_frequency_hz: 50
+buses:
+- MCP Confirmation HV 110: 110 kV, out_of_service=true
+- MCP Confirmation MV 20: 20 kV, out_of_service=true
+confirmation: empty
+open_digsilent: true
+
+Preview response selected fields:
+success=true, applied=false, grid_created=false, grid_activated=false,
+buses_created=0, grid_will_be_created=true, grid_will_be_activated=true.
+Both buses were listed in buses_to_create; reused_buses was empty.
+confirmation_required:
+CREATE GRID MCP Confirmation Check 20261013 50Hz WITH 2 BUSES plan=d297656511bc188fc0871e250f1659c90ad913f3841333ada4079e3e5df0cf1e
+
+Confirmed creation repeated the preview inputs with that exact token.
+Response selected fields:
+success=true, applied=true, grid_created=true, grid_activated=true,
+buses_created=2.
+message:
+Created and activated grid 'MCP Confirmation Check 20261013' with 2 bus(es)
+grid:
+\<user>.IntUser\test.IntPrj\Network Model.IntPrjfolder\Network Data.IntPrjfolder\MCP Confirmation Check 20261013.ElmNet
+
+The supplied creation response labels the frequency field nominal_frequency_kv,
+whereas the preview and implementation use nominal_frequency_hz.
+This discrepancy was flagged during review; the original client capture was
+not supplied to resolve it. No correction of that supplied field is claimed.
+
+Repeating the confirmed call with the original token returned:
+{
+  "success": false,
+  "applied": false,
+  "grid_created": false,
+  "grid_activated": false,
+  "buses_created": 0,
+  "message": "confirmation must exactly match: CREATE GRID MCP Confirmation Check 20261013 50Hz WITH 2 BUSES plan=0e015f03eecbde8a421aecab5e47fa3c5dfbeb70fcb91721f870b352f0497862"
+}
+
+Final ping: pong.
+
+Conclusion:
+The original creation token was rejected after the resolved plan changed to
+reuse. One grid and two out-of-service buses were created and left in the project.
+Cross-project and study-case changes were not tested live. Project-change
+rejection is covered by automated tests. No calculations were run.

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
 import sys
 
 from packaging.version import Version
@@ -59,14 +61,57 @@ def test_path_status_missing_and_configured(isolated_config):
     assert style == "green"
 
 
+def test_path_status_rejects_existing_path_with_wrong_type(isolated_config):
+    from powermcp import config as cfg
+
+    # LTspice expects a file. An existing directory must not be reported as ready.
+    target_dir = isolated_config / "LTspice.exe"
+    target_dir.mkdir()
+    cfg.set_value("ltspice", "exe", str(target_dir))
+    style, msg = doctor._path_status(get_tool("ltspice"))
+    assert style == "yellow"
+    assert "wrong type" in msg
+    assert "expected file" in msg
+
+    # HOPE expects a directory. An existing file must not be reported as ready.
+    target_file = isolated_config / "hope-repo"
+    target_file.write_text("")
+    cfg.set_value("hope", "repo_root", str(target_file))
+    style, msg = doctor._path_status(get_tool("hope"))
+    assert style == "yellow"
+    assert "wrong type" in msg
+    assert "expected dir" in msg
+
+
 def test_namespace_shadow_not_false_positive(monkeypatch):
-    # surge-py is NOT installed in the test venv. The repo's lowercase surge/
-    # directory must not be mistaken for the installed library (PEP 420 namespace
-    # shadow), so the dependency must report missing, not ok. Bypass surge's
-    # Python-version gate (it is 3.12-3.14 only) so this exercises the probe path
-    # on every Python version; otherwise on 3.10/3.11 _dep_status short-circuits
-    # to the "needs Python 3.12-3.14" warning before reaching the probe.
+    """A PEP 420 namespace portion must not be read as an installed library.
+
+    This repository ships a lowercase ``surge/`` directory whose name matches
+    the import name of the ``surge-py`` library. Without the library present,
+    ``find_spec("surge")`` still answers -- with a namespace portion whose
+    ``origin`` is None -- so a naive probe would report the dependency as
+    present and ``doctor`` would tell the operator everything is fine.
+
+    The namespace portion is simulated rather than read off the ambient
+    environment. CI installs the ``surge`` extra so surge/test_integration.py
+    can run, and an assertion that depended on the library being absent would
+    then pass or fail for reasons having nothing to do with the logic it
+    covers. Bypass surge's Python-version gate (3.12-3.14 only) so the probe
+    path is exercised on every interpreter, rather than short-circuiting to the
+    version warning on 3.11.
+    """
+    real_find_spec = importlib.util.find_spec
+
+    def shadowed_find_spec(name, *args, **kwargs):
+        if name == "surge":
+            spec = importlib.machinery.ModuleSpec("surge", loader=None, origin=None)
+            spec.submodule_search_locations = ["<repo>/surge"]
+            return spec
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", shadowed_find_spec)
     monkeypatch.setattr(doctor, "_surge_supported", lambda: True)
+
     style, msg = doctor._dep_status(get_tool("surge"))
     assert style == "red", f"expected surge missing, got {style}: {msg}"
 
@@ -121,13 +166,13 @@ def test_the_floor_is_found_without_top_level_distribution_metadata(monkeypatch)
     monkeypatch.setattr(
         doctor,
         "requires",
-        lambda _distribution: ("powerio[mcp,matrix]>=0.11.2,<0.12",),
+        lambda _distribution: ("powerio[mcp,matrix]>=0.11.8,<0.12",),
     )
     req = doctor._declared_requirement("powerio")
     assert req is not None
     assert doctor._canonical(req.name) == "powerio"
-    assert Version("0.11.2") in req.specifier
-    assert Version("0.11.1") not in req.specifier
+    assert Version("0.11.8") in req.specifier
+    assert Version("0.11.7") not in req.specifier
     assert Version("0.12.0") not in req.specifier
 
 

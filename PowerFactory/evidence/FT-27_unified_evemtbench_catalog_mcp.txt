@@ -1,0 +1,158 @@
+Evidence ID: FT-27
+Title: Unified EvEMTBench MCP exposure and filtered catalog listing
+Date: 15 October 2026
+Classification: Compiled evidence record
+Source: Contributor-supplied VS Code MCP client output from the development PC
+Revision: PR #122 commit 5993fc8 plus patch 0107, before commit
+
+Scope and provenance:
+The contributor restarted the powerFactoryUnified MCP server using the
+PowerMCP-tests-layout checkout and supplied the client's tool-exposure report
+and catalog response. No independent tool-registry capture or byte-for-byte
+running-source verification was supplied.
+This read-only catalog call does not open PowerFactory or require a project.
+
+The client reported only these exposed EvEMTBench tools:
+- list_evemtbench_components
+- create_evemtbench_component
+No specialized EvEMTBench create/list tools were reported visible.
+
+Call:
+list_evemtbench_components(
+  component_type="overhead_line",
+  filters={"voltage_kv": 110, "profile": "p50"}
+)
+
+Selected response fields (extract from supplied JSON):
+success: true
+component_type: overhead_line
+catalog_id: evemtbench-overhead-lines-tables-3-7-9-v1
+source.tables: [3, 7, 9]
+affiliation: Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)
+returned_count: 1
+results[0].voltage_class: "110"
+results[0].nominal_voltage_kv: 110.0
+results[0].length_km: {"min": 1.0, "max": 32.0}
+results[0].electrical_profiles:
+{
+  "p50": {
+    "r1_ohm_per_km": 0.06,
+    "x1_ohm_per_km": 0.29,
+    "c1_nf_per_km": 12.58,
+    "r0_ohm_per_km": 0.31,
+    "x0_ohm_per_km": 1.07,
+    "c0_nf_per_km": 5.59
+  }
+}
+powerfactory.source_capacitance_unit: nF/km
+powerfactory.powerfactory_capacitance_unit: uF/km
+powerfactory.capacitance_conversion_factor: 0.001
+catalog_only.geometry.reason:
+Tower and conductor geometry is retained in the human-readable catalog but
+is not written by the TypLne sequence-equivalent creator.
+
+Filter discovery:
+voltage_kv: number, optional, nullable, default null
+profile: string, optional, default ""
+
+Creation-parameter discovery:
+voltage_kv, nominal_frequency_hz, rated_current_ka, length_km:
+  number, required
+profile, line_name, type_name, bus1_name, bus2_name:
+  string, required
+grid_name: string, optional, default ""
+out_of_service: boolean, optional, default false
+confirmation: string, optional, default ""
+open_digsilent: boolean, optional, default true
+
+Related automated validation:
+Development-PC output: 166 tests and 85 subtests passed in 6.90 seconds.
+The focused tests cover all six unified catalog routes, filter routing,
+parameter discovery, invalid filters, and the two-tool MCP registration surface.
+Local wheel build and six installed unified catalog listings also passed.
+
+Incidental client behavior:
+The client first attempted PowerMCP-PSCAD-list_documentation, which failed.
+This is outside the requested PowerFactory test and is not validation evidence
+for the unified tools.
+
+Conclusion and limits:
+The first supplied response verifies filtered overhead-line listing and
+creation-input discovery through the refreshed MCP interface. The additional
+MCP-client checks below extend coverage to all six catalog types. No
+PowerFactory objects were created or modified. Confirmed creation was not
+retested during this catalog validation.
+
+Additional MCP-client checks, 15 October 2026:
+Revision reported by contributor: 6b14337, published in PR #122.
+The following results are compiled from contributor-supplied client summaries.
+The original large responses were read through the client's file-reading tool;
+their temporary files were not supplied to the repository or independently
+parsed during preparation of this record. These are not verbatim JSON captures.
+
+For each additional call the client reported success=true, matching
+component_type, returned_count=1, and presence of catalog_id, source,
+available_filters and creation_parameters.
+
+1. transformer
+   filters: {"voltage_class": "345/25", "rated_power_mva": 800}
+   catalog_id: evemtbench-transformers-tables-10-12-v1
+   available_filters: voltage_class, rated_power_mva
+   required creation inputs: voltage_class, rated_power_mva,
+     nominal_frequency_hz, vector_group, clock_number, transformer_name,
+     type_name, high_voltage_bus_name, low_voltage_bus_name
+   Returned limitations: unmapped_source_tables=[10,12]; Table 12 saturation
+     mapping pending; Block catalog-only pending an explicit voltage rule;
+     other component families catalog-only pending validated mappings.
+   The client initially stopped on display truncation. A later read of the
+   saved response recovered the missing fields and verified the checks.
+
+2. underground_cable
+   filters: {"profile": "p50"}
+   catalog_id: evemtbench-underground-cables-tables-3-6-v1
+   available_filters: profile
+   required creation inputs: nominal_frequency_hz, rated_current_ka, profile,
+     length_km, cable_name, type_name, bus1_name, bus2_name
+   Returned limitations: geometric ULM model remains catalog-only; cable
+     ampacity is not provided and requires a validated engineering rating.
+
+3. external_grid
+   filters: {"voltage_kv": 110}
+   catalog_id: evemtbench-external-grids-table-4-v1
+   available_filters: voltage_kv
+   required creation inputs: voltage_kv, external_grid_name, bus_name
+   No catalog-only or unsupported mapping limitation was reported returned.
+   This does not establish unrestricted engineering applicability.
+
+4. load
+   filters: {"voltage_kv": 20}
+   catalog_id: evemtbench-loads-table-5-v1
+   available_filters: voltage_kv
+   required creation inputs: voltage_kv, load_name, bus_name
+   Returned limitation: load-model coefficients are stored but not written
+     pending live validation of PowerFactory ZIP attributes.
+
+5. synchronous_machine
+   filters: {"machine_type": "round_rotor"}
+   catalog_id: evemtbench-synchronous-machines-table-13-v1
+   available_filters: machine_type
+   required creation inputs: machine_type, rated_power_mva, machine_name,
+     type_name, bus_name
+   Returned status text: corrected open-circuit time-input mapping awaits a
+     creation retest; salient-pole creation disabled because xq transient data
+     is omitted by the source.
+   The creation-retest wording predates FT-23, which already records live
+   round-rotor creation and time-constant validation. This record preserves
+   the client's reported catalog text without treating it as current evidence
+   that the earlier creation validation is missing.
+
+The client reported reading saved transformer, cable and machine responses
+in sections. Other response fields and unviewed portions are not asserted here.
+The initial transformer sequence also attempted an unrelated PSCAD documentation
+call, which failed; it is excluded from PowerFactory validation.
+
+Final scope:
+All six types now have contributor-reported MCP-client catalog coverage in
+addition to automated and installed-wheel coverage. This validates catalog
+routing and parameter discovery, not physical model suitability or a fresh
+creation/calculation run. No new CI result is claimed for this evidence update.

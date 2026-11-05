@@ -1,307 +1,200 @@
 # DIgSILENT PowerFactory MCP Agent
 
-A Model Context Protocol (MCP) server that exposes DIgSILENT PowerFactory simulation capabilities to AI assistants such as Claude. The agent automates RMS transient stability simulations, load flow and short-circuit calculations, parameter modifications, and result exports — all through a clean, tool-callable interface.
-
----
+Connect an AI assistant to DIgSILENT PowerFactory to inspect models, run
+calculations and fault simulations, build equipment, and export results.
 
 ## Architecture
 
-```
+```text
 Claude / AI assistant
-        │  MCP protocol
+        │ MCP protocol
         ▼
-MCP_PowerFactory.py   ← MCP Python SDK 2 server
-        │  Python calls 
+MCP_PowerFactory.py                    MCP Python SDK 2 server
+        │ Python calls
         ▼
-Agent_DIgSILENT.py    ← Simulation engine
-        │  
+Agent_DIgSILENT.py                     Simulation and shared PowerFactory helpers
+        │
+        ├── Inherits EvEMTBenchMixin from evemtbench.py
+        │       ├── Reads data/evemtbench_*.json
+        │       ├── Lists catalogs, filters and creation parameters
+        │       └── Plans, creates, verifies and rolls back equipment
+        │
+        │ Simulation, inspection, export and equipment-creation calls
         ▼
-DIgSILENT PowerFactory 
+DIgSILENT PowerFactory
         │
         ▼
-Output folder:  CSV results, PNG plots, optional .pfd export
+Outputs: CSV results, PNG plots, diagram PDF, optional .pfd export
 ```
+
+`evemtbench.py` is part of the agent layer, not a separate MCP server.
+Catalog listing returns JSON data without opening PowerFactory. Equipment
+creation and simulation require a PowerFactory connection.
 
 ## Features
 
-- **Full simulation pipeline** — connect, activate study case, load flow, RMS transient simulation, CSV export, plot generation, optional PFD export in one call.
-- **Custom fault scenarios** — define bus faults, line faults, and generator switching events at call time without editing config files.
-- **Parameter modification** — update any PowerFactory attribute on any object via the MCP interface.
-- **Model inspection and discovery** — inspect the active project and study case, read selected attributes, and discover objects using raw queries or friendly component categories.
-- **Guarded component management** — create or safely preview and delete buses, loads, generators, lines, and two-winding transformers.
-- **Diagram and switchgear synchronization** — optionally update the active single-line diagram and create one closed circuit breaker in each generated connection cubicle.
-- **Load flow and short-circuit** — run Load flow and Short-Circuit calculation.
-- **Automatic plot generation** — bus voltage magnitudes and generator speeds plotted from exported CSV results.
-- **Study case management** — create, copy, and activate study cases with idempotency support (replay-safe via `request_id`).
-- **Project import/export** — import `.pfd` files and export the active project back to `.pfd`.
-- **CSV result reading** — auto-discovers the latest result file or reads a specified path.
-- **JSON configuration** — all simulation parameters controlled through `simulation_config.json`.
-
----
+- Model inspection, parameter changes, and study-case management.
+- Load flow, short-circuit, contingency analysis, and RMS fault simulations.
+- Grid bootstrap, component management, and six EvEMTBench equipment catalogs.
+- CSV results, PNG plots, single-line PDF export, and optional project export.
 
 ## Implemented Functions
 
-### MCP Tools (`MCP_PowerFactory.py`)
-
-| Tool | Description |
-|------|-------------|
-| `ping` | Health check — returns `"pong"`. |
-| `close_digsilent` | Closes the PowerFactory session. |
-| `get_config` | Returns the active `simulation_config.json` as a JSON string. |
-| `get_active_project` | Returns the active PowerFactory project without modifying it. |
-| `get_active_study_case` | Returns the active PowerFactory study case without modifying it. |
-| `get_parameters` | Reads selected attributes from objects matching a PowerFactory query. |
-| `list_objects` | Lists calculation-relevant objects using a raw PowerFactory query. |
-| `list_components` | Lists objects using friendly equipment categories. |
-| `list_study_cases` | Lists study cases and identifies the active case. |
-| `import_project` | Imports a `.pfd` project file and activates it. |
-| `create_study_case` | Creates (or activates) a study case by name, copying from a base case when needed. Supports `request_id` for idempotency. |
-| `modify_parameter` | Sets one attribute on all PowerFactory objects matching a query string. Auto-casts string values to the correct type. |
-| `add_component` | Creates a bus, load, generator, line, or two-winding transformer with validation, rollback, circuit breakers, and optional diagram insertion. |
-| `delete_component` | Previews or confirms exact-name component deletion, including generated cubicles, circuit breakers, and optional diagram cleanup. |
-| `run_loadflow` | Runs a standalone load flow calculation (ComLdf). |
-| `run_short_circuit` | Runs a standalone short-circuit calculation (ComShc). |
-| `run_simulation` | Executes the full pipeline defined in `simulation_config.json`. |
-| `run_custom_case` | Runs one fault simulation with parameters supplied at call time (no config file edit required). |
-| `read_results_csv` | Reads an RMS result CSV; auto-discovers the latest file if no path is given. |
-
-### Simulation Engine (`Agent_DIgSILENT.py`)
-
-| Class / Method | Description |
-|----------------|-------------|
-| `SimulationConfig` | Dataclass holding all simulation parameters. `from_json()` loads from a JSON file. |
-| `Logger` | Timestamped console logging with `info`, `ok`, `warn`, `error`, `section`. |
-| `DIgSILENTAgent.__init__` | Initialises the agent from a `SimulationConfig`. |
-| `DIgSILENTAgent.connect` | Connects to PowerFactory and activates the configured project. |
-| `DIgSILENTAgent.activate_study_case` | Activates or creates the target study case. |
-| `DIgSILENTAgent.run_loadflow` | Executes ComLdf. |
-| `DIgSILENTAgent.run_rms_simulation` | Applies fault events, then runs ComInc + ComSim. |
-| `DIgSILENTAgent._apply_fault_event` | Builds the event sequence for bus faults, line faults, or generator switches. |
-| `DIgSILENTAgent.addSwitchEvent` | Creates a PowerFactory `EvtSwitch` event. |
-| `DIgSILENTAgent.export_results_to_csv` | Exports the RMS result object to CSV via ComRes. |
-| `DIgSILENTAgent.export_project_to_pfd` | Exports the active project to `.pfd` via ComPfdexport. |
-| `DIgSILENTAgent.generate_standard_plots` | Reads the exported CSV and produces voltage and generator speed PNG plots. |
-| `DIgSILENTAgent.import_project` | Imports a `.pfd` file into the running PowerFactory session. |
-| `DIgSILENTAgent.create_study_case` | Creates or reuses a study case by exact name. |
-| `DIgSILENTAgent.modify_parameter` | Sets an attribute on all objects returned by `GetCalcRelevantObjects`. |
-| `DIgSILENTAgent.get_active_project` | Returns the active project identity. |
-| `DIgSILENTAgent.get_active_study_case` | Returns the active study-case identity. |
-| `DIgSILENTAgent.get_parameters` | Reads selected object attributes. |
-| `DIgSILENTAgent.list_objects` | Lists objects using a PowerFactory query. |
-| `DIgSILENTAgent.list_components` | Lists friendly component categories. |
-| `DIgSILENTAgent.list_study_cases` | Lists available study cases and marks the active one. |
-| `DIgSILENTAgent.add_component` | Creates and verifies supported network components and their connections. |
-| `DIgSILENTAgent.delete_component` | Performs guarded exact-name component deletion and cleanup. |
-| `DIgSILENTAgent.short_circuit` | Standalone ComShc execution. |
-| `DIgSILENTAgent.run_pipeline` | Orchestrates the full workflow and returns a structured status report. |
-| `DIgSILENTAgent.close` | Shuts down PowerFactory and clears shared handles. |
-
-## Component Management
-
-### Create a component
-
-```text
-add_component(
-    component_type,
-    component_name,
-    parameters,
-    grid_name="",
-    out_of_service=false,
-    open_digsilent=true,
-    update_graphics=false
-)
-```
-
-Supported component parameters:
-
-| Type | Required parameters | Optional parameters |
+| Task | Main tools | Guide |
 |---|---|---|
-| `bus` | `nominal_voltage_kv` | — |
-| `load` | `bus_name`, `active_power_mw` | `reactive_power_mvar` |
-| `generator` | `bus_name`, `template_generator`, `active_power_mw` | `reactive_power_mvar` |
-| `line` | `bus1_name`, `bus2_name`, `template_line`, `length_km` | — |
-| `transformer` | `high_voltage_bus_name`, `low_voltage_bus_name`, `template_transformer` | — |
+| Inspect models | `list_components`, `list_objects`, `get_parameters` | [Tool reference](references/tool_guide.md#implemented-functions) |
+| Manage study cases and imports | `list_study_cases`, `create_study_case`, `import_project` | [Examples](references/tool_guide.md#prompt-examples) |
+| Run calculations | `run_loadflow`, `run_short_circuit` | [Tool reference](references/tool_guide.md#implemented-functions) |
+| Simulate faults and read results | `run_custom_case`, `run_simulation`, `read_results_csv` | [Configuration and outputs](references/tool_guide.md#configuration) |
+| Run contingency analysis | `list_contingencies`, `run_contingency_analysis`, `get_contingency_summary` | [Contingency tools](references/tool_guide.md#implemented-functions) |
+| Bootstrap grids and buses | `create_grid_with_buses` | [Bootstrap](references/tool_guide.md#greenfield-grid-bootstrap) |
+| Add or delete equipment | `add_component`, `delete_component` | [Component management](references/tool_guide.md#component-management) |
+| Build paper-backed equipment | `list_evemtbench_components`, `create_evemtbench_component` | [EvEMTBench](#evemtbench-equipment) |
+| Export a diagram | `export_active_grid_pdf` | [Export behavior](references/tool_guide.md#automated-tests-and-validation-reports) |
 
-Each generated connection cubicle contains one closed circuit breaker
-(`StaSwitch`, `aUsage="cbk"`, `on_off=1`). Set `update_graphics=true` to
-request insertion into the active single-line diagram.
+The [detailed guide](references/tool_guide.md) contains full tool and agent-method
+inventories, parameter examples, and prompt examples.
 
-If graphical insertion fails, the network component remains created and the
-tool returns `success=false` with the graphical error. Check the returned
-message before retrying to avoid creating a duplicate.
+## EvEMTBench Equipment
 
-PowerFactory may place an isolated bus far from the existing network when it
-is inserted directly into the diagram. For a better anchored result, create
-the bus with `update_graphics=false`, then create its first connecting line
-with `update_graphics=true`.
+Two public MCP tools cover six component families:
 
-### Delete a component
+- `list_evemtbench_components(component_type, filters)` reads catalog data and
+  returns source information, available filters, and creation parameters.
+- `create_evemtbench_component(component_type, parameters)` previews or creates
+  equipment using the selected catalog.
 
-```text
-delete_component(
-    component_type,
-    component_name,
-    grid_name="",
-    confirmation="",
-    open_digsilent=true,
-    update_graphics=false
+Supported types: `transformer`, `overhead_line`, `underground_cable`,
+`external_grid`, `load`, and `synchronous_machine`.
+
+Discover a line profile without opening PowerFactory:
+
+```python
+list_evemtbench_components(
+    component_type="overhead_line",
+    filters={"voltage_kv": 110, "profile": "p50"},
 )
 ```
 
-Calling `delete_component` without confirmation returns a preview and the
-required confirmation phrase:
+Preview a load in an existing grid with a compatible bus:
 
-```text
-DELETE <component_type> <exact component name>
+```python
+create_evemtbench_component(
+    component_type="load",
+    parameters={
+        "voltage_kv": 20,
+        "load_name": "Research Load",
+        "bus_name": "MV Bus",
+        "grid_name": "Research Grid",
+        "seed": 42,
+        "out_of_service": True,
+        "confirmation": "",
+    },
+)
 ```
 
-Confirmed deletion removes the exact component and its generated cubicles and
-circuit breakers. A bus cannot be deleted while it still has connected
-cubicles. Set `update_graphics=true` to remove the corresponding diagram object
-and rebuild the active view.
+These are MCP tool-call examples. An empty confirmation creates nothing.
+Inspect the preview, then repeat the same request with the exact returned
+`confirmation_required` string to apply it. If inputs or resolved project
+state change, obtain a fresh preview.
 
----
+Choose the catalog class or profile explicitly; a paper table alone does not
+select equipment. See the [equipment examples](references/tool_guide.md#evemtbench-transformer-database-and-creator),
+[source mappings](references/evemtbench.md), and
+[component catalog](references/evemtbench_component_catalog.md).
+
+### Scope and safety
+
+- Bootstrap requires an active project and study case. It does not create a
+  project or a single-line diagram.
+- Lines and cables use sequence equivalents, not geometric ULM models.
+  Supply a suitable engineering current rating.
+- Transformer zero sequence has a restricted opt-in YNd11 impedance equivalent;
+  full core/limb and saturation mappings remain unsupported.
+  Loads default to constant power; opt-in `load_model="zip"` creates a new
+  type for voltage-dependent load flow. RMS/EMT ZIP behavior is unvalidated.
+  Synchronous-machine creation supports round rotors only.
+- Sampled research inputs need engineering review. Retained-value checks do not
+  establish a complete dynamic model or suitability for an energized network.
+- Preview/confirmation applies to EvEMTBench creation, bootstrap, and deletion.
+  Other tools, including `add_component` and `modify_parameter`, can change
+  the model immediately. Inspect returned status and partial-change warnings.
+
+When upgrading from specialized MCP tools, migrate to the two unified tools
+and refresh the client's tool list. Internal Python helpers remain available.
+See the [detailed guide](references/tool_guide.md) for per-family constraints.
 
 ## Configuration
 
-Copy `simulation_config.example.json` to `simulation_config.json` and fill in your paths and parameters:
-
-```json
-{
-    "project_path":    "\\<username>\\<project_folder>\\<project_name>.IntPrj",
-    "study_case":      "Case 1",
-    "base_study_case": "0. Base",
-    "output_dir":      "C:\\path\\to\\output",
-    "run_label":       "Test_1",
-    "result_name":     "All calculations.ElmRes",
-    "cases": [
-        {
-            "case_name":     "Fault_1",
-            "fault_type":    "bus",
-            "fault_element": "Bus 25.ElmTerm",
-            "t_start": 0.0, "t_fault": 1.0, "t_clear": 1.08, "t_end": 10.0, "dt_rms": 0.01
-        }
-    ]
-}
-```
-
-Supported `fault_type` values: `"bus"`, `"line"`, `"gen_switch"`.
-
-
----
+Copy [simulation_config.example.json](simulation_config.example.json) to
+`simulation_config.json`. Set the project, study case, output paths, and fault
+cases. Do not commit this machine-specific file. Configure
+`POWERFACTORY_PYTHON_PATH` or `PYTHONPATH` for the PowerFactory Python module.
+See the [configuration guide](references/tool_guide.md#configuration) for details.
 
 ## Output Structure
 
-Each simulation run creates a dedicated subfolder:
-
-```
-output_dir/
-└── run_label/
-    ├── run_label_RMS.csv
-    ├── run_label_voltages.png
-    ├── run_label_gen_speeds.png
-    └── run_label.pfd          (optional)
-```
-
----
+Each run writes CSV results and PNG plots beneath `output_dir/run_label/`,
+with an optional `.pfd` project export. See the
+[output example](references/tool_guide.md#output-structure).
 
 ## Requirements
 
-See [requirements.txt](requirements.txt) and [INSTALL.txt](INSTALL.txt) for full details.
-
-- Python 3.10+
-- DIgSILENT PowerFactory 2023 or later (with Python interface enabled)
-- PowerFactory Python module path configured through `POWERFACTORY_PYTHON_PATH` or `PYTHONPATH`
-- MCP Python SDK 2.x
-- numpy >= 1.26
-- matplotlib >= 3.8
-- pandas >= 1.5
-
----
+A licensed Windows installation of PowerFactory with its Python interface is
+required for simulations and model changes. Catalog listing works offline.
+Use a Python version supported by your PowerFactory installation.
+See [INSTALL.txt](INSTALL.txt) and [requirements.txt](requirements.txt) for setup
+and dependencies.
 
 ## Quick Start
 
-1. Install Python dependencies: `pip install -r requirements.txt`
-2. Add the PowerFactory Python path to your environment (see [INSTALL.txt](INSTALL.txt)).
-3. Copy and edit the config: `cp simulation_config.example.json simulation_config.json`
-4. Start the MCP server: `python MCP_PowerFactory.py`
-5. Connect your AI assistant to the server using the MCP protocol.
+From the `PowerFactory` directory, with your virtual environment active:
 
----
+```powershell
+python -m pip install -r requirements.txt
+Copy-Item simulation_config.example.json simulation_config.json
+python MCP_PowerFactory.py --transport stdio
+```
+
+Before starting the server, configure your project and output paths as described
+above. See [INSTALL.txt](INSTALL.txt) for MCP client configuration.
+
+Once connected, start with `ping`, then inspect the context using
+`get_active_project` and `get_active_study_case` before requesting changes.
 
 ## Prompt Examples
 
-Below are example prompts you can send to an AI assistant connected to this MCP server.
+> Inspect the active project and study case, then list ten buses without changes.
 
-**Health check**
-```
-Ping the PowerFactory server and confirm it's reachable.
-```
+> Preview a 20 kV EvEMTBench load on MV Bus in Research Grid using seed 42.
+> Return the sampled values and confirmation phrase without creating anything.
 
-**Run a load flow**
-```
-Run a load flow on the active study case and tell me if it converged.
-```
+See [more prompts](references/tool_guide.md#prompt-examples) for calculations,
+fault simulations, component management, and exports.
 
-**Run a transient fault simulation**
-```
-Simulate a three-phase bus fault on Bus 25 starting at t=1.0 s, cleared at t=1.08 s,
-with a total simulation window of 10 s and a time step of 0.01 s. Export the results
-and generate the voltage and generator speed plots.
-```
+## EvEMTBench Data Source
 
-**Modify a parameter before running**
-```
-Set the generator G 01.ElmSym out of service (e:outserv = 1),
-then run a load flow and report the result.
-```
-
-**Inspect the active context**
-```
-Return the active PowerFactory project and study case, then list the first ten
-buses without modifying anything.
-```
-
-**Create and connect a bus**
-```
-Create an in-service 110 kV bus named "MCP Example Bus" in Grid without a
-graphical update. Connect Bus 01 to it with a 1 km line based on
-"Line 01 - 02.ElmLne", request a graphical update for the line, and run a load
-flow. Stop if any operation fails.
-```
-
-**Preview and delete a component**
-```
-Preview deletion of the load "MCP Example Load" in Grid. Show me the required
-confirmation phrase and do not perform the confirmed deletion yet.
-```
-
-**Create a new study case and run a custom fault**
-```
-Create a study case called "Scenario_A" based on "0. Base",
-then run a line fault on "Line 12-34.ElmLne" from t=0.5 s to t=0.58 s
-in a 15 s window. Save the CSV and plots to C:\Results\Scenario_A.
-```
-
-**Short-circuit calculation**
-```
-Run a short-circuit calculation on the active study case and return the results.
-```
-
-**Read the latest results**
-```
-Read the most recent RMS results CSV and summarise the peak voltage deviations
-and minimum generator speed recorded during the simulation.
-```
-
-**Import a project and run the full pipeline**
-```
-Import the project at C:\Projects\IEEE39.pfd, activate it,
-then run the full simulation pipeline defined in the config file.
-```
-
----
+Equipment catalogs use [EvEMTBench (Kordowich et al., 2026)](https://arxiv.org/abs/2608.19777).
+See [source mappings and limitations](references/evemtbench.md).
 
 ## License
 
 MIT
+
+## Automated Tests and Validation Reports
+
+From the repository root:
+
+```powershell
+python -m pytest PowerFactory/tests -q
+```
+
+The installed-wheel smoke check,
+[`check_evemtbench_wheel.py`](tests/check_evemtbench_wheel.py), runs separately
+in CI against an installed package outside the checkout. Automated tests do
+not replace licensed-runtime validation.
+
+Live records and contribution and function-test reports are indexed in
+[`evidence/`](evidence/README.md). See the
+[validation notes](references/tool_guide.md#automated-tests-and-validation-reports)
+for confirmation binding and PDF diagram restoration limitations.

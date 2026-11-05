@@ -1,0 +1,46 @@
+Evidence ID: FT-15
+Title: Active grid diagram PDF export live validation
+Date: 9 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus active-grid PDF export changes
+
+Provenance:
+The contributor supplied individual MCP client responses and file metadata from
+the PowerFactory development PC. This is not a continuous terminal capture.
+The tested working tree had not yet been committed, and no independent
+byte-for-byte revision comparison was performed. The Windows account name is
+replaced with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Active project and study case
+- Available grid diagram: Grid
+
+Initial name-discovery request:
+- Tool: powerFactoryUnified-export_active_grid_pdf
+- file_path: C:\Users\<user>\.powermcp\powerfactory\exports\active-grid-20261009.pdf
+- diagram_name: Summary Grid
+- open_digsilent: true
+
+Response:
+{"success": false, "message": "Diagram not found: Summary Grid. Available diagrams: Grid"}
+
+Successful export request:
+- Tool: powerFactoryUnified-export_active_grid_pdf
+- file_path: C:\Users\<user>\.powermcp\powerfactory\exports\active-grid-20261009.pdf
+- diagram_name: Grid
+- open_digsilent: true
+
+Response:
+{"success": true, "message": "Grid diagram 'Grid' exported to C:\\Users\\<user>\\.powermcp\\powerfactory\\exports\\active-grid-20261009.pdf"}
+
+Post-export filesystem verification:
+- FullName: C:\Users\<user>\.powermcp\powerfactory\exports\active-grid-20261009.pdf
+- Length: 40874 bytes
+- LastWriteTime: 09.10.2026 12:51:38
+
+The live check confirms exact diagram-name discovery, successful ComWr PDF
+export, and creation of a non-empty PDF file at the requested allowed path.
+The PDF's visual content and page layout were not independently inspected for
+this evidence record.

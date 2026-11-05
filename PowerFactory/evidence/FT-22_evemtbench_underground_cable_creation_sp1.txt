@@ -1,0 +1,127 @@
+Evidence ID: FT-22
+Title: EvEMTBench underground-cable creation
+Date: 11 October 2026
+Classification: Compiled evidence record
+Source revision: Working tree on main commit 63341e6 plus patches 0063-0090
+
+Provenance:
+The contributor supplied individual MCP client responses from the PowerFactory
+development PC. This is not a continuous terminal capture. The tested working
+tree had not yet been committed, and no independent byte-for-byte revision
+comparison was performed. The PowerFactory account identifier is replaced
+with <user>.
+
+Live environment:
+- PowerFactory 2026 SP1
+- Windows, VS Code MCP client, stdio transport
+- Project: test
+- Existing study case: Case 1
+- Grid: MCP Bootstrap Grid, 50 Hz
+- Existing bus: MCP Bootstrap MV 20, 20 kV
+- Newly created bus: MCP Bootstrap Cable End 20, 20 kV
+- Requested cable state: out of service
+
+Most recent captured automated validation for this working tree:
+- 116 tests passed
+- 31 subtests passed
+- elapsed time: 1.53 seconds
+
+Study-case activation:
+create_study_case(case_name="Case 1", base_study_case="0. Base",
+open_digsilent=true) returned:
+{"success": true, "message": "Study case already existed and was activated: Case 1"}
+
+Second-bus preview and creation:
+create_grid_with_buses previewed reuse of MCP Bootstrap Grid and
+MCP Bootstrap MV 20, with only MCP Bootstrap Cable End 20 pending. The preview
+returned success=true, applied=false, grid_will_be_created=false,
+grid_will_be_activated=false, and the exact confirmation phrase:
+CREATE GRID MCP Bootstrap Grid 50Hz WITH 2 BUSES plan=925efc465654
+
+The confirmed call returned success=true, applied=true, grid_created=false,
+buses_created=1, and reported the new 20 kV ElmTerm below MCP Bootstrap Grid.
+It returned grid_activated=false because the grid was already active; the
+preview had correspondingly reported grid_will_be_activated=false.
+
+Catalog inspection:
+list_evemtbench_cable_profiles(profile="p50") returned the 20 kV entry from
+catalog evemtbench-underground-cables-tables-3-6-v1. The catalog attributed
+the voltage and length range to Table 3 and the electrical sequence values to
+Table 6. Its p50 values were:
+- r1: 0.2125 ohm/km
+- x1: 0.1411 ohm/km
+- c1: 247.06 nF/km
+- r0: 0.7775 ohm/km
+- x0: 0.2661 ohm/km
+- c0: 247.06 nF/km
+
+The response explicitly identified the implementation as a three-phase
+underground-cable sequence equivalent. Construction and installation fields
+remain catalog-only; the tool does not claim to reproduce the paper's
+geometric ULM model. The caller supplied 0.4 kA because Table 6 does not
+publish cable ampacity.
+
+Read-only creation preview:
+create_evemtbench_cable was called with:
+- nominal frequency: 50 Hz
+- rated current: 0.4 kA
+- profile: p50
+- length: 2 km
+- cable name: MCP Bootstrap EvEMTBench Cable 20
+- type name: MCP Bootstrap EvEMTBench Cable Type 20
+- terminal 1: MCP Bootstrap MV 20
+- terminal 2: MCP Bootstrap Cable End 20
+- grid: MCP Bootstrap Grid
+- out_of_service: true
+- confirmation: empty
+
+The preview returned success=true, applied=false, type_created=false, and
+cable_created=false. It converted each capacitance from 247.06 nF/km to
+0.24706 uF/km for PowerFactory. The exact returned confirmation phrase was:
+CREATE MCP Bootstrap EvEMTBench Cable 20 WITH MCP Bootstrap EvEMTBench Cable Type 20 20kV p50 2km 0.4kA 50Hz
+
+Confirmed creation:
+The tool was called again with the exact preview confirmation phrase. It
+returned success=true, applied=true, type_created=true, and cable_created=true.
+It reported creation of a TypLne in the project Line Types folder and a
+connected ElmLne below MCP Bootstrap Grid.
+
+Independent type readback:
+get_parameters returned exactly one object for
+MCP Bootstrap EvEMTBench Cable Type 20.TypLne. PowerFactory retained:
+- uline: 20.0 kV
+- sline: 0.4000000059604645 kA
+- frnom: 50.0 Hz
+- rline: 0.21250000596046448 ohm/km
+- xline: 0.14110000431537628 ohm/km
+- cline: 0.24706000089645386 uF/km
+- rline0: 0.7774999737739563 ohm/km
+- xline0: 0.2660999894142151 ohm/km
+- cline0: 0.24706000089645386 uF/km
+
+Attribute metadata confirmed the expected PowerFactory meanings and units.
+The small differences from decimal inputs are normal single-precision
+readback.
+
+Independent element readback:
+get_parameters returned exactly one object for
+MCP Bootstrap EvEMTBench Cable 20.ElmLne. It retained the created TypLne,
+dline=2.0 km, outserv=1, and StaCubic references below MCP Bootstrap MV 20 and
+MCP Bootstrap Cable End 20. The final ping returned pong.
+
+Incidental denied request:
+Before the requested PowerFactory sequence, the MCP client attempted one
+PowerMCP-PSCAD list_projects call. The user denied it at the tool boundary. No
+PSCAD operation ran, and it did not alter the PowerFactory validation sequence.
+
+Conclusion and limits:
+This run validates Table 3/6 catalog filtering, explicit unit conversion,
+preview and exact confirmation, creation of a project TypLne and connected
+ElmLne, retained positive- and zero-sequence values, length, type assignment,
+both terminal connections, and safe out-of-service creation on PowerFactory
+2026 SP1.
+
+No geometric ULM cable was created. No construction fields or calculated
+ampacity were written. No in-service energization, load flow, short-circuit
+calculation, dynamic simulation, graphical-layout update, PowerFactory 2026
+SP4 validation, or independent revision verification was performed.

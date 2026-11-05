@@ -532,30 +532,59 @@ def open_case(case: str) -> Dict[str, Any]:
         case: Filename with .sav extension.
 
     Returns:
-        Dict with status and case information
+        Dict with status and case information.
     """
     try:
         case = checked_path(case, purpose="case")
     except PathNotAllowed as exc:
         return {"status": "error", "message": str(exc)}
+
     try:
         _ensure_psse()
         ierr = psspy.case(case)
-        err, bus_data = psspy.abuscount(flag=2)
-        err, branch_data = psspy.abrncount(flag=4)
-        err, gen_data = psspy.amachcount(flag=4)
 
-        if err == 0:
+        if ierr != 0:
             return {
-                'status': 'success',
-                'case_info': {
-                    'path': os.path.abspath(case),
-                    'num_buses': bus_data or 0,
-                    'num_branches': branch_data or 0,
-                    'num_generators': gen_data or 0
-                }
+                "status": "error",
+                "ierr": ierr,
+                "message": f"psspy.case returned ierr={ierr}",
+                "case": os.path.abspath(case),
             }
-        return {'status': 'error', 'ierr': err}
+
+        bus_ierr, bus_data = psspy.abuscount(flag=2)
+        if bus_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": bus_ierr,
+                "message": f"psspy.abuscount returned ierr={bus_ierr}",
+            }
+
+        branch_ierr, branch_data = psspy.abrncount(flag=4)
+        if branch_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": branch_ierr,
+                "message": f"psspy.abrncount returned ierr={branch_ierr}",
+            }
+
+        gen_ierr, gen_data = psspy.amachcount(flag=4)
+        if gen_ierr != 0:
+            return {
+                "status": "error",
+                "ierr": gen_ierr,
+                "message": f"psspy.amachcount returned ierr={gen_ierr}",
+            }
+
+        return {
+            "status": "success",
+            "case_info": {
+                "path": os.path.abspath(case),
+                "num_buses": bus_data or 0,
+                "num_branches": branch_data or 0,
+                "num_generators": gen_data or 0,
+            },
+        }
+
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -709,6 +738,299 @@ def search_psspy_commands(query: str, category: Optional[str] = None) -> Dict[st
             matches.append(entry)
 
     return {"status": "success", "count": len(matches), "results": matches[:50]}
+
+
+def _dyntools():
+    """Import dyntools, which ships in the PSSPY dir that _ensure_psse adds."""
+    _ensure_psse()
+    import dyntools
+
+    return dyntools
+
+
+_DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS = 10_000
+_DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS = 100_000
+
+
+def _channel_extrema(values: Any, time: Any) -> Dict[str, Any]:
+    """Return numeric min/max values and their corresponding positions."""
+    numeric = [
+        (index, value)
+        for index, value in enumerate(values)
+        if isinstance(value, (int, float)) and not isinstance(value, bool)
+    ]
+    if not numeric:
+        return {}
+    min_index, min_value = min(numeric, key=lambda item: item[1])
+    max_index, max_value = max(numeric, key=lambda item: item[1])
+    return {
+        "min": min_value,
+        "min_index": min_index,
+        "min_time": time[min_index],
+        "max": max_value,
+        "max_index": max_index,
+        "max_time": time[max_index],
+    }
+
+
+def _sample_dynamic_data(
+    data: Dict[Any, Any],
+    max_points: int,
+    max_cells: int,
+    selected: Optional[List[Any]] = None,
+) -> tuple[Dict[str, List[Any]], int, int, bool, Dict[str, Any]]:
+    """Validate and safely sample dynamic output within point and cell budgets."""
+    if "time" not in data or not data["time"]:
+        raise ValueError("Dynamic output is missing a non-empty time vector")
+
+    time = data["time"]
+    if not isinstance(time, (list, tuple)):
+        raise ValueError("Dynamic output time vector must be a sequence")
+
+    total_points = len(time)
+    if selected is None:
+        series = {key: value for key, value in data.items() if key != "time"}
+    else:
+        series = {
+            key: data[key]
+            for key in selected
+            if key != "time" and key in data
+        }
+    for key, value in series.items():
+        if not isinstance(value, (list, tuple)):
+            raise ValueError(f"Dynamic output channel {key!r} must be a sequence")
+        if len(value) != total_points:
+            raise ValueError(
+                f"Dynamic output channel {key!r} has {len(value)} points; "
+                f"expected {total_points} to match the time vector"
+            )
+
+    if not series:
+        raise ValueError("Dynamic output contains no time-series channels")
+
+    returned_series_count = len(series) + 1
+    effective_points = min(max_points, max_cells // returned_series_count)
+    if effective_points < 2 and total_points > effective_points:
+        raise ValueError(
+            f"max_cells={max_cells} is too small for "
+            f"{returned_series_count} returned series; at least 2 points are required"
+        )
+
+    downsampled = total_points > effective_points
+    if not downsampled:
+        result = {"time": time}
+        result.update({str(key): value for key, value in series.items()})
+        return result, total_points, effective_points, False, {}
+
+    indices = [
+        (i * (total_points - 1)) // (effective_points - 1)
+        for i in range(effective_points)
+    ]
+    sampled = {"time": [time[index] for index in indices]}
+    sampled.update(
+        {
+            str(key): [values[index] for index in indices]
+            for key, values in series.items()
+        }
+    )
+    extrema = {
+        str(key): _channel_extrema(values, time)
+        for key, values in series.items()
+    }
+    return sampled, total_points, effective_points, True, extrema
+
+
+
+@mcp.tool()
+def list_dynamic_output_channels(
+    outfile: str,
+    outvrsn: int = 0,
+) -> Dict[str, Any]:
+    """
+    List channels available in a PSS/E dynamic simulation output file.
+
+    Args:
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
+
+    Returns:
+        Dict containing the output title and channel definitions.
+    """
+    try:
+        outfile = checked_path(outfile, purpose="dynamic output")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if not os.path.isfile(outfile):
+        return {
+            "status": "error",
+            "message": (
+                f"Dynamic output file does not exist: "
+                f"{os.path.abspath(outfile)}"
+            ),
+        }
+
+    try:
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
+        title, channels, _ = chnf.get_data()
+
+        return {
+            "status": "success",
+            "outfile": os.path.abspath(outfile),
+            "title": title,
+            "channels": {
+                str(key): value
+                for key, value in channels.items()
+            },
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to read dynamic output: {exc}",
+        }
+
+
+@mcp.tool()
+def read_dynamic_output(
+    outfile: str,
+    channels: Optional[List[int]] = None,
+    outvrsn: int = 0,
+    max_points: Optional[int] = None,
+    max_cells: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Read time-series data from a PSS/E dynamic simulation output file.
+
+    Args:
+        outfile: Path to the PSS/E dynamic output (.out or .outx) file.
+        channels: Optional list of channel numbers to return. If omitted,
+            all channels are returned.
+        outvrsn: PSS/E output format version: 0 for .out, 1 for .outx.
+        max_points: Maximum number of time points in the response. Defaults to
+            10,000.
+        max_cells: Maximum number of returned time-series cells. Defaults to
+            100,000. The effective point count is the lower of max_points and
+            max_cells divided by the number of returned series.
+
+    Returns:
+        Dict containing the output title, selected channels, time-series data,
+        the original point count, effective point cap, cell cap, and transient
+        extrema when sampling is applied.
+    """
+    try:
+        outfile = checked_path(outfile, purpose="dynamic output")
+    except PathNotAllowed as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if not os.path.isfile(outfile):
+        return {
+            "status": "error",
+            "message": (
+                f"Dynamic output file does not exist: "
+                f"{os.path.abspath(outfile)}"
+            ),
+        }
+
+    if channels is not None:
+        if not channels:
+            return {
+                "status": "error",
+                "message": "channels must contain at least one channel number",
+            }
+
+        if any(
+            not isinstance(channel, int)
+            or isinstance(channel, bool)
+            or channel < 1
+            for channel in channels
+        ):
+            return {
+                "status": "error",
+                "message": "channels must contain positive integer channel numbers",
+            }
+
+    if max_points is None:
+        max_points = _DEFAULT_DYNAMIC_OUTPUT_MAX_POINTS
+    elif (
+        not isinstance(max_points, int)
+        or isinstance(max_points, bool)
+        or max_points < 2
+    ):
+        return {
+            "status": "error",
+            "message": "max_points must be an integer of at least 2",
+        }
+
+    if max_cells is None:
+        max_cells = _DEFAULT_DYNAMIC_OUTPUT_MAX_CELLS
+    elif (
+        not isinstance(max_cells, int)
+        or isinstance(max_cells, bool)
+        or max_cells < 2
+    ):
+        return {
+            "status": "error",
+            "message": "max_cells must be an integer of at least 2",
+        }
+
+    try:
+        chnf = _dyntools().CHNF(outfile, outvrsn=outvrsn)
+        title, channel_names, data = chnf.get_data()
+
+        if channels is None:
+            selected = list(channel_names.keys())
+        else:
+            missing = [
+                channel
+                for channel in channels
+                if channel not in channel_names
+            ]
+
+            if missing:
+                return {
+                    "status": "error",
+                    "message": f"Requested channel(s) not found: {missing}",
+                }
+
+            selected = ["time"] + channels
+
+        selected_names = {
+            str(channel): channel_names[channel]
+            for channel in selected
+            if channel in channel_names
+        }
+
+        (
+            sampled_data,
+            total_points,
+            effective_points,
+            downsampled,
+            extrema,
+        ) = _sample_dynamic_data(
+            data, max_points, max_cells, selected=selected
+        )
+
+        return {
+            "status": "success",
+            "outfile": os.path.abspath(outfile),
+            "title": title,
+            "channels": selected_names,
+            "data": sampled_data,
+            "num_points": len(sampled_data["time"]),
+            "total_points": total_points,
+            "downsampled": downsampled,
+            "max_points": max_points,
+            "max_cells": max_cells,
+            "effective_points": effective_points,
+            "returned_cells": len(sampled_data) * len(sampled_data["time"]),
+            **({"extrema": extrema} if downsampled else {}),
+        }
+
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"Failed to read dynamic output: {exc}",
+        }
 
 
 if __name__ == "__main__":

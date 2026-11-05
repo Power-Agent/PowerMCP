@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Any, Union
+import copy
 import sys
 from pathlib import Path
 
@@ -6,12 +7,19 @@ import pandapower as pp
 from mcp.server.mcpserver import MCPServer as FastMCP
 import logging
 
+# Only the repo root would shadow the real pandapower library, not this dir.
+_server_dir = str(Path(__file__).resolve().parent)
+if _server_dir not in sys.path:
+    sys.path.insert(0, _server_dir)
+from audit import audit_network as _audit_network
+from operating_point import validate_operating_point as _validate_operating_point
+
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
 if _repo_root_added:
     sys.path.insert(0, _repo_root)
 try:
-    from powermcp.solver_case import resolve_solver_case, diagnostic_messages, diagnostic_records
+    from powermcp.solver_case import resolve_solver_case, diagnostic_messages
     from powermcp.sandbox import PathNotAllowed, checked_path
 finally:
     if _repo_root_added:
@@ -41,6 +49,35 @@ def _get_network() -> pp.pandapowerNet:
     if _current_net is None:
         raise RuntimeError("No pandapower network is currently loaded. Please create or load a network first.")
     return _current_net
+
+
+@mcp.tool()
+def audit_network() -> Dict[str, Any]:
+    """Run a deterministic structural audit on the current network.
+
+    The audit does not run a power flow and does not mutate the network.
+
+    Returns:
+        Dict whose ``status`` is ``success`` when the audit ran, or ``error``
+        with a ``message`` when it could not run, like the other tools. On
+        success, ``audit_status`` is the verdict (``ok``, ``warning`` or
+        ``error``), ``counts`` has keys ``errors``, ``warnings`` and ``info``,
+        and each of ``findings`` has ``severity``, ``code``, ``message``,
+        ``element`` and ``index``.
+    """
+    logger.info("Auditing current pandapower network")
+    try:
+        report = _audit_network(_get_network()).to_dict()
+    except RuntimeError as re:
+        return {"status": "error", "message": str(re)}
+    except Exception as e:
+        return {"status": "error", "message": f"Network audit failed: {str(e)}"}
+    return {
+        "status": "success",
+        "audit_status": report["status"],
+        "counts": report["counts"],
+        "findings": report["findings"],
+    }
 
 
 @mcp.tool()
@@ -161,6 +198,58 @@ def run_power_flow(algorithm: str = 'nr', calculate_voltage_angles: bool = True,
         }
 
 @mcp.tool()
+def validate_operating_point(
+    voltage_min_pu: float = 0.95,
+    voltage_max_pu: float = 1.05,
+    line_loading_limit_percent: float = 100.0,
+    trafo_loading_limit_percent: float = 100.0,
+) -> Dict[str, Any]:
+    """Validate the current converged operating point against voltage and loading limits.
+
+    Reads the results of the last power flow (res_bus, res_line, res_trafo,
+    res_trafo3w); it does not run a solver or modify the network, so call
+    run_power_flow first. The limits are the global values passed here;
+    per-element limits stored in the network (bus min_vm_pu/max_vm_pu, line
+    max_loading_percent) are ignored. trafo_loading_limit_percent applies to
+    2- and 3-winding transformers, and out-of-service buses are skipped.
+
+    Args:
+        voltage_min_pu: Lowest acceptable bus voltage magnitude in p.u.
+        voltage_max_pu: Highest acceptable bus voltage magnitude in p.u.
+        line_loading_limit_percent: Line loading limit in percent
+        trafo_loading_limit_percent: Transformer loading limit in percent
+
+    Returns:
+        Dict whose ``status`` is ``success`` when the validation ran, or
+        ``error`` with a ``message`` when it could not (no network, no
+        converged power flow, invalid limits), like the other tools. On
+        success, ``validation_status`` is the verdict:
+        ``ok`` - nothing within 5% of a limit;
+        ``warning`` - no violations, but an element is within 5% of a limit
+            (see near_limit_codes);
+        ``error`` - limit violations were found (see violations).
+        A completed validation also carries criteria, summary,
+        near_limit_codes, violations and counts.
+    """
+    try:
+        net = _get_network()
+        report = _validate_operating_point(
+            net,
+            voltage_min_pu=voltage_min_pu,
+            voltage_max_pu=voltage_max_pu,
+            line_loading_limit_percent=line_loading_limit_percent,
+            trafo_loading_limit_percent=trafo_loading_limit_percent,
+        )
+    except RuntimeError as exc:
+        return {"status": "error", "message": str(exc)}
+    # The validator reports "failed" when it could not run; every other
+    # status is its verdict on a completed validation.
+    verdict = report.pop("status")
+    if verdict == "failed":
+        return {"status": "error", **report}
+    return {"status": "success", "validation_status": verdict, **report}
+
+@mcp.tool()
 def run_contingency_analysis(contingency_type: str = "N-1", 
                            elements: Optional[List[str]] = None) -> Dict[str, Any]:
     """Run contingency analysis on the current network.
@@ -177,7 +266,7 @@ def run_contingency_analysis(contingency_type: str = "N-1",
         net = _get_network()
         
         # Store original state
-        orig_net = net.deepcopy()
+        orig_net = copy.deepcopy(net)
         results = []
         
         # Define elements to analyze
@@ -188,7 +277,7 @@ def run_contingency_analysis(contingency_type: str = "N-1",
         for element_type in elements:
             for idx in net[element_type].index:
                 # Create contingency by taking element out of service
-                contingency_net = orig_net.deepcopy()
+                contingency_net = copy.deepcopy(orig_net)
                 contingency_net[element_type].at[idx, 'in_service'] = False
                 
                 try:
@@ -483,7 +572,7 @@ def export_network_to_format(to_format: str) -> Dict[str, Any]:
         "status": "success",
         "text": conv.text,
         "fidelity": conv.fidelity,
-        "diagnostics": diagnostic_records(conv.diagnostics),
+        "diagnostics": powerio.diagnostic_records(conv.diagnostics),
         "warnings": list(diagnostic_messages(conv.diagnostics)),
     }
 

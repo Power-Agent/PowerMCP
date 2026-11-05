@@ -6,6 +6,12 @@ from typing import Any
 from mcp.server.mcpserver import MCPServer as FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
+from .powermcp_adapter import apply_powermcp_hope_config
+
+# PowerMCP owns this adapter layer. Translate its captured installation paths
+# into the environment-based contract used by the synchronized standalone core.
+apply_powermcp_hope_config()
+
 from .core import (
     hope_aggregation_audit,
     hope_cancel_job,
@@ -15,6 +21,7 @@ from .core import (
     hope_debug_solver_environment_async,
     hope_compare_cases,
     hope_emission_compliance,
+    hope_holistic_status,
     hope_job_status,
     hope_nodal_prices,
     hope_open_dashboard,
@@ -323,7 +330,7 @@ def register_write_tools(mcp: FastMCP) -> None:
         name="hope_run_hope",
         description=(
             "Launch a HOPE single-case run as a background job. Returns a job_id immediately. "
-            "Poll with hope_job_status until done. Works for both GTEP and PCM model modes. "
+            "Poll with hope_job_status until done. Works for GTEP, PCM, and DART model modes. "
             "Pass any ModelCases directory name as case_id."
         ),
     )
@@ -356,14 +363,32 @@ def register_write_tools(mcp: FastMCP) -> None:
             "Stage 1 solves capacity expansion (GTEP) to determine optimal new builds and retirements. "
             "Stage 2 fixes the resulting fleet and runs a full PCM (production cost model) "
             "to validate operational feasibility and compute hourly dispatch + LMPs. "
-            "Returns a job_id immediately. Poll with hope_job_status."
+            "Creates an isolated workspace and persistent manifest. Returns a request_id and job_id; "
+            "poll with hope_holistic_status. Reusing the same request_id is idempotent."
         ),
     )
     def hope_run_holistic_tool(
         gtep_case_id: str,
         pcm_case_id: str,
+        request_id: str | None = None,
+        solver: str | None = None,
     ) -> dict[str, Any]:
-        return hope_run_holistic(gtep_case_id=gtep_case_id, pcm_case_id=pcm_case_id)
+        return hope_run_holistic(
+            gtep_case_id=gtep_case_id,
+            pcm_case_id=pcm_case_id,
+            request_id=request_id,
+            solver=solver,
+        )
+
+    @mcp.tool(
+        name="hope_holistic_status",
+        description=(
+            "Return the persistent status and artifact locations for a GTEP->PCM request. "
+            "Unlike job IDs, request IDs remain queryable after an MCP reconnect."
+        ),
+    )
+    def hope_holistic_status_tool(request_id: str) -> dict[str, Any]:
+        return hope_holistic_status(request_id)
 
     @mcp.tool(
         name="hope_run_erec",
@@ -392,7 +417,7 @@ def register_write_tools(mcp: FastMCP) -> None:
         description=(
             "Launch the local HOPE Dash dashboard for a completed case run and return its URL. "
             "Automatically picks the GTEP dashboard (port 8051) for GTEP cases and the PCM dashboard "
-            "(port 8050) for PCM cases. "
+            "(port 8050) for PCM cases. DART has no dashboard yet and returns an explicit unsupported-mode error. "
             "If a dashboard is already running on the target port, returns the existing URL immediately. "
             "After the browser URL opens, select the matching case from the dropdown in the UI. "
             "Requires Python with dash, plotly, pandas installed "

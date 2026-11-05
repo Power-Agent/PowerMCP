@@ -1,0 +1,265 @@
+{
+  "success": true,
+  "scope": "YNd11 lossless sequence-network absolute current reference",
+  "rows": [
+    {
+      "label": "baseline",
+      "three_phase_ka": 0.7906929703892057,
+      "earth_fault_ka": 0.850727859777707,
+      "retained_r0pu": 0.01022594328969717,
+      "retained_x0pu": 0.10423660278320312,
+      "neutral_resistance_ohm": 0.0,
+      "passed": true,
+      "hv_terminal_I0_ka": 0.2835759532576406,
+      "lv_terminal_I0_ka": 0.0,
+      "prefault_voltage_pu": 0.9999999999973533,
+      "reference": {
+        "three_phase_ka": 0.790692966014283,
+        "earth_fault_ka": 0.8507278521757972,
+        "hv_terminal_I0_ka": 0.2835759507252657,
+        "lv_terminal_I0_ka": 0.0,
+        "hv_impedance_base_ohm": 605.0,
+        "hv_current_base_ka": 0.1049727762162956,
+        "source_Z1_pu": {
+          "real": 0.0019900744097807893,
+          "imag": 0.019900743801263703
+        },
+        "Z1_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z2_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z0_pu": {
+          "real": 0.01022594328969717,
+          "imag": 0.10423660278320312
+        }
+      },
+      "relative_errors": {
+        "three_phase_ka": 5.533023493876223e-09,
+        "earth_fault_ka": 8.935771715854653e-09,
+        "hv_terminal_I0_ka": 8.930146983180101e-09
+      },
+      "absolute_reference_passed": true
+    },
+    {
+      "label": "higher_R0",
+      "three_phase_ka": 0.7906929703892057,
+      "earth_fault_ka": 0.8134800676727756,
+      "retained_r0pu": 0.10225943475961685,
+      "retained_x0pu": 0.10423660278320312,
+      "neutral_resistance_ohm": 0.0,
+      "passed": true,
+      "hv_terminal_I0_ka": 0.27116002254234106,
+      "lv_terminal_I0_ka": 0.0,
+      "prefault_voltage_pu": 0.9999999999973533,
+      "reference": {
+        "three_phase_ka": 0.790692966014283,
+        "earth_fault_ka": 0.8134800623589546,
+        "hv_terminal_I0_ka": 0.27116002078631823,
+        "lv_terminal_I0_ka": 0.0,
+        "hv_impedance_base_ohm": 605.0,
+        "hv_current_base_ka": 0.1049727762162956,
+        "source_Z1_pu": {
+          "real": 0.0019900744097807893,
+          "imag": 0.019900743801263703
+        },
+        "Z1_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z2_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z0_pu": {
+          "real": 0.10225943475961685,
+          "imag": 0.10423660278320312
+        }
+      },
+      "relative_errors": {
+        "three_phase_ka": 5.533023493876223e-09,
+        "earth_fault_ka": 6.532207960222809e-09,
+        "hv_terminal_I0_ka": 6.475965085326057e-09
+      },
+      "absolute_reference_passed": true
+    },
+    {
+      "label": "higher_X0",
+      "three_phase_ka": 0.7906929703892057,
+      "earth_fault_ka": 0.6640420079137861,
+      "retained_r0pu": 0.01022594328969717,
+      "retained_x0pu": 0.20847317576408386,
+      "neutral_resistance_ohm": 0.0,
+      "passed": true,
+      "hv_terminal_I0_ka": 0.22134733597001716,
+      "lv_terminal_I0_ka": 0.0,
+      "prefault_voltage_pu": 0.9999999999973533,
+      "reference": {
+        "three_phase_ka": 0.790692966014283,
+        "earth_fault_ka": 0.6640420109815358,
+        "hv_terminal_I0_ka": 0.22134733699384523,
+        "lv_terminal_I0_ka": 0.0,
+        "hv_impedance_base_ohm": 605.0,
+        "hv_current_base_ka": 0.1049727762162956,
+        "source_Z1_pu": {
+          "real": 0.0019900744097807893,
+          "imag": 0.019900743801263703
+        },
+        "Z1_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z2_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z0_pu": {
+          "real": 0.01022594328969717,
+          "imag": 0.20847317576408386
+        }
+      },
+      "relative_errors": {
+        "three_phase_ka": 5.533023493876223e-09,
+        "earth_fault_ka": 4.619812707911672e-09,
+        "hv_terminal_I0_ka": 4.625436618202474e-09
+      },
+      "absolute_reference_passed": true
+    },
+    {
+      "label": "neutral_resistance",
+      "three_phase_ka": 0.7906929703892057,
+      "earth_fault_ka": 0.8088946015064056,
+      "retained_r0pu": 0.01022594328969717,
+      "retained_x0pu": 0.10423660278320312,
+      "neutral_resistance_ohm": 20.0,
+      "passed": true,
+      "hv_terminal_I0_ka": 0.2696315338192448,
+      "lv_terminal_I0_ka": 0.0,
+      "prefault_voltage_pu": 0.9999999999973533,
+      "reference": {
+        "three_phase_ka": 0.790692966014283,
+        "earth_fault_ka": 0.8088945948632568,
+        "hv_terminal_I0_ka": 0.2696315316210856,
+        "lv_terminal_I0_ka": 0.0,
+        "hv_impedance_base_ohm": 605.0,
+        "hv_current_base_ka": 0.1049727762162956,
+        "source_Z1_pu": {
+          "real": 0.0019900744097807893,
+          "imag": 0.019900743801263703
+        },
+        "Z1_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z2_pu": {
+          "real": 0.006746327156809855,
+          "imag": 0.13258895738807094
+        },
+        "Z0_pu": {
+          "real": 0.10939949700870544,
+          "imag": 0.10423660278320312
+        }
+      },
+      "relative_errors": {
+        "three_phase_ka": 5.533023493876223e-09,
+        "earth_fault_ka": 8.212626034359908e-09,
+        "hv_terminal_I0_ka": 8.152456046195909e-09
+      },
+      "absolute_reference_passed": true
+    }
+  ],
+  "restored": true,
+  "cleanup_ok": true,
+  "remaining_objects": [],
+  "limitations": [
+    "Restricted lossless, unloaded network; not an absolute-current certification of the original lossy type.",
+    "No core/limb, internal-delta YNyn, RMS or EMT validation.",
+    "Perturbed impedances are diagnostic controls, not Table 10 samples."
+  ],
+  "method_template": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase\\MCP Complete Method Template.ComShc",
+  "method_code": 3,
+  "method_selection_basis": "operator selected complete on dedicated GUI template; enum read directly",
+  "test_name": "MCP YNd Reference c8c7e260",
+  "original_study_case": "\\<user>.IntUser\\test.IntPrj\\Study Cases.IntPrjfolder\\Case 1.IntCase",
+  "original_active_grids": [
+    "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\Grid.ElmNet",
+    "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Bootstrap Grid.ElmNet",
+    "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Confirmation Check 20261013.ElmNet",
+    "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Round Rotor Grid 20261011.ElmNet"
+  ],
+  "original_scenario": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Operation Scenarios.IntPrjfolder\\N.IntScenario",
+  "source_type": "\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Transformer Types.IntPrjfolder\\EvEMTBench Test Type 110-20.TypTr2",
+  "original_type": {
+    "pfe": 14.55005931854248,
+    "curmg": 0.42232099175453186,
+    "nntap0": 0,
+    "strn": 20.0,
+    "frnom": 60.0,
+    "utrn_h": 110.0,
+    "utrn_l": 20.0,
+    "tr2cn_h": "YN",
+    "tr2cn_l": "D",
+    "nt2ag": 11.0,
+    "it0mt": 0,
+    "r1pu": 0.004756252747029066,
+    "x1pu": 0.11268821358680725,
+    "r0pu": 0.0,
+    "x0pu": 0.029999999329447746,
+    "ur0tr": 0.0,
+    "uk0tr": 3.0
+  },
+  "source_c_factors": {
+    "cmax": {
+      "description": "Max. Values: c-Factor (max.)",
+      "before": 1.100000023841858,
+      "retained": 1.0
+    },
+    "cmin": {
+      "description": "Min. Values: c-Factor (min.)",
+      "before": 1.0,
+      "retained": 1.0
+    }
+  },
+  "method_description": "Method",
+  "fault_command": {
+    "method_code": 3,
+    "fault_bus": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP YNd Reference c8c7e260.ElmNet\\HV Star 110.ElmTerm",
+    "faults": [
+      "3psc",
+      "spgf"
+    ],
+    "Rf_ohm": 0.0,
+    "Xf_ohm": 0.0
+  },
+  "source_inputs": {
+    "snss": 1000.0,
+    "rntxn": 0.10000000149011612,
+    "x0tx1": 1.0,
+    "r0tx0": 0.10000000149011612,
+    "usetp": 1.0
+  },
+  "reference_assumptions": {
+    "prefault_voltage_pu": 1.0,
+    "source_c_factor": 1.0,
+    "source_Z2_equals_Z1": true,
+    "transformer_Z2_equals_Z1": true,
+    "source_Z0_excluded_by_delta": true,
+    "temporary_pfe_kw": 0.0,
+    "temporary_curmg_pct": 0.0,
+    "fault_impedance_ohm": 0.0,
+    "current_relative_tolerance": 0.005,
+    "current_absolute_tolerance_ka": 1e-05,
+    "formula_3ph": "Ibase / abs(Z1)",
+    "formula_slg": "3 * Ibase / abs(Z1 + Z2 + Z0)",
+    "formula_Z0": "R0pu + jX0pu + 3*(Rn+jXn)/Zbase"
+  },
+  "source_only_control": {
+    "expected_ka": 28.86751345948129,
+    "measured_ka": 28.867514740311133,
+    "passed": true
+  },
+  "method_template_unchanged": true
+}

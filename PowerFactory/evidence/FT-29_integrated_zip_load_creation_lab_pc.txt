@@ -1,0 +1,199 @@
+FT-29: Integrated opt-in ZIP load creation through the unified MCP tool
+=====================================================================
+
+Classification: compiled evidence record containing a user-supplied creation
+response. This is not an independently rerun or continuous tool transcript.
+The JSON below is parsed/reformatted from the supplied response; account
+identifiers are replaced with <user>. Token text is preserved as supplied,
+not independently checked against the original client output file.
+
+Environment: Lab PC, PowerFactory 2026; service pack not captured in this output.
+Code under test: working tree with patch 0114 applied on feature branch
+feat/powerfactory-load-zip. No post-patch commit hash was supplied.
+Lab PC automated run reported 179 passed, 435 subtests passed.
+
+Sequence reported by the contributor:
+- Catalog discovery exposed load_model (default constant_power) and type_name.
+- Preview used voltage_kv=20, seed=42, load_model=zip, out_of_service=true.
+- An initial confirmation was rejected for an exact-token mismatch. Its
+  response reported success=false, applied=false, load_created=false; no
+  rollback/survivor fields were returned. This is not a creation/rollback test.
+- The client requested a fresh preview, then submitted the exact returned
+  confirmation locally rather than retyping it from the chat.
+- The final supplied response reported successful type and element creation.
+
+Checks supported by the final response:
+- New dedicated TypLod and connected ElmLod reported created.
+- Native type coefficients/exponents and derived cP/cQ returned after readback.
+- Negative bQ retained; both coefficient triplets sum to one within tolerance.
+- Element retained plini=1.013841 MW, qlini=-0.306438 Mvar, outserv=1.
+- typ_id is a plain full-name string matching created_type.
+- The Load Types folder already existed; folder creation was not exercised.
+
+Limits:
+- No separate post-call object query or server-health call was supplied.
+- No calculation was run on this out-of-service integrated load.
+- FT-28's seven-point ZIP load-flow response test used a separate diagnostic
+  network and type, not this newly created load.
+- Constant-power regression, stale-plan variations, and rollback failures have
+  automated coverage; they were not all rerun live in this integrated test.
+- RMS/EMT ZIP behavior remains unvalidated.
+- This test retains its new out-of-service load and dedicated type; no cleanup
+  was requested or reported.
+
+Final successful creation response (user-supplied, reformatted):
+--------------------------------------------------------------
+{
+  "success": true,
+  "applied": true,
+  "load_created": true,
+  "type_created": true,
+  "load_model": "zip",
+  "voltage_class": "20",
+  "seed": 42,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [
+      5
+    ]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "target": {
+    "grid": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Confirmation Check 20261013.ElmNet",
+    "load_name": "MCP ZIP Load Integration 01",
+    "bus": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Confirmation Check 20261013.ElmNet\\MCP Confirmation MV 20.ElmTerm",
+    "out_of_service": true
+  },
+  "item": {
+    "name": "MCP ZIP Load Integration 01",
+    "catalog_id": "evemtbench-loads-table-5-v1",
+    "source_tables": [
+      5
+    ],
+    "voltage_class": "20",
+    "seed": 42,
+    "parameters": {
+      "nominal_voltage_kv": 20,
+      "active_power_mw": 1.013841,
+      "reactive_power_mvar": -0.306438,
+      "apparent_power_mva": 1.05914,
+      "power_factor": 0.95723,
+      "power_factor_mode": "capacitive",
+      "reactive_power_angle_deg": -16.817661
+    },
+    "powerfactory_attributes": {
+      "plini": 1.013841,
+      "qlini": -0.306438
+    },
+    "model": "balanced voltage-dependent ZIP load (load flow only)",
+    "load_model": "zip",
+    "catalog_only": {
+      "load_model_coefficients": {
+        "kP_Z": {
+          "min": 0.2,
+          "max": 1.31
+        },
+        "kP_I": {
+          "min": -1.14,
+          "max": 0.5
+        },
+        "kP_P": {
+          "min": 0.14,
+          "max": 0.83
+        },
+        "kQ_Z": {
+          "min": 0.43,
+          "max": 4.74
+        },
+        "kQ_I": {
+          "min": -6.19,
+          "max": 0.71
+        },
+        "kQ_P": {
+          "min": -0.14,
+          "max": 2.45
+        },
+        "constraints": [
+          "kP_Z + kP_I + kP_P = 1",
+          "kQ_Z + kQ_I + kQ_P = 1"
+        ],
+        "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
+      }
+    },
+    "zip_coefficients": {
+      "kP_Z": 0.5239968824696447,
+      "kP_I": 0.0227936684188898,
+      "kP_P": 0.4532094491114655,
+      "kQ_Z": 1.7337988188477982,
+      "kQ_I": -1.9656476348433651,
+      "kQ_P": 1.231848815995567
+    },
+    "type_attributes": {
+      "kpu0": 0,
+      "kpu1": 1,
+      "kpu": 2,
+      "kqu0": 0,
+      "kqu1": 1,
+      "kqu": 2,
+      "aP": 0.4532094491114655,
+      "bP": 0.0227936684188898,
+      "aQ": 1.231848815995567,
+      "bQ": -1.9656476348433651
+    },
+    "derived_type_attributes": {
+      "cP": 0.5239968824696447,
+      "cQ": 1.7337988188477982
+    },
+    "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+    "limitations": [
+      "Enable Consider Voltage Dependency of Loads in ComLdf to apply ZIP behavior.",
+      "No load-flow command settings are changed by this creator.",
+      "RMS and EMT ZIP behavior have not been validated."
+    ],
+    "type_destination": {
+      "equipment_folder": "\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder",
+      "load_types_folder": "\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder",
+      "create_folder": false,
+      "type_name": "MCP ZIP Load Type Integration 01"
+    }
+  },
+  "confirmation_required": "CREATE MCP ZIP Load Integration 01 AT MCP Confirmation MV 20 20kV seed=42 grid=MCP Confirmation Check 20261013 out_of_service=1 plan=a772b8388bfe9307f4db03c4aa3c5dc8ed4ddfefd23a3e03b2cd9cb5be5e768b",
+  "message": "Created ElmLod 'MCP ZIP Load Integration 01' and connected it to 'MCP Confirmation MV 20'",
+  "created_load": "\\<user>.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP Confirmation Check 20261013.ElmNet\\MCP ZIP Load Integration 01.ElmLod",
+  "retained_powerfactory_attributes": {
+    "plini": 1.013841,
+    "qlini": -0.306438,
+    "outserv": 1,
+    "typ_id": "\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP Load Type Integration 01.TypLod"
+  },
+  "created_type": "\\<user>.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP Load Type Integration 01.TypLod",
+  "retained_type_attributes": {
+    "kpu0": 0,
+    "kpu1": 1,
+    "kpu": 2,
+    "kqu0": 0,
+    "kqu1": 1,
+    "kqu": 2,
+    "aP": 0.45320945978164673,
+    "bP": 0.022793669253587723,
+    "aQ": 1.2318488359451294,
+    "bQ": -1.965647578239441
+  },
+  "retained_derived_attributes": {
+    "cP": 0.5239968709647655,
+    "cQ": 1.7337987422943115
+  },
+  "component_type": "load"
+}

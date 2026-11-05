@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib
+import tomllib
 
 import pytest
 
@@ -17,7 +14,7 @@ from powermcp.registry import CORE, TOOLS, Tool
 
 def test_package_versions_match():
     project = tomllib.loads((registry.REPO_ROOT / "pyproject.toml").read_text())["project"]
-    assert project["version"] == __version__ == "0.4.0"
+    assert project["version"] == __version__ == "0.4.1"
 
 
 def test_core_tools_present_and_have_no_extra():
