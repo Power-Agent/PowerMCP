@@ -55,47 +55,6 @@ def unique_diagnostics(items: Any) -> list[Any]:
     return unique
 
 
-def diagnostic_record(item: Any) -> dict[str, Any]:
-    """One diagnostic in the shape the powerio MCP server reports."""
-    record: dict[str, Any] = {
-        "code": item.code,
-        "severity": item.severity,
-        "message": item.message,
-        "target": item.target,
-    }
-    if item.id:
-        record["id"] = item.id
-    if item.suggested_action:
-        record["suggested_action"] = item.suggested_action
-    if item.related:
-        record["related"] = list(item.related)
-    if item.details is not None:
-        record["details"] = item.details
-    spans = item.spans
-    if spans:
-        record["spans"] = [
-            {"source": span.source, "byte_start": span.byte_start, "byte_end": span.byte_end}
-            for span in spans
-        ]
-    return record
-
-
-def diagnostic_records(items: Any) -> list[dict[str, Any]]:
-    return [diagnostic_record(item) for item in items]
-
-
-def value_type_name(module: powerio.PioModule) -> str:
-    """The PowerIO structural type of a module's value.
-
-    powerio 0.11.2 publishes no accessor for it; its own MCP server reads the
-    same private attribute in `_canonical_type`. Isolating it here makes a
-    future public accessor a one-line change.
-    """
-    inner = getattr(module, "_inner", None)
-    name = getattr(inner, "_type_name", None)
-    return str(name) if name else f"powerio.{type(module.value).__name__}"
-
-
 def check_diagnostics(items: Any) -> None:
     failures = [item for item in items if item.severity == "error"]
     if failures:
@@ -144,7 +103,7 @@ class SolverCase:
             "selection": dict(self.selection),
         }
         if conversion is not None:
-            diagnostics.extend(diagnostic_records(conversion.diagnostics))
+            diagnostics.extend(powerio.diagnostic_records(conversion.diagnostics))
             warnings.extend(diagnostic_messages(conversion.diagnostics))
             fields["fidelity"] = conversion.fidelity
         fields["diagnostics"] = diagnostics
@@ -473,7 +432,7 @@ def resolve_solver_case(
     if isinstance(value, powerio.OperatingPoint):
         module = operating_point_module(module)
         value = module.value
-    selected_type = value_type_name(module)
+    selected_type = module.type_name
     lowering = None
     if isinstance(value, _MULTICONDUCTOR):
         if not to_balanced or not isinstance(value, powerio.MulticonductorNetwork):
@@ -517,7 +476,7 @@ def resolve_solver_case(
         context,
         value_type=selected_type,
         selection=selection,
-        diagnostics=tuple(diagnostic_records(all_diagnostics)),
+        diagnostics=tuple(powerio.diagnostic_records(all_diagnostics)),
         edits=edit_report,
         lowering=lowering,
     )

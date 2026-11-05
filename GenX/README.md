@@ -69,7 +69,7 @@ Below is the computation calling this skill executes.
 
 ## Setup
 
-Requires Python ≥ 3.10 and (for submission) a SLURM cluster with `sbatch` on
+Requires Python ≥ 3.11 and (for submission) a SLURM cluster with `sbatch` on
 `PATH` plus a local GenX.jl checkout. GenX itself is Julia; this connector
 reads the CSVs a completed run produces and submits new ones.
 
