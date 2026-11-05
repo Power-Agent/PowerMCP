@@ -1,8 +1,13 @@
 """Native Study adapter behavior and path checks."""
 import asyncio
+
 import pytest
-from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
-from powermcp import tellegen
+
+# tellegen reads PioModule.type_name and powerio.diagnostic_records.
+pytest.importorskip("powerio", minversion="0.11.8")
+
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError  # noqa: E402
+from powermcp import tellegen  # noqa: E402
 
 
 def test_apply_is_not_an_agent_operation(monkeypatch):
@@ -157,15 +162,23 @@ def test_the_input_side_diagnostics_travel_with_every_response(fake_binary):
     """The module's own records reach the caller, not only the returned module's."""
     lowered = powerio.parse(DIST).to_balanced(1.0)
     ir = powerio.serialize(lowered).text
-    codes = {record["code"] for record in tellegen._module_ir(ir, None, None, None, None)[1]["diagnostics"]}
-    assert codes and all(code.startswith("TRANSFORM.MULTI_TO_BALANCED") for code in codes)
+    records = tellegen._module_ir(ir, None, None, None, None)[1]["diagnostics"]
+    codes = {record["code"] for record in records}
+    # The lowered module keeps the reader's records beside the transformation's.
+    assert any(code.startswith("TRANSFORM.MULTI_TO_BALANCED") for code in codes)
+    assert all(code.startswith(("TRANSFORM.MULTI_TO_BALANCED", "READ.DSS")) for code in codes)
 
     solved = asyncio.run(tellegen.solve(powerio_ir=ir))
     assert {record["code"] for record in solved["diagnostics"]} == codes
-    # A balanced transformation states remarks, and `warnings` carries error and
-    # warning severities only, so the records are the ones that carry them.
-    assert {record["severity"] for record in solved["diagnostics"]} == {"remark"}
-    assert solved["warnings"] == []
+    # `warnings` carries the error and warning severities only; the remarks
+    # reach the caller through the records alone.
+    severities = {record["severity"] for record in solved["diagnostics"]}
+    assert "remark" in severities and "error" not in severities
+    assert set(solved["warnings"]) == {
+        f"{record['code']}: {record['message']}"
+        for record in solved["diagnostics"]
+        if record["severity"] == "warning"
+    }
 
     module = asyncio.run(tellegen.solve_module(powerio_ir=ir))
     # The stand-in echoes the module it was given, so its records repeat the

@@ -7,7 +7,8 @@
   powerio test suite (`tests/data/dist/micro`, CC BY 4.0), used to exercise the
   explicit multiconductor to balanced transformation at the solver boundary.
 - `opendss/geometry_unresolved.dss`: a four conductor feeder whose line geometry
-  carries no resolved impedance matrix, so a balanced transformation of it
-  fails with a diagnostic instead of a network.
+  names a conductor with no `WireData`, so PowerIO cannot compute its impedance
+  matrix and marks the network with an error (`READ.DSS.GEOMETRY_UNRESOLVED`).
+  PowerIO computes the impedance of a geometry whose wires are all defined.
 - `fake_tellegen.py`: a stand-in for the compiled `tellegen` CLI that speaks
   its JSON protocol, so the tellegen server tests run without a Rust toolchain.
