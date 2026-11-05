@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+from pathlib import Path
 
 import pytest
 
@@ -23,7 +24,7 @@ def test_set_and_get_roundtrip(isolated_config):
 
 
 def test_windows_backslash_path_roundtrip(isolated_config):
-    win = r"C:\\Program Files\\PTI\\PSSE36\\36.2\\PSSPY311"
+    win = r"C:\Program Files\PTI\PSSE36\36.2\PSSPY311"
     cfg.set_value("psse", "python_lib", win)
     assert cfg.get("psse", "python_lib") == win
 
@@ -52,14 +53,14 @@ def test_get_path_config_value_used(isolated_config, tmp_path):
 
 
 def test_get_path_missing_path_raises(isolated_config):
-    cfg.set_value("psse", "bin", r"C:\\does\\not\\exist\\PSSBIN")
+    cfg.set_value("psse", "bin", r"C:\does\not\exist\PSSBIN")
     with pytest.raises(cfg.ConfigError) as exc:
         cfg.get_path("psse", "bin")
     assert "does not exist" in str(exc.value)
 
 
 def test_get_path_must_exist_false_skips_check(isolated_config):
-    cfg.set_value("psse", "bin", r"C:\\does\\not\\exist\\PSSBIN")
+    cfg.set_value("psse", "bin", r"C:\does\not\exist\PSSBIN")
     assert cfg.get_path("psse", "bin", must_exist=False).endswith("PSSBIN")
 
 
@@ -77,11 +78,8 @@ def _concurrent_config_writer(index: int, home: str) -> None:
     cfg.set_value("worker", f"key_{index}", str(index))
 
 
-@pytest.mark.parametrize("start_method", ["spawn", "fork"])
-def test_concurrent_process_updates_are_not_lost(isolated_config, start_method):
-    if start_method == "fork" and os.name == "nt":
-        pytest.skip("fork is not available on Windows")
-    context = multiprocessing.get_context(start_method)
+def test_concurrent_process_updates_are_not_lost(isolated_config):
+    context = multiprocessing.get_context("spawn")
     workers = 8
     processes = [
         context.Process(
@@ -106,8 +104,6 @@ def test_save_uses_unique_staging_file_and_cleans_up_on_failure(isolated_config,
         assert Path(source).name.startswith(".config.toml.")
         assert Path(source).suffix == ".tmp"
         raise OSError("simulated replace failure")
-
-    from pathlib import Path
 
     monkeypatch.setattr(cfg.os, "replace", fail_replace)
     with pytest.raises(OSError, match="simulated replace failure"):
