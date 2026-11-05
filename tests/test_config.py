@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import multiprocessing
+import os
+from pathlib import Path
+
 import pytest
 
 from powermcp import config as cfg
@@ -70,3 +74,49 @@ def test_get_path_falls_back_to_legacy_default(isolated_config, tmp_path, monkey
     existing.mkdir()
     monkeypatch.setattr(registry, "legacy_default", lambda t, k: str(existing))
     assert cfg.get_path("psse", "python_lib") == str(existing)
+
+
+def _concurrent_config_writer(index: int, home: str) -> None:
+    os.environ["POWERMCP_HOME"] = home
+    cfg.set_value("worker", f"key_{index}", str(index))
+
+
+def test_concurrent_process_updates_are_not_lost(isolated_config):
+    context = multiprocessing.get_context("spawn")
+    workers = 8
+    processes = [
+        context.Process(
+            target=_concurrent_config_writer, args=(index, str(isolated_config))
+        )
+        for index in range(workers)
+    ]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(timeout=15)
+    for process in processes:
+        assert not process.is_alive(), "config writer hung waiting for lock"
+        assert process.exitcode == 0
+    config = cfg.load()
+    assert config["worker"] == {f"key_{index}": str(index) for index in range(workers)}
+
+
+def test_save_uses_unique_staging_file_and_cleans_up_on_failure(isolated_config, monkeypatch):
+    def fail_replace(source, destination):
+        assert Path(source).parent == cfg.config_dir()
+        assert Path(source).name.startswith(".config.toml.")
+        assert Path(source).suffix == ".tmp"
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(cfg.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated replace failure"):
+        cfg.save({"one": {"value": "1"}})
+    assert not cfg.config_path().exists()
+    assert list(isolated_config.glob(".config.toml.*.tmp")) == []
+
+
+def test_save_replaces_existing_file_atomically(isolated_config):
+    cfg.save({"existing": {"keep": "yes"}})
+    cfg.save({"existing": {"keep": "yes", "new": "value"}})
+    assert cfg.load() == {"existing": {"keep": "yes", "new": "value"}}
+    assert list(isolated_config.glob(".config.toml.*.tmp")) == []
