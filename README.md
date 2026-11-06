@@ -1,7 +1,7 @@
 # PowerMCP ⚡
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.10%20to%203.14-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.11%20to%203.14-blue.svg)](https://www.python.org/downloads/)
 
 PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
 
@@ -66,7 +66,7 @@ Check out these helpful tutorials to get started with MCP:
 
 ## 📦 Installation
 
-PowerMCP installs as a single Python package with an interactive CLI. Python 3.10 through 3.14 is supported.
+PowerMCP installs as a single Python package with an interactive CLI. Python 3.11 through 3.14 is supported.
 
 ```bash
 pip install powermcp
@@ -128,7 +128,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 ### Case compilation between servers (PowerIO)
 
 PowerIO IR is the exchange format of this repository. PowerMCP runs the
-server shipped in PowerIO 0.11.2 (`powermcp run powerio` is `python -m
+server shipped in PowerIO 0.11.9 (`powermcp run powerio` is `python -m
 powerio.mcp`); that server parses every grid exchange format, emits every
 target, summarizes, diagnoses, normalizes, lowers multiconductor networks, and
 calculates matrices. Its `parse` tool returns serialized **PowerIO IR

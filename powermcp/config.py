@@ -18,10 +18,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
+import tomllib
 
 import tomli_w
 

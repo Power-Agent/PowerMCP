@@ -4,7 +4,7 @@ MCP server for PSLF (GE Positive Sequence Load Flow), enabling case management, 
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - PSLF with PSLF_PYTHON API
 - [pandas](https://pandas.pydata.org/)
 
