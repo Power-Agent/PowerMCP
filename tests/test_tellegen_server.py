@@ -4,7 +4,7 @@ import asyncio
 import pytest
 
 # tellegen reads PioModule.type_name and powerio.diagnostic_records.
-pytest.importorskip("powerio", minversion="0.11.8")
+pytest.importorskip("powerio", minversion="0.11.9")
 
 from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError  # noqa: E402
 from powermcp import tellegen  # noqa: E402
