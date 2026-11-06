@@ -128,7 +128,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 ### Case compilation between servers (PowerIO)
 
 PowerIO IR is the exchange format of this repository. PowerMCP runs the
-server shipped in PowerIO 0.11.8 (`powermcp run powerio` is `python -m
+server shipped in PowerIO 0.11.9 (`powermcp run powerio` is `python -m
 powerio.mcp`); that server parses every grid exchange format, emits every
 target, summarizes, diagnoses, normalizes, lowers multiconductor networks, and
 calculates matrices. Its `parse` tool returns serialized **PowerIO IR

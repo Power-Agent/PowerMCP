@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("powerio", minversion="0.11.8")
+pytest.importorskip("powerio", minversion="0.11.9")
 
 from mcp import ClientSession, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client  # noqa: E402

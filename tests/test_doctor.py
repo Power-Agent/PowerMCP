@@ -166,13 +166,13 @@ def test_the_floor_is_found_without_top_level_distribution_metadata(monkeypatch)
     monkeypatch.setattr(
         doctor,
         "requires",
-        lambda _distribution: ("powerio[mcp,matrix]>=0.11.8,<0.12",),
+        lambda _distribution: ("powerio[mcp,matrix]>=0.11.9,<0.12",),
     )
     req = doctor._declared_requirement("powerio")
     assert req is not None
     assert doctor._canonical(req.name) == "powerio"
-    assert Version("0.11.8") in req.specifier
-    assert Version("0.11.7") not in req.specifier
+    assert Version("0.11.9") in req.specifier
+    assert Version("0.11.8") not in req.specifier
     assert Version("0.12.0") not in req.specifier
 
 

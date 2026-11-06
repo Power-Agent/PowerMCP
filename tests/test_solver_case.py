@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 # solver_case reads PioModule.type_name and powerio.diagnostic_records.
-pytest.importorskip("powerio", minversion="0.11.8")
+pytest.importorskip("powerio", minversion="0.11.9")
 
 import powerio  # noqa: E402
 
