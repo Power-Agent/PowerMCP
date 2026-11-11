@@ -201,8 +201,23 @@ def test_done_line_keeps_bracketed_config_path(monkeypatch, capsys, tmp_path):
 
     home = tmp_path / "cfg[old]"  # `[old]` reads as a Rich style tag
     monkeypatch.setenv("POWERMCP_HOME", str(home))
-    monkeypatch.setattr(wizard, "console", Console(width=1000))  # no wrapping of the long path
+    monkeypatch.setattr(wizard, "console", Console(width=80))  # the path is wider than this
     wizard.run_wizard(yes=False, tools="andes", clients="none", dry_run=True)
     out = capsys.readouterr().out
     assert f"PowerMCP config: {home / 'config.toml'}" in out
     assert "pip install powermcp[andes]" in out
+
+
+def test_long_pip_hint_stays_on_one_line(monkeypatch, capsys):
+    # Without a TTY Rich renders at 80 columns and used to fold a wider spec
+    # (every Windows tool) mid-word, so a copied hint split the spec in two.
+    from rich.console import Console
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(wizard, "_surge_supported", lambda: True)
+    monkeypatch.setattr(wizard, "console", Console(width=80))
+    selected = wizard._resolve_selection(yes=False, tools="all", select_all=False, client_names=[])
+    spec = "powermcp[" + ",".join(sorted({t.extra for t in selected if t.extra})) + "]"
+    assert len(spec) > 80
+    wizard._pip_install(selected, dry_run=True)
+    assert f"pip install {spec}" in capsys.readouterr().out

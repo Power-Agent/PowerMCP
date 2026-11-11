@@ -136,7 +136,7 @@ def run_wizard(
         _capture_paths(selected)
     _pip_install(selected, assume_yes=yes, dry_run=dry_run)
     _write_clients(selected, client_names, dry_run)
-    console.print(f"\n[green]Done.[/] PowerMCP config: {escape(str(cfg.config_path()))}")
+    console.print(f"\n[green]Done.[/] PowerMCP config: {escape(str(cfg.config_path()))}", soft_wrap=True)
 
 
 def _resolve_selection(
@@ -296,15 +296,20 @@ def _capture_paths(selected: list[Tool]) -> None:
 def _pip_install(selected: list[Tool], *, assume_yes: bool = False, dry_run: bool = False) -> None:
     extras = sorted({t.extra for t in selected if t.extra})
     spec = "powermcp" + (f"[{','.join(extras)}]" if extras else "")
-    # Rich would read `[andes,ltspice]` as a markup tag and drop it from the hint.
+    # Rich would read `[andes,ltspice]` as a markup tag and drop it from the hint,
+    # and would fold a spec wider than the console (80 columns without a TTY)
+    # across lines; soft_wrap leaves the copyable command on one line.
     shown = escape(spec)
     if dry_run:
-        console.print(f"[cyan](dry-run)[/] would run: pip install {shown}")
+        console.print(f"[cyan](dry-run)[/] would run: pip install {shown}", soft_wrap=True)
         return
     if assume_yes:
         proceed = True
     elif not _tty():
-        console.print(f"[yellow]Non-interactive; skipping dependency install. Run:[/] pip install {shown}")
+        console.print(
+            f"[yellow]Non-interactive; skipping dependency install. Run:[/] pip install {shown}",
+            soft_wrap=True,
+        )
         return
     else:
         import questionary
@@ -316,12 +321,15 @@ def _pip_install(selected: list[Tool], *, assume_yes: bool = False, dry_run: boo
         except Exception:
             proceed = False
     if not proceed:
-        console.print(f"[yellow]Skipped. Install later with:[/] pip install {shown}")
+        console.print(f"[yellow]Skipped. Install later with:[/] pip install {shown}", soft_wrap=True)
         return
-    console.print(f"[cyan]Installing[/] {shown} ...")
+    console.print(f"[cyan]Installing[/] {shown} ...", soft_wrap=True)
     result = subprocess.run([sys.executable, "-m", "pip", "install", spec], check=False)
     if result.returncode != 0:
-        console.print(f"[red]pip install failed (exit {result.returncode}).[/] Install manually: pip install {shown}")
+        console.print(
+            f"[red]pip install failed (exit {result.returncode}).[/] Install manually: pip install {shown}",
+            soft_wrap=True,
+        )
 
 
 def _write_clients(selected: list[Tool], client_names: list[str], dry_run: bool) -> None:
@@ -342,6 +350,6 @@ def _write_clients(selected: list[Tool], client_names: list[str], dry_run: bool)
     results = configure(client_names, tool_names, dry_run=dry_run)
     for client, path in results.items():
         if path:
-            console.print(f"[green]Configured {client}:[/] {escape(str(path))}")
+            console.print(f"[green]Configured {client}:[/] {escape(str(path))}", soft_wrap=True)
         elif not dry_run:
             console.print(f"[yellow]Skipped {client} (unknown client name).[/]")
