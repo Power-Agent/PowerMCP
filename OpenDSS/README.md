@@ -4,7 +4,7 @@ MCP server for OpenDSS distribution studies using `py_dss_toolkit` and `py_dss_i
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - Install from the **PowerMCP** repository root so the editable path resolves:
 
 ```bash
