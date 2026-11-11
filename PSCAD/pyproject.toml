@@ -7,14 +7,14 @@ name = "pscad-mcp"
 version = "0.1.0"
 description = "A professional, robust MCP server for PSCAD."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "LL0pez20", email = "luansantos@poli.ufrj.br"}
 ]
 dependencies = [
     "mcp>=2,<3",
-    "powerio[mcp,matrix]>=0.11.2,<0.12",
+    "powerio[mcp,matrix]>=0.11.11,<0.12",
     "psutil"
 ]
 

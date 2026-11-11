@@ -12,7 +12,7 @@ This guide shows how to **install** and **test** the packaged version.
 
 ## 1. Install (as a user)
 
-Requires **Python 3.10 through 3.14**.
+Requires **Python 3.11 through 3.14**.
 
 ```bash
 pip install powermcp
@@ -324,3 +324,9 @@ powermcp/
   clients/        # claude_desktop / claude_code / codex config writers
   _servers/       # (wheel only) the tool dirs, shipped verbatim at build time
 ```
+
+## Persistent Tellegen Studies
+
+The optional `tellegen` server invokes the native CLI for saved goals, branching
+history, comparisons and exact proposals. See [the Study integration guide](TELLEGEN.md)
+for executable configuration, portable bundles and revision checks.

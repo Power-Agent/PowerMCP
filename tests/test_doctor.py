@@ -98,7 +98,7 @@ def test_namespace_shadow_not_false_positive(monkeypatch):
     then pass or fail for reasons having nothing to do with the logic it
     covers. Bypass surge's Python-version gate (3.12-3.14 only) so the probe
     path is exercised on every interpreter, rather than short-circuiting to the
-    version warning on 3.10.
+    version warning on 3.11.
     """
     real_find_spec = importlib.util.find_spec
 
@@ -166,13 +166,13 @@ def test_the_floor_is_found_without_top_level_distribution_metadata(monkeypatch)
     monkeypatch.setattr(
         doctor,
         "requires",
-        lambda _distribution: ("powerio[mcp,matrix]>=0.11.2,<0.12",),
+        lambda _distribution: ("powerio[mcp,matrix]>=0.11.11,<0.12",),
     )
     req = doctor._declared_requirement("powerio")
     assert req is not None
     assert doctor._canonical(req.name) == "powerio"
-    assert Version("0.11.2") in req.specifier
-    assert Version("0.11.1") not in req.specifier
+    assert Version("0.11.11") in req.specifier
+    assert Version("0.11.10") not in req.specifier
     assert Version("0.12.0") not in req.specifier
 
 

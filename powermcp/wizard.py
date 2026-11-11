@@ -89,10 +89,8 @@ def _existing_managed_tools(client_names: list[str]) -> set[str]:
         keys: list[str] = []
         try:
             if name == "codex":
-                try:
-                    import tomllib
-                except ModuleNotFoundError:  # py3.10
-                    import tomli as tomllib  # type: ignore
+                import tomllib
+
                 keys = list((tomllib.loads(text).get("mcp_servers") or {}).keys())
             else:
                 import json

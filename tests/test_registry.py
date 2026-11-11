@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib
+import tomllib
 
 import pytest
 
@@ -55,7 +52,7 @@ def test_closed_source_path_tools_declare_config_keys():
 def test_windows_only_flags():
     for name in ("psse", "pslf", "powerfactory", "pscad", "powerworld"):
         assert TOOLS[name].windows_only is True
-    for name in ("pandapower", "pypsa", "andes", "egret", "surge", "opendss", "hope", "ltspice"):
+    for name in ("pandapower", "pypsa", "andes", "egret", "surge", "opendss", "hope", "ltspice", "tellegen"):
         assert TOOLS[name].windows_only is False
 
 

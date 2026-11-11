@@ -4,7 +4,7 @@ MCP server for Egret power system optimization, enabling unit commitment, AC OPF
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - [Egret](https://github.com/grid-parity-exchange/Egret)
 - Gurobi or ipopt solver for different tasks
 

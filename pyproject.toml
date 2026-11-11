@@ -14,14 +14,13 @@ version = "0.4.1"
 description = "MCP servers for power-system software (PowerWorld, OpenDSS, PSS/E, pandapower, PyPSA, and more)"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "PowerMCP contributors" }]
 keywords = ["mcp", "power systems", "energy", "simulation", "pandapower", "pypsa", "powerworld", "opendss", "pss/e"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -48,10 +47,12 @@ dependencies = [
     "mcp>=2,<3",
     # powerio supplies the conversion server, module model, native solver
     # writers, shared JSON transports, and path policy used by the bridges.
-    # PowerMCP uses the typed PowerIO 0.11.2 module APIs.
+    # PowerMCP uses the typed PowerIO module APIs and their public names
+    # (PioModule.type_name, powerio.diagnostic_records). PowerIO has required
+    # Python 3.11 since 0.11.8, which sets this package's floor too.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.11.2,<0.12",
+    "powerio[mcp,matrix]>=0.11.11,<0.12",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
@@ -61,11 +62,11 @@ dependencies = [
     "rich>=13",
     "tomli-w>=1.0",
     "tomlkit>=0.13",
-    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
 # --- open-source tool engines ---
+tellegen   = []  # The native CLI installs separately.
 andes      = ["andes"]
 egret      = ["gridx-egret", "pyomo"]          # PyPI dist is `gridx-egret`; imports as `egret`
 opendss    = ["py_dss_toolkit"]
@@ -105,7 +106,7 @@ powerfactory = ["numpy>=1.26", "matplotlib>=3.8", "pandas>=1.5"]  # vendor `powe
 # powermcp[plexosdb]` until that's resolved upstream.
 plexosdb   = ["r2x-plexos>=0.3.0", "r2x-plexos-to-sienna>=0.1.0", "r2x-sienna>=0.4.0"]
 # --- convenience groups ---
-opensource = ["powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
+opensource = ["powermcp[tellegen]", "powermcp[andes]", "powermcp[egret]", "powermcp[opendss]", "powermcp[ltspice]", "powermcp[surge]", "powermcp[hope]", "powermcp[genx]"]
 windows    = ["powermcp[pscad-windows]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[psse]", "powermcp[pslf]"]
 all        = ["powermcp[opensource]", "powermcp[powerworld]", "powermcp[powerfactory]", "powermcp[pscad-windows]", "powermcp[psse]", "powermcp[pslf]", "powermcp[plexosdb]"]
 
