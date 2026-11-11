@@ -1,9 +1,14 @@
 # PowerMCP ⚡
 
+[![PyPI](https://img.shields.io/pypi/v/powermcp.svg)](https://pypi.org/project/powermcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10%20to%203.14-blue.svg)](https://www.python.org/downloads/)
 
-PowerMCP is an open-source collection of MCP servers for power system software like PowerWorld and OpenDSS. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
+PowerMCP is an open-source collection of MCP servers for power system software such as PSS/E, PowerWorld, PowerFactory, PSLF, PSCAD, OpenDSS, pandapower, and PyPSA. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
+
+PowerMCP is part of [PowerAgent](https://poweragent.seas.harvard.edu/), an open-source community for agentic AI in power systems, maintained by the Power and AI Initiative (PAI) at Harvard SEAS.
+
+> **Install with your AI agent:** paste [this prompt](#-install-with-an-ai-agent-recommended) into Claude Code, Codex, or another coding agent and it will install and configure PowerMCP for you.
 
 ## 🌟 What is MCP?
 
@@ -29,7 +34,7 @@ We're building an open-source community focused on accelerating AI adoption in t
 
 > **🚀 New to PowerMCP? Start here!**
 
-The recommended way to get started is the `powermcp` package and its installer (see the **Installation** section below):
+The recommended way to get started is the `powermcp` package and its installer. Either let an AI coding agent do it ([copy the prompt](#-install-with-an-ai-agent-recommended)), or run it yourself (see the **Installation** section below):
 
 ```bash
 pip install powermcp
@@ -42,6 +47,12 @@ powermcp install        # pick tools, capture local paths, write your MCP client
 ### Video Demos
 
 Check out these demos showcasing PowerMCP in action:
+
+- [**PowerMCP New Feature Release**](https://www.youtube.com/watch?v=xwTcNZLmIW8): pip install, automatic setup with `powermcp install`, and PowerIO integration.
+
+- [**Grid Impact Evaluation Demo**](https://www.youtube.com/watch?v=LxF8RqsNf04): Agentic AI streamlines the grid impact evaluation of large loads such as data centers, automating the analysis and report generation.
+
+- [**PowerSkills + PowerMCP Demo**](https://www.youtube.com/watch?v=bxZu47f6fUE): [PowerSkills](https://github.com/Power-Agent/PowerSkills) and PowerMCP together give AI agents the domain knowledge and structured instructions for simulation, analysis, and optimization across industry software tools, with reports in an industry-standard format.
 
 - [**Contingency Evaluation Demo**](https://www.youtube.com/watch?v=MbF-SlBI4Ws): An LLM automatically operates power system software, such as PowerWorld and pandapower, to perform contingency analysis and generate professional reports.
 
@@ -66,20 +77,64 @@ Check out these helpful tutorials to get started with MCP:
 
 ## 📦 Installation
 
+### 🤖 Install with an AI agent (recommended)
+
+More and more people install PowerMCP by asking an AI coding agent such as **Claude Code**, **Codex**, Cursor, or Cline to do it. Open the agent in a terminal on the machine where your power-system software lives, then paste this prompt and fill in the two lists:
+
+```text
+Install and configure PowerMCP (https://github.com/Power-Agent/PowerMCP) on this computer.
+Follow the agent guide step by step:
+https://raw.githubusercontent.com/Power-Agent/PowerMCP/main/llms-install.md
+
+Tools I want, in addition to the core pandapower, PyPSA and PowerIO: <for example OpenDSS, ANDES, PSS/E, or "core only">
+MCP clients to configure: <for example Claude Code, Claude Desktop, Codex CLI>
+
+Use a dedicated virtual environment. Ask me before guessing the install path of any
+commercial software. Finish by running `powermcp doctor` and telling me what is left for me to do.
+```
+
+The agent follows [`llms-install.md`](llms-install.md): it checks your OS and Python, creates a virtual environment, installs the right extras, stores vendor software paths, writes the MCP client configuration without touching your other servers, and verifies the result. If your agent can't open web links, clone this repository and tell it to read `llms-install.md` from the clone.
+
+After it finishes, restart your MCP client (start a new Claude Code or Codex session, or fully quit and reopen Claude Desktop) so it loads the new servers.
+
+### Install it yourself
+
 PowerMCP installs as a single Python package with an interactive CLI. Python 3.10 through 3.14 is supported.
 
 ```bash
 pip install powermcp
 ```
 
-The base install includes the open-source engines that need no extra setup — **pandapower**, **PyPSA**, and **PowerIO** (the cross-server case-conversion substrate). Every other tool is opt-in via an extra:
+The base install includes the open-source engines that need no extra setup: **pandapower**, **PyPSA**, and **PowerIO** (the cross-server case-conversion substrate). Every other tool is opt-in via an extra. Quote the brackets, since zsh (the macOS default shell) otherwise rejects them:
 
 ```bash
-pip install powermcp[psse]              # add PSS/E support
-pip install powermcp[andes,opendss]     # add several tools at once
-pip install powermcp[opensource]        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice, GenX)
-pip install powermcp[all]               # everything (closed-source tools still need the local software)
+pip install "powermcp[psse]"              # add PSS/E support
+pip install "powermcp[andes,opendss]"     # add several tools at once
+pip install "powermcp[opensource]"        # all open-source tools (ANDES, Egret, OpenDSS, surge, HOPE, LTSpice, GenX)
+pip install "powermcp[windows]"           # all Windows vendor tools (PowerWorld, PSS/E, PSLF, PowerFactory, PSCAD)
+pip install "powermcp[all]"               # everything (closed-source tools still need the local software)
 ```
+
+### Supported tools
+
+| Tool | `powermcp` id | pip extra | Platform | Notes |
+|---|---|---|---|---|
+| pandapower | `pandapower` | *(core)* | any | |
+| PyPSA | `pypsa` | *(core)* | any | HiGHS included; CBC, GLPK, Gurobi optional |
+| PowerIO | `powerio` | *(core)* | any | case parsing, conversion, and matrices for every other server |
+| ANDES | `andes` | `andes` | any | |
+| Egret | `egret` | `egret` | any | needs ipopt or Gurobi |
+| OpenDSS | `opendss` | `opendss` | any | |
+| surge | `surge` | `surge` | any | Python 3.12 to 3.14 |
+| HOPE | `hope` | `hope` | any | needs a HOPE.jl checkout and Julia |
+| GenX | `genx` | `genx` | any | needs a GenX.jl checkout; SLURM to submit cases |
+| LTSpice | `ltspice` | `ltspice` | any | LTspice must be installed (auto-detected) |
+| PLEXOS database | `plexosdb` | `plexosdb` | any | Python 3.11 to 3.13; extra manual steps in [PLEXOSDB/README.md](PLEXOSDB/README.md) |
+| PowerWorld | `powerworld` | `powerworld` | Windows | needs a running, licensed Simulator |
+| PSS/E | `psse` | `psse` | Windows | needs PSS/E installed |
+| GE PSLF | `pslf` | `pslf` | Windows | needs PSLF installed |
+| PowerFactory | `powerfactory` | `powerfactory` | Windows | needs PowerFactory installed |
+| PSCAD | `pscad` | `pscad-windows` | Windows | needs PSCAD installed |
 
 ### Set up with the interactive installer
 
@@ -87,7 +142,7 @@ pip install powermcp[all]               # everything (closed-source tools still 
 powermcp install
 ```
 
-The wizard lets you pick tools (pandapower + PyPSA + PowerIO pre-selected), captures the local install path for any closed-source/EXE-based tools you choose (PSS/E, PSLF, PowerFactory, PSCAD, LTSpice), installs the right extras, and writes the MCP client configuration for **Claude Desktop**, **Claude Code**, and the **Codex CLI**. Use `--dry-run` to preview the changes, or `--yes` for a non-interactive core install.
+The wizard lets you pick tools (pandapower + PyPSA + PowerIO pre-selected), captures the local install path for any tools that need one (PSS/E, PSLF, PowerFactory, LTSpice, HOPE, GenX), installs the right extras, and writes the MCP client configuration for **Claude Desktop**, **Claude Code**, and the **Codex CLI**. Each entry launches the server with the absolute path of the Python interpreter that ran the installer, so keep that environment in place. Use `--dry-run` to preview the changes, `--clients` to pick which clients to configure, or `--yes` for a non-interactive core install.
 
 In the interactive picker, move with ↑/↓ and **press SPACE to toggle each tool** before ENTER (ENTER alone keeps only the preselected tools). Prefer not to use the checkbox? Choose tools directly:
 
@@ -96,17 +151,18 @@ powermcp install --tools psse,andes      # core + the listed tools
 powermcp install --all                   # every tool available on this platform
 ```
 
-Re-running `powermcp install` pre-checks the tools you've already installed or configured, so it **preserves and updates** your setup instead of resetting to the core tools. Paths for tools like LTSpice are **auto-detected and pre-filled**, so you can usually just press Enter.
+Re-running `powermcp install` interactively pre-checks the tools you've already installed or configured, so it **preserves and updates** your setup instead of resetting to the core tools. With `--tools`, list every tool you want to keep: `powermcp_*` entries for tools left out of the list are removed. Paths for tools like LTSpice are **auto-detected and pre-filled**, so you can usually just press Enter.
 
 ### CLI commands
 
 | Command | Description |
 |---|---|
-| `powermcp install` | Setup wizard — interactive, or `--tools <ids>` / `--all` (also `--dry-run`, `--yes`, `--clients`) |
+| `powermcp install` | Setup wizard: interactive, or `--tools <ids>` / `--all` (also `--dry-run`, `--yes`, `--clients claude-desktop,claude-code,codex,none`) |
 | `powermcp run <tool>` | Launch a server over stdio (used by the generated client config) |
 | `powermcp list` | List the available tools, extras, and Windows-only flags |
-| `powermcp doctor` | Check each tool's dependencies and configured paths |
+| `powermcp doctor [tool]` | Check dependencies and configured paths for every tool, or for one |
 | `powermcp config show` / `config set <tool>.<key> <path>` | Inspect / set local software paths |
+| `powermcp --version` | Print the installed version |
 
 ### Closed-source / EXE-based tools
 
@@ -121,7 +177,8 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 | HOPE | `hope.repo_root`, `hope.julia_bin`, `hope.julia_depot_path` | `powermcp config set hope.repo_root "C:\src\HOPE"` |
 | GenX | `genx.repo_root` | `powermcp config set genx.repo_root "/home/me/GenX.jl"` — the GenX.jl checkout; `GENX_DIR` overrides it |
 | PowerWorld | *(none)* | `esa` auto-discovers a running, licensed Simulator via COM; the `powerworld` extra also installs `numba` (required by esa) |
-| PSCAD | *(none)* | `pip install powermcp[pscad-windows]` provides `mhi-pscad`; PSCAD must be installed |
+| PSCAD | *(none)* | `pip install "powermcp[pscad-windows]"` provides `mhi-pscad`; PSCAD must be installed |
+| PLEXOS database | *(none)* | The upstream `plexosdb-mcp` package is not on PyPI yet; install it as described in [PLEXOSDB/README.md](PLEXOSDB/README.md) |
 
 > The Codex *Desktop* app on Windows has been reported to overwrite `~/.codex/config.toml`; the Codex *CLI* is unaffected. If you use both, re-run `powermcp install` after Desktop edits.
 
@@ -252,7 +309,7 @@ python -m powerio.mcp            # powerio ships its own server; the clone holds
 
 > **Note:** All MCPs should be tested via an MCP client (Claude Desktop, Claude Code, or Codex) before submitting a PR to ensure consistency.
 
-`powermcp install` writes the client configuration for you. The generated entries look like the example in [`config.json`](config.json). (The **[PowerMCP Tutorial PDF](PowerMCP_Tutorial.pdf)** covers the older manual / low-code setup and isn't needed for the package install.)
+`powermcp install` writes the client configuration for you. Each generated entry runs `<python> -m powermcp run <tool>` with the absolute interpreter path, because GUI clients such as Claude Desktop don't inherit your shell `PATH`. [`config.json`](config.json) shows the shorter form that works when `powermcp` is on `PATH`. For clients the installer doesn't write (Cursor, VS Code, and others), add the same command and arguments by hand; [`llms-install.md`](llms-install.md) has an example. (The **[PowerMCP Tutorial PDF](PowerMCP_Tutorial.pdf)** covers the older manual / low-code setup and isn't needed for the package install.)
 
 ## 📚 Documentation
 
@@ -263,7 +320,7 @@ For detailed documentation about MCP, please visit:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](https://power-agent.github.io/) for details.
+We welcome contributions! Please see our [Contributing Guidelines](https://poweragent.seas.harvard.edu/) for details, and join the conversation in the [PowerAgent Slack community](https://join.slack.com/t/poweragentslack/shared_invite/zt-3c14g1lv4-LfwB2DQU1_ZwTyxJO6k_5Q).
 
 ## 📄 License
 
@@ -272,7 +329,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🙏 Acknowledgments
 
 ### Core Team
-- [Qian Zhang](https://www.linkedin.com/in/qian-zhang-75323111b/), [Steven Black](https://www.linkedin.com/in/steven-black-09322b31/), [Paulo Radatz](https://www.linkedin.com/in/pauloradatz/), [Andrea Pomarico](https://www.linkedin.com/in/andrea-pomarico-2695a2218/), [Muhy Eddin Za’ter](https://scholar.google.com/citations?user=_IFFYFAAAAAJ&hl=en), [Luan Lopes dos Santos](https://www.linkedin.com/in/luan-lopes/), [Stephen Jenkins](https://www.linkedin.com/in/stephenjenkins2/), [Maanas Goel](https://www.linkedin.com/in/maanas-goel/), [Shen Wang](https://www.linkedin.com/in/swang16/), [Drew Gray](https://www.linkedin.com/in/drew-gray-b09ba426/), [Samuel Talkington](https://samueltalkington.com/)
+PowerAgent leads: [Qian Zhang](https://qianzhang.xyz/) (student lead) and [Le Xie](https://seas.harvard.edu/person/le-xie) (faculty lead)
+
+PowerMCP: [Qian Zhang](https://qianzhang.xyz/), [Steven Black](https://www.linkedin.com/in/steven-black-09322b31/), [Paulo Radatz](https://www.linkedin.com/in/pauloradatz/), [Andrea Pomarico](https://www.linkedin.com/in/andrea-pomarico-2695a2218/), [Muhy Eddin Za'ter](https://scholar.google.com/citations?user=_IFFYFAAAAAJ&hl=en), [Luan Lopes dos Santos](https://www.linkedin.com/in/luan-lopes/), [Stephen Jenkins](https://www.linkedin.com/in/stephenjenkins2/), [Maanas Goel](https://www.linkedin.com/in/maanas-goel/), [Shen Wang](https://www.linkedin.com/in/swang16/), [Drew Gray](https://www.linkedin.com/in/drew-gray-b09ba426/), [Samuel Talkington](https://samueltalkington.com/), [Laura Hwa](https://www.linkedin.com/in/laurahwa/), [Leo Winiecki](https://www.linkedin.com/in/leo-winiecki-3337b716a/), [Brian Horakh](https://www.linkedin.com/in/brianhorakh/), [Aswin Krishna Poyil](https://www.linkedin.com/in/aswinkrishnapoyil/), [Burhan Abdullah](https://www.linkedin.com/in/burhanabdullah/)
+
+The full PowerAgent team, including PowerFM, PowerSkills, PowerWF, and the PowerAgent Platform, is listed at [poweragent.seas.harvard.edu](https://poweragent.seas.harvard.edu/).
 
 ### Special Thanks
 - All contributors who help make this project better
