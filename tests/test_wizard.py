@@ -142,3 +142,82 @@ def test_interactive_select_ctrl_c_returns_empty(monkeypatch):
     fake_q.checkbox = lambda *a, **k: _Q()
     monkeypatch.setitem(sys.modules, "questionary", fake_q)
     assert wizard._interactive_select([]) == []
+
+
+# The pip hint is printed through Rich, which reads `[andes]` as a markup tag
+# and drops it, so the hint used to read `pip install powermcp` with no extras.
+# Copying it installed nothing the selection needed.
+def _andes_selection():
+    return wizard._resolve_selection(yes=False, tools="andes", select_all=False, client_names=[])
+
+
+@pytest.mark.parametrize("mode", ["dry_run", "non_tty"])
+def test_pip_hint_keeps_extras(monkeypatch, capsys, mode):
+    monkeypatch.setattr(wizard, "_tty", lambda: False)
+    monkeypatch.setitem(sys.modules, "questionary", None)  # must not prompt
+    monkeypatch.setattr(wizard.subprocess, "run", lambda *a, **k: pytest.fail("pip must not run"))
+    wizard._pip_install(_andes_selection(), dry_run=(mode == "dry_run"))
+    out = capsys.readouterr().out
+    assert "pip install powermcp[andes]" in out
+
+
+def test_pip_hint_keeps_extras_when_declined(monkeypatch, capsys):
+    monkeypatch.setattr(wizard, "_tty", lambda: True)
+    prompts = []
+    fake_q = types.ModuleType("questionary")
+
+    class _Q:
+        def ask(self):
+            return False
+
+    def _confirm(message, **kw):
+        prompts.append(message)
+        return _Q()
+
+    fake_q.confirm = _confirm
+    monkeypatch.setitem(sys.modules, "questionary", fake_q)
+    wizard._pip_install(_andes_selection())
+    assert prompts and "pip install powermcp[andes]" in prompts[0]  # questionary prints it verbatim
+    assert "Install later with: pip install powermcp[andes]" in capsys.readouterr().out
+
+
+def test_pip_hint_keeps_extras_when_install_fails(monkeypatch, capsys):
+    calls = []
+
+    def _run(cmd, **kw):
+        calls.append(cmd)
+        return types.SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(wizard.subprocess, "run", _run)
+    wizard._pip_install(_andes_selection(), assume_yes=True)
+    assert calls[0][-1] == "powermcp[andes]"  # the real command was never affected
+    out = capsys.readouterr().out
+    assert "Installing powermcp[andes]" in out
+    assert "Install manually: pip install powermcp[andes]" in out
+
+
+def test_done_line_keeps_bracketed_config_path(monkeypatch, capsys, tmp_path):
+    from rich.console import Console
+
+    home = tmp_path / "cfg[old]"  # `[old]` reads as a Rich style tag
+    monkeypatch.setenv("POWERMCP_HOME", str(home))
+    monkeypatch.setattr(wizard, "console", Console(width=80))  # the path is wider than this
+    wizard.run_wizard(yes=False, tools="andes", clients="none", dry_run=True)
+    out = capsys.readouterr().out
+    assert f"PowerMCP config: {home / 'config.toml'}" in out
+    assert "pip install powermcp[andes]" in out
+
+
+def test_long_pip_hint_stays_on_one_line(monkeypatch, capsys):
+    # Without a TTY Rich renders at 80 columns and used to fold a wider spec
+    # (every Windows tool) mid-word, so a copied hint split the spec in two.
+    from rich.console import Console
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(wizard, "_surge_supported", lambda: True)
+    monkeypatch.setattr(wizard, "console", Console(width=80))
+    selected = wizard._resolve_selection(yes=False, tools="all", select_all=False, client_names=[])
+    spec = "powermcp[" + ",".join(sorted({t.extra for t in selected if t.extra})) + "]"
+    assert len(spec) > 80
+    wizard._pip_install(selected, dry_run=True)
+    assert f"pip install {spec}" in capsys.readouterr().out
