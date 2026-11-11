@@ -236,4 +236,4 @@ def run_doctor(tool: str | None = None) -> None:
         )
         for note in solver_notes:
             console.print(f"[dim]{note}[/]")
-    console.print(f"\n[dim]Config file: {cfg.config_path()}[/]")
+    console.print(f"\n[dim]Config file: {escape(str(cfg.config_path()))}[/]", soft_wrap=True)

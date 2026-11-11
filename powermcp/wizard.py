@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 
 from . import config as cfg
 from .clients import CLIENT_NAMES, configure
@@ -135,7 +136,7 @@ def run_wizard(
         _capture_paths(selected)
     _pip_install(selected, assume_yes=yes, dry_run=dry_run)
     _write_clients(selected, client_names, dry_run)
-    console.print(f"\n[green]Done.[/] PowerMCP config: {cfg.config_path()}")
+    console.print(f"\n[green]Done.[/] PowerMCP config: {escape(str(cfg.config_path()))}", soft_wrap=True)
 
 
 def _resolve_selection(
@@ -163,7 +164,7 @@ def _resolve_selection(
                     unknown.append(name)
             if unknown:
                 console.print(
-                    f"[red]Unknown tool id(s) ignored:[/] {', '.join(unknown)} "
+                    f"[red]Unknown tool id(s) ignored:[/] {escape(', '.join(unknown))} "
                     f"(run `powermcp list` for valid ids)"
                 )
             if unavailable:
@@ -211,7 +212,7 @@ def _interactive_select(client_names: list[str]) -> list[Tool]:
         ).ask()
     except Exception as exc:
         console.print(
-            f"[yellow]Interactive picker unavailable ({exc}); defaulting to core tools. "
+            f"[yellow]Interactive picker unavailable ({escape(str(exc))}); defaulting to core tools. "
             f"Use `--tools <ids>` or `--all`.[/]"
         )
         return [TOOLS[n] for n in CORE]
@@ -252,12 +253,12 @@ def _capture_paths(selected: list[Tool]) -> None:
             default = existing or detect(t.name, ck.key) or ""
             label = f"[{t.display}] {ck.prompt}"
             if default and not existing:
-                console.print(f"[dim]  detected: {default}[/]")
+                console.print(f"[dim]  detected: {escape(str(default))}[/]")
             try:
                 answer = questionary.path(label, default=default).ask()
             except Exception as exc:  # prompt backend unavailable
                 console.print(
-                    f"[yellow]Could not prompt for {t.name}.{ck.key} ({exc}); "
+                    f"[yellow]Could not prompt for {t.name}.{ck.key} ({escape(str(exc))}); "
                     f"set it later with `powermcp config set {t.name}.{ck.key} <path>`.[/]"
                 )
                 answer = None
@@ -295,13 +296,20 @@ def _capture_paths(selected: list[Tool]) -> None:
 def _pip_install(selected: list[Tool], *, assume_yes: bool = False, dry_run: bool = False) -> None:
     extras = sorted({t.extra for t in selected if t.extra})
     spec = "powermcp" + (f"[{','.join(extras)}]" if extras else "")
+    # Rich would read `[andes,ltspice]` as a markup tag and drop it from the hint,
+    # and would fold a spec wider than the console (80 columns without a TTY)
+    # across lines; soft_wrap leaves the copyable command on one line.
+    shown = escape(spec)
     if dry_run:
-        console.print(f"[cyan](dry-run)[/] would run: pip install {spec}")
+        console.print(f"[cyan](dry-run)[/] would run: pip install {shown}", soft_wrap=True)
         return
     if assume_yes:
         proceed = True
     elif not _tty():
-        console.print(f"[yellow]Non-interactive; skipping dependency install. Run:[/] pip install {spec}")
+        console.print(
+            f"[yellow]Non-interactive; skipping dependency install. Run:[/] pip install {shown}",
+            soft_wrap=True,
+        )
         return
     else:
         import questionary
@@ -313,12 +321,15 @@ def _pip_install(selected: list[Tool], *, assume_yes: bool = False, dry_run: boo
         except Exception:
             proceed = False
     if not proceed:
-        console.print(f"[yellow]Skipped. Install later with:[/] pip install {spec}")
+        console.print(f"[yellow]Skipped. Install later with:[/] pip install {shown}", soft_wrap=True)
         return
-    console.print(f"[cyan]Installing[/] {spec} ...")
+    console.print(f"[cyan]Installing[/] {shown} ...", soft_wrap=True)
     result = subprocess.run([sys.executable, "-m", "pip", "install", spec], check=False)
     if result.returncode != 0:
-        console.print(f"[red]pip install failed (exit {result.returncode}).[/] Install manually: pip install {spec}")
+        console.print(
+            f"[red]pip install failed (exit {result.returncode}).[/] Install manually: pip install {shown}",
+            soft_wrap=True,
+        )
 
 
 def _write_clients(selected: list[Tool], client_names: list[str], dry_run: bool) -> None:
@@ -339,6 +350,6 @@ def _write_clients(selected: list[Tool], client_names: list[str], dry_run: bool)
     results = configure(client_names, tool_names, dry_run=dry_run)
     for client, path in results.items():
         if path:
-            console.print(f"[green]Configured {client}:[/] {path}")
+            console.print(f"[green]Configured {client}:[/] {escape(str(path))}", soft_wrap=True)
         elif not dry_run:
             console.print(f"[yellow]Skipped {client} (unknown client name).[/]")
