@@ -60,7 +60,7 @@ def main(argv):
         print(json.dumps([{"formulation": "dcopf", "available": True}, {"formulation": "acopf", "available": False}]))
         return 0
     if arg == "contract":
-        print(json.dumps({"contract": "tellegen.cli/1", "tellegen_version": "0.3.0-fake", "powerio_version": "0.11.9", "schemas": {}}))
+        print(json.dumps({"contract": "tellegen.cli/1", "tellegen_version": "0.3.0-fake", "powerio_version": "0.11.11", "schemas": {}}))
         return 0
     if arg == "boom":
         print("tellegen: boom", file=sys.stderr)
