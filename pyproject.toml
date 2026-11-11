@@ -52,7 +52,7 @@ dependencies = [
     # Python 3.11 since 0.11.8, which sets this package's floor too.
     # powerio ships the server itself (`python -m powerio.mcp`), so this repo
     # bundles no copy of it and `powermcp run powerio` runs powerio's.
-    "powerio[mcp,matrix]>=0.11.9,<0.12",
+    "powerio[mcp,matrix]>=0.11.11,<0.12",
     # CLI / installer toolkit:
     # packaging: the doctor compares an installed version against the floor
     # declared right here, so it has to read a version specifier.
