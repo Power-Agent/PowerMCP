@@ -53,7 +53,9 @@ mpc.branch = [
 
 
 # 2-bus case whose pandapower emission raises no diagnostic, so the shared
-# response tail carries an empty warnings list.
+# response tail carries an empty warnings list. The branch sets only rate_a:
+# pandapower keeps a single loading limit, and powerio >= 0.11.8 warns when a
+# rate_b/rate_c value is dropped.
 CLEAN_CASE = """function mpc = clean
 mpc.version = '2';
 mpc.baseMVA = 100.0;
