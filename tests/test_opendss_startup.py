@@ -231,3 +231,42 @@ def test_cached_compile_revalidates_circuit_before_reporting_loaded(monkeypatch,
     assert compile_calls == []
     assert configuration.state.circuit_loaded is False
     assert configuration.state.last_compiled_dss_file is None
+
+def test_compile_rejects_circuit_when_toolkit_readiness_is_false(monkeypatch, tmp_path):
+    configuration, dss, compile_calls, dss_file = _load_configuration(
+        monkeypatch, tmp_path, num_buses=13, num_elements=22
+    )
+    configuration.dss_tools.configuration.circuit_readiness = lambda: {
+        "ready": False, "code": "not_ready", "message": "invalid circuit state"
+    }
+
+    result = configuration.compile_opendss_file(str(dss_file))
+
+    assert result["success"] is False
+    assert "readiness=not_ready" in result["error"]
+    assert compile_calls == [str(dss_file)]
+    assert dss.commands == ["ClearAll"]
+    assert configuration.state.circuit_loaded is False
+    assert configuration.state.solution_available is False
+    assert configuration.state.last_compiled_dss_file is None
+
+
+def test_compile_cleanup_failure_preserves_validation_error(monkeypatch, tmp_path):
+    configuration, dss, compile_calls, dss_file = _load_configuration(
+        monkeypatch, tmp_path, num_buses=0, num_elements=9
+    )
+
+    def fail_clear(_command):
+        raise RuntimeError("engine cleanup failed")
+
+    monkeypatch.setattr(dss, "text", fail_clear)
+    result = configuration.compile_opendss_file(str(dss_file))
+
+    assert result["success"] is False
+    assert "did not produce a usable circuit" in result["error"]
+    assert "engine cleanup failed" not in result["error"]
+    assert compile_calls == [str(dss_file)]
+    assert configuration.state.circuit_loaded is False
+    assert configuration.state.solution_available is False
+    assert configuration.state.last_compiled_dss_file is None
+
