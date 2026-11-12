@@ -7,6 +7,6 @@ PyPSA and PowerIO) and add tools via extras (`pip install powermcp[psse]`).
 Configure and connect MCP clients with the `powermcp` CLI (`powermcp install`).
 """
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 __all__ = ["__version__"]
