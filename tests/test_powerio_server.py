@@ -827,7 +827,12 @@ def _load_opendss_configuration(monkeypatch):
         update_dss=lambda _dss: None,
         configuration=fake_config,
     )
-    fake_dss_interface = types.SimpleNamespace(DSS=lambda: object())
+    fake_dss_interface = types.SimpleNamespace(
+        DSS=lambda: types.SimpleNamespace(
+            circuit=types.SimpleNamespace(num_buses=1, num_ckt_elements=1),
+            text=lambda _command: None,
+        )
+    )
     monkeypatch.setitem(
         sys.modules, "py_dss_toolkit", types.SimpleNamespace(dss_tools=fake_tools)
     )
