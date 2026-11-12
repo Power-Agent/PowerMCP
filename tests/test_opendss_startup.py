@@ -144,3 +144,90 @@ def test_concurrent_engine_requests_construct_and_wire_once(monkeypatch):
     assert len(calls) == 1
     assert len(updates) == 1
     assert all(instance is calls[0] for instance in instances)
+
+
+def _load_configuration(monkeypatch, tmp_path, *, num_buses, num_elements):
+    class FakeDSS:
+        def __init__(self):
+            self.circuit = types.SimpleNamespace(
+                num_buses=num_buses, num_ckt_elements=num_elements
+            )
+            self.commands = []
+
+        def text(self, command):
+            self.commands.append(command)
+
+    dss = FakeDSS()
+    server = _load_server(monkeypatch, dss_factory=lambda: dss)
+    del server
+    configuration = importlib.import_module("opendss_tools.configuration")
+    fake_tools = sys.modules["py_dss_toolkit"].dss_tools
+    compile_calls = []
+    fake_tools.configuration.compile_dss = lambda path: compile_calls.append(path)
+    fake_tools.configuration.circuit_readiness = lambda: {
+        "ready": True, "code": "ok", "message": ""
+    }
+    monkeypatch.setattr(configuration.engine, "ensure_engine", lambda: dss)
+    monkeypatch.setattr(configuration, "checked_path", lambda path, **_kwargs: str(path))
+    monkeypatch.setattr(configuration, "allowed_roots", lambda: [])
+    configuration.state.circuit_loaded = False
+    configuration.state.solution_available = False
+    configuration.state.last_compiled_dss_file = None
+    dss_file = tmp_path / "master.dss"
+    dss_file.write_text("clear")
+    return configuration, dss, compile_calls, dss_file
+
+
+def test_compile_marks_only_a_populated_circuit_as_loaded(monkeypatch, tmp_path):
+    configuration, _dss, compile_calls, dss_file = _load_configuration(
+        monkeypatch, tmp_path, num_buses=13, num_elements=22
+    )
+
+    result = configuration.compile_opendss_file(str(dss_file))
+
+    assert result["success"] is True
+    assert result["payload"]["circuit_loaded"] is True
+    assert result["payload"]["num_buses"] == 13
+    assert result["payload"]["num_elements"] == 22
+    assert compile_calls == [str(dss_file)]
+    assert configuration.state.last_compiled_dss_file == str(dss_file.resolve())
+
+
+@pytest.mark.parametrize(
+    ("num_buses", "num_elements"),
+    [(0, 9), (13, 0), (0, 0)],
+)
+def test_compile_rejects_empty_or_partial_circuit(
+    monkeypatch, tmp_path, num_buses, num_elements
+):
+    configuration, dss, compile_calls, dss_file = _load_configuration(
+        monkeypatch, tmp_path, num_buses=num_buses, num_elements=num_elements
+    )
+
+    result = configuration.compile_opendss_file(str(dss_file))
+
+    assert result["success"] is False
+    assert "did not produce a usable circuit" in result["error"]
+    assert f"buses={num_buses}" in result["error"]
+    assert f"elements={num_elements}" in result["error"]
+    assert compile_calls == [str(dss_file)]
+    assert dss.commands == ["ClearAll"]
+    assert configuration.state.circuit_loaded is False
+    assert configuration.state.solution_available is False
+    assert configuration.state.last_compiled_dss_file is None
+
+
+def test_cached_compile_revalidates_circuit_before_reporting_loaded(monkeypatch, tmp_path):
+    configuration, _dss, compile_calls, dss_file = _load_configuration(
+        monkeypatch, tmp_path, num_buses=0, num_elements=9
+    )
+    configuration.state.circuit_loaded = True
+    configuration.state.last_compiled_dss_file = str(dss_file.resolve())
+
+    result = configuration.compile_opendss_file(str(dss_file))
+
+    assert result["success"] is False
+    assert "did not produce a usable circuit" in result["error"]
+    assert compile_calls == []
+    assert configuration.state.circuit_loaded is False
+    assert configuration.state.last_compiled_dss_file is None
