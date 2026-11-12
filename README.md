@@ -170,7 +170,7 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 
 | Tool | Config keys | Example |
 |---|---|---|
-| PSS/E | `psse.python_lib`, `psse.bin` | `powermcp config set psse.python_lib "C:\Program Files\PTI\PSSE36\36.2\PSSPY311"` |
+| PSS/E | `psse.python_lib`, `psse.bin`, optional `psse.bus_size` | `powermcp config set psse.python_lib "C:\Program Files\PTI\PSSE36\36.2\PSSPY311"`. The engine starts at the bus size set in the PSS/E GUI; for a larger case, `powermcp config set psse.bus_size 150000` |
 | PSLF | `pslf.python_lib` | `powermcp config set pslf.python_lib "C:\Program Files\GE PSLF\PSLF_PYTHON"` |
 | PowerFactory | `powerfactory.python_path` | `powermcp config set powerfactory.python_path "...\DIgSILENT\PowerFactory 2024\Python\3.11"` |
 | LTSpice | `ltspice.exe` *(auto-detected)* | Found automatically in standard locations — usually no setup needed. Override: `powermcp config set ltspice.exe "C:\Program Files\ADI\LTspice\LTspice.exe"` |
