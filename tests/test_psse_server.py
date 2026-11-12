@@ -53,6 +53,62 @@ def _use(monkeypatch, fake):
     monkeypatch.setattr(psse_mcp, "_ensure_psse", lambda: fake)
 
 
+@pytest.fixture
+def psseinit_calls(monkeypatch, isolated_config):
+    """An uninitialized server whose psspy import records psseinit's argument."""
+    calls = []
+    fake = types.ModuleType("psspy")
+    fake.psseinit = lambda buses: calls.append(buses)
+    monkeypatch.setitem(sys.modules, "psspy", fake)
+    monkeypatch.setitem(sys.modules, "psse36", types.ModuleType("psse36"))
+    monkeypatch.setattr(psse_mcp, "psspy", None)
+    monkeypatch.setattr(psse_mcp, "_psse_ready", False)
+    monkeypatch.setattr(psse_mcp, "_resolve_psse_paths", lambda: (None, None))
+    return calls
+
+
+def test_engine_starts_at_the_pss_e_default_bus_size(psseinit_calls):
+    """psseinit(50) capped the engine at 1,000 buses, and a RAW read past that
+    dropped buses while returning ierr=0. 0 asks PSS/E for the default size
+    level the GUI starts at. The size cannot be raised later in the process."""
+    psse_mcp._ensure_psse()
+
+    assert psseinit_calls == [0]
+
+
+def test_bus_size_comes_from_config(psseinit_calls):
+    from powermcp import config as cfg
+
+    cfg.set_value("psse", "bus_size", "150000")
+
+    psse_mcp._ensure_psse()
+
+    assert psseinit_calls == [150000]
+
+
+def test_bus_size_environment_variable_overrides_config(psseinit_calls, monkeypatch):
+    from powermcp import config as cfg
+
+    cfg.set_value("psse", "bus_size", "150000")
+    monkeypatch.setenv("POWERMCP_PSSE_BUS_SIZE", "200000")
+
+    psse_mcp._ensure_psse()
+
+    assert psseinit_calls == [200000]
+
+
+@pytest.mark.parametrize("value", ["lots", "-5", "1.5"])
+def test_invalid_bus_size_is_refused_before_starting_the_engine(psseinit_calls, value):
+    from powermcp import config as cfg
+
+    cfg.set_value("psse", "bus_size", value)
+
+    with pytest.raises(RuntimeError, match="psse.bus_size"):
+        psse_mcp._ensure_psse()
+    assert psseinit_calls == []
+    assert psse_mcp._psse_ready is False
+
+
 def test_open_case_returns_the_counts_of_the_loaded_case(monkeypatch, case_file):
     fake = FakePsspy()
     _use(monkeypatch, fake)
