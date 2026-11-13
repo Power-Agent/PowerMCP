@@ -39,7 +39,7 @@ Responses are JSON with `success` and either `payload` (tabular data) or `error`
 
 | Tool | Purpose |
 |------|---------|
-| **compile_opendss_file** | `ClearAll` + compile a master DSS file; `payload` includes `circuit_readiness`, `circuit_loaded`; may skip recompile when the same file is already loaded (unless `force_recompile`). |
+| **compile_opendss_file** | `ClearAll` + compile a master DSS file; verifies the resulting circuit has buses and circuit elements before reporting success. A missing `Redirect` that leaves a partial/empty circuit is returned as an error. `payload` includes readiness and engine counts; may skip recompile when the same file is already loaded (unless `force_recompile`). |
 | **clear_all_opendss_memory** | `ClearAll`; resets `circuit_loaded` and `solution_available`. |
 
 ### Model
