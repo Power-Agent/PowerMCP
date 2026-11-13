@@ -1,0 +1,52 @@
+FT-37: Multi-seed balanced RMS ZIP settled-voltage response
+
+Source: contributor-supplied complete Lab PC JSON
+ZIP_RMS_MULTI_20261031T152725Z_8728740a.json (2026-10-31).
+The complete JSON and standalone script are archived alongside this record.
+Only the account identifier ic84yhos is replaced with LAB_USER in both.
+The JSON retains every field, trace, sampled plan and recorded sampler hash.
+Script numerical logic is unchanged; adapt PROJECT/SOURCE_PATH and REPO before
+rerunning the archived copy. Stop MCP, use interactive ComPython, activate
+test / Case 1, and retain the inspected FT-35 source type. The source is read
+and copied, not modified. No public creator or MCP server is imported or invoked.
+
+Scope: six sampled 20 kV, 50 Hz ZIP cases plus six matched constant-power
+controls. Inductive seeds 0, 1, 2; capacitive seeds 4, 7, 15. Both nominal P/Q
+and coefficients come from the checkout's pure _evemtbench_load_plan with
+load_model=zip_rms. Q signs are sampled, not manually flipped. Each constant-
+power control uses the same nominal P/Q with constant-power coefficients.
+
+Temporary copied types use explicit loddy=100, i_nln=1, exponents 0/1/2,
+zero time constants and zero frequency coefficients. Each isolated feeder has
+two parallel 1 km branches, R=30/P0 and X=5/P0 Ohm/km, zero capacitance.
+One branch opens at 1 s and closes at 3 s; simulation ends at 5 s with 0.01 s
+step. These feeder and dynamic settings are diagnostic choices, not paper-
+derived physical dynamic parameters. Feeder scaling normalizes nominal
+loading across sampled sizes; it is not a fixed-network comparison of seeds.
+
+Results: success=true; all twelve cases passed; 503 samples per run, 6036 total.
+Before/dip/recovered windows contain 40/80/80 samples. Recalculation from saved
+traces reproduces every analysis. Settled voltage dips span approximately
+0.03436 to 0.04906 p.u. across all runs. Maximum absolute settled P/Q versus
+polynomial discrepancy on local recomputation is approximately 3.34e-16 MW/Mvar.
+This is numerical agreement, not a physical accuracy or measurement claim.
+Acceptance tolerances remain 0.5% relative and 0.0001 MW/Mvar absolute.
+All six ZIP cases distinguish ZIP from constant power and constant impedance
+over the dip; all six constant-power controls preserve nominal signed P/Q.
+Each run reports original study case/grids/scenario restored, source unchanged
+by readback, cleanup_ok=true, remaining_objects=[]. No error is recorded.
+
+Provenance hashes recorded by the Lab script:
+PowerFactory/evemtbench.py:
+d2c3b322bfc04709370a6a0940c6471c7d4caddfc0041c493ba0bd35c20df477
+PowerFactory/data/evemtbench_loads.json:
+434a5578951a44ebde3506b6af0d26d7fd36c9b156a420e5f979025d258ceef0
+Hashes identify bytes on the Lab PC; line-ending changes can alter these hashes.
+
+Limits: six seeds only; settled balanced 50 Hz, 20 kV response with zero time
+constants. No all-seed, transient-recovery, nonzero-time-constant, frequency-
+response, other-voltage/frequency, unbalanced RMS or EMT validation. These
+temporary models use pure creator plans but bypass public creation, token,
+connection and rollback workflows. FT-36 remains creation/readback evidence,
+not a simulation of its retained integrated load. No supported mode or default
+is widened by FT-37.

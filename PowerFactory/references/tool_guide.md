@@ -378,7 +378,7 @@ and limitations.
 
 ### Opt-in YNd11 zero-sequence impedance equivalent
 
-For **20 MVA, 110/20 kV, 60 Hz, YNd11 only**, add these fields to the
+For **20 MVA, 110/20 kV, 50 or 60 Hz, YNd11 only**, add these fields to the
 transformer creation `parameters` (not a complete creation request):
 
 ```json
@@ -423,6 +423,17 @@ All four comparisons passed the predeclared 0.5% relative / 0.00001 kA absolute
 tolerance; the record includes the complete JSON, script and rerun instructions.
 This is not an absolute-current certification of the original lossy type or
 integrated transformer, and does not extend the creator's configuration scope.
+
+[FT-33](../evidence/FT-33_ynd11_two_frequency_reference_lab_pc.txt) records
+successful lossless reference checks at both nominal frequencies, with fixed
+per-unit inputs, all eight fault scenarios and both source-only controls passing.
+Confirmed 50 Hz creation/readback passed on the Lab PC:
+[FT-34](../evidence/FT-34_integrated_50hz_transformer_creation_lab_pc.txt).
+The new type retained 50 Hz and the transformer remained out of service, with
+the intended connections and grounding; no calculation was run.
+The creator does not change grid frequency or
+existing types. Keep test creations out of service and use a fresh confirmation
+for the selected frequency; 50/60 Hz tokens are not interchangeable.
 
 ---
 
@@ -632,6 +643,76 @@ The Lab PC mapping and separate diagnostic voltage-response checks are in
 creation and retained-value verification of an out-of-service ZIP load passed
 on the Lab PC; see [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
 No calculation was run on that integrated load. RMS/EMT validation remains pending.
+
+### Explicit opt-in RMS ZIP model
+
+Use `"load_model": "zip_rms"` with a new `"type_name"` to create the separate
+restricted RMS configuration. This mode requires a 20 kV bus in a grid already
+at 50 Hz; it never changes grid frequency. It keeps the same seeded power and
+coefficient samples as `zip`, adding these explicit settings on the new type:
+
+```json
+{
+  "loddy": 100,
+  "i_nln": 1,
+  "t1": 0.0,
+  "tpf": 0.0,
+  "tqf": 0.0,
+  "tpu": 0.0,
+  "tqu": 0.0,
+  "kpf": 0.0,
+  "kqf": 0.0
+}
+```
+
+These are tested diagnostic settings, not paper-derived dynamic parameters.
+Preview includes `rms_configuration`, resolved grid frequency, limitations,
+type destination and all coefficient/exponent/RMS values in the confirmation
+plan. Confirm only the exact fresh preview; changing model, settings or
+destination requires a new confirmation. Retained settings are verified and
+new objects are rolled back on failure, with survivors reported.
+
+[FT-35](../evidence/FT-35_zip_rms_diagnostic_lab_pc.txt) found the unchanged
+`zip` type's RMS response matched constant impedance, while an explicit
+nonlinear copy matched settled ZIP response in the isolated 50 Hz test.
+`success=true` in that diagnostic is not a claim that creator defaults provide
+RMS ZIP: `creator_rms_zip_validated=false` records the actual finding.
+
+The result covers one coefficient set with positive P/Q and zero time constants,
+not every sampled mixture, capacitive-Q RMS behavior or transient recovery.
+No load-flow/RMS commands are modified by the creator. EMT, frequency response,
+nonzero time constants, other frequencies/voltages and unbalanced RMS are
+unvalidated. Integrated `zip_rms` creation/readback passed in
+[FT-36](../evidence/FT-36_integrated_rms_zip_creation_lab_pc.txt): explicit RMS
+settings and sampled P/Q were retained, the new load stayed out of service and
+the grid stayed at 50 Hz. No simulation was run; capacitive-Q RMS response is
+not validated by that successful creation.
+
+[FT-37](../evidence/FT-37_zip_rms_multiseed_lab_pc.txt) subsequently passed six
+sampled ZIP cases with both inductive and capacitive Q, each paired with a
+constant-power control. Complete traces reproduce all twelve analyses offline;
+restoration and cleanup passed throughout. This is settled balanced 20 kV /
+50 Hz validation of temporary models using pure creator plans, not a public
+creator integration test or simulation of the FT-36 load. The full sampled
+domain, transient dynamics and other operating modes remain unvalidated.
+No creator defaults, restrictions or command settings change.
+
+[FT-38](../evidence/FT-38_zip_rms_e2e_lab_pc.txt) adds real unified MCP creation
+through settled RMS simulation of the exact created loads/types for one
+inductive and one capacitive seed (0 and 4). Both runs passed with 503 samples
+each; original context restoration and cleanup passed without survivors. Full
+result, four-response capture and final state are archived. The standalone
+script's activation guard skips an already-active exact case but still verifies
+isolation and rejects required activation failures. The server's separate
+`run_rms_simulation` tool is not exercised. Two seeds do not validate the whole
+sampled domain or transient dynamics; creator defaults/restrictions do not change.
+
+Discovery and `zip_rms` preview status descriptions now summarize FT-37/FT-38
+without widening those limits. Status text is part of the bound creation plan:
+after this update or a server restart on the new checkout, request a fresh
+`zip_rms` preview instead of reusing a prior confirmation token. Archived tool
+responses retain their historical status wording; they are not current discovery
+metadata. Seeded values, electrical settings and the legacy modes are unchanged.
 
 ---
 

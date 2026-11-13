@@ -62,7 +62,7 @@ not a claim that every sampled type is suitable for a specific study.
 #### Restricted Table 10 YNd11 equivalent
 
 `zero_sequence_model="ynd11_equivalent"` supports only 20 MVA, 110/20 kV,
-60 Hz, YNd11, with explicit `r0_r1_ratio` and `x0_x1_ratio`. The allowed
+50 or 60 Hz, YNd11, with explicit `r0_r1_ratio` and `x0_x1_ratio`. The allowed
 intervals [1.5, 2.8] and [0.85, 1.0] come from the three-limb numerical rule;
 no physical limb count or core geometry is configured. Default `unchanged`
 does not enable zero-sequence or grounding assignments.
@@ -95,7 +95,19 @@ temporary YNd11 equivalent, with complete JSON and a reproducible script.
 All four comparisons and the source-only control passed, with restoration and
 cleanup confirmed. This does not certify absolute fault currents for the original
 lossy type or integrated transformer, or validate core/limb, magnetizing,
-saturation or RMS/EMT models. Supported creator configurations are unchanged.
+saturation or RMS/EMT models. FT-32 itself did not widen supported configurations.
+[FT-33](../evidence/FT-33_ynd11_two_frequency_reference_lab_pc.txt) repeats the
+lossless reference at 60 and 50 Hz: all eight fault scenarios and both source-only
+controls passed, with retained grid/type frequencies, restoration and cleanup.
+The cases keep per-unit impedance inputs fixed at each nominal frequency; this
+is not a physical frequency sweep of one transformer. The opt-in creator now
+accepts 50 Hz at the same rating, voltage class and vector group; integrated
+50 Hz creation/readback passed on the Lab PC, recorded in
+[FT-34](../evidence/FT-34_integrated_50hz_transformer_creation_lab_pc.txt).
+The new transformer remained out of service; type frequency, impedance ratios,
+grounding and bus connections were retained, with no calculation run.
+Catalog discovery
+reports the supported set as `partial_table_10_mapping.nominal_frequencies_hz`.
 `unmapped_source_tables` still includes 10 and 12 because they are not fully
 mapped; `partial_table_10_mapping` exposes the restricted capability separately.
 
@@ -208,7 +220,54 @@ Integrated unified-tool creation and retained-value verification passed on
 the Lab PC with the new load out of service; see
 [FT-29](../evidence/FT-29_integrated_zip_load_creation_lab_pc.txt).
 The voltage sweep used a separate diagnostic network, not the integrated load.
-RMS/EMT ZIP behavior remains unvalidated.
+`zip` does not configure RMS behavior. In the isolated
+[FT-35](../evidence/FT-35_zip_rms_diagnostic_lab_pc.txt) test, its copied type
+behaved as constant impedance during the RMS dip, not the ZIP polynomial.
+
+#### Explicit opt-in RMS ZIP configuration
+
+`load_model="zip_rms"` requires a new `type_name`, a 20 kV bus and a destination
+grid already at 50 Hz. It reuses the existing seeded power and ZIP coefficient
+streams and explicitly adds `loddy=100`, `i_nln=1`, and zero
+`t1`, `tpf`, `tqf`, `tpu`, `tqu`, `kpf`, `kqf` on the new type.
+These settings are diagnostic choices, not Table 5 dynamic parameters.
+The default remains `constant_power`; `zip` retains its load-flow-only behavior.
+No existing type, grid frequency, load-flow or RMS command is changed.
+
+FT-35 records three isolated runs with complete JSON and a standalone script.
+The explicit nonlinear copy matched settled ZIP P/Q before, during and after
+the voltage dip; the constant-power control also passed. Each case restored
+context and cleaned up. This is evidence for one coefficient set with positive
+P/Q, not validation of all sampled mixtures or capacitive-Q RMS response.
+Transient recovery, nonzero time constants, frequency response, other voltages
+or frequencies, unbalanced RMS and EMT remain unvalidated. Integrated
+`zip_rms` creation/readback passed in
+[FT-36](../evidence/FT-36_integrated_rms_zip_creation_lab_pc.txt), retaining the
+new load out of service with its sampled capacitive Q and all explicit type
+settings. The grid stayed at 50 Hz and no simulation was run on that load.
+This does not validate its capacitive-Q RMS response. No claim is made that
+this changes the paper's model or validates the original integrated load.
+
+[FT-37](../evidence/FT-37_zip_rms_multiseed_lab_pc.txt) separately validates six
+sampled ZIP cases (inductive seeds 0/1/2, capacitive seeds 4/7/15), each with a
+matched constant-power control, at 20 kV / 50 Hz. All twelve settled-response
+checks passed with complete traces, restoration and cleanup. Pure creator plans
+are applied to temporary copies; this does not simulate the retained FT-36 load
+or exercise public creation. Feeder impedance is scaled per sampled P0 as an
+engineering diagnostic choice. Six seeds do not validate every mixture, recovery
+dynamics, nonzero time constants, other voltages/frequencies, unbalanced RMS or
+EMT. Defaults and supported-mode restrictions remain unchanged.
+
+[FT-38](../evidence/FT-38_zip_rms_e2e_lab_pc.txt) closes the tested integration
+gap for seeds 0 and 4: actual unified MCP preview/confirmation created new ZIP
+RMS loads/types, followed by isolated interactive simulation of those exact
+objects. Both inductive and capacitive cases matched settled ZIP response;
+1006 complete samples, capture and final state are archived. Original context
+restoration and cleanup passed. The corrected already-active-case guard is
+regression tested; required activation failures and isolation checks remain.
+This does not simulate the older FT-36 load, exercise the server's separate
+RMS command, or validate the full sampled domain or transient dynamics.
+Defaults, supported voltages/frequencies and zero-time-constant scope stay fixed.
 
 ### Table 13 synchronous-machine mapping
 

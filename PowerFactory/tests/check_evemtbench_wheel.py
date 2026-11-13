@@ -80,12 +80,24 @@ for label in component_types:
         inputs = result["creation_parameters"]
         if inputs["load_model"].get("default") != "constant_power" or inputs["type_name"].get("default") != "":
             raise SystemExit("installed-wheel load listing omitted optional ZIP creation inputs")
+        mapping = result.get("powerfactory", {})
+        if "zip_rms" not in mapping.get("supported_load_models", []):
+            raise SystemExit("installed-wheel load listing omitted restricted RMS ZIP mode")
+        if mapping.get("rms_zip_model", {}).get("type_attributes", {}).get("loddy") != 100:
+            raise SystemExit("installed-wheel RMS ZIP mapping omitted explicit RMS settings")
+        rms = mapping["rms_zip_model"]
+        if not all(record in rms.get("validation", "") for record in ("FT-37", "FT-38")):
+            raise SystemExit("installed-wheel RMS ZIP validation status is outdated")
+        if "full sampled domain" not in rms.get("limitations", ""):
+            raise SystemExit("installed-wheel RMS ZIP status omitted sampled-domain limits")
     if label == "transformer":
         inputs = result["creation_parameters"]
         if inputs["zero_sequence_model"].get("default") != "unchanged":
             raise SystemExit("installed-wheel transformer listing changed the default zero-sequence mode")
         if not inputs["r0_r1_ratio"].get("nullable") or not result.get("partial_table_10_mapping"):
             raise SystemExit("installed-wheel transformer listing omitted partial zero-sequence discovery")
+        if result["partial_table_10_mapping"].get("nominal_frequencies_hz") != [50.0, 60.0]:
+            raise SystemExit("installed-wheel transformer listing omitted 50/60 Hz equivalent support")
 
 print(
     f"Wheel catalog smoke test passed: {len(CATALOGS)} JSON catalogs loaded "

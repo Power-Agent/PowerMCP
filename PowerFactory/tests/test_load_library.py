@@ -330,5 +330,197 @@ class EvEMTBenchLoadTest(unittest.TestCase):
                 self.assertEqual(alternate_bus["StaCubic"], [])
 
 
+class EvEMTBenchRmsZipTest(unittest.TestCase):
+    call = EvEMTBenchLoadTest.call
+
+    def test_current_status_describes_tested_cases_without_widening_scope(self):
+        agent = agent_module.DIgSILENTAgent
+        listing = agent.list_evemtbench_components("load")
+        config = listing["powerfactory"]["rms_zip_model"]
+        for record in ("FT-37", "FT-38"):
+            self.assertIn(record, config["validation"])
+        self.assertIn("six sampled ZIP cases", config["validation"])
+        self.assertIn("seeds 0 (inductive) and 4 (capacitive)", config["validation"])
+        for limitation in ("full sampled domain", "transient recovery", "nonzero time-constant",
+                           "other voltage/frequency", "unbalanced RMS", "EMT", "run_rms_simulation"):
+            self.assertIn(limitation, config["limitations"])
+        self.assertEqual(config["voltage_kv"], 20.)
+        self.assertEqual(config["grid_frequency_hz"], 50.)
+        self.assertEqual(listing["creation_parameters"]["load_model"]["default"], "constant_power")
+        _, plan = agent._evemtbench_load_plan(20., "Load", 4, "zip_rms")
+        status = " ".join(plan["limitations"])
+        self.assertIn("FT-37", status)
+        self.assertIn("FT-38", status)
+        self.assertIn("not the full sampled domain", status)
+        self.assertIn("FT-36; no simulation was run on that load", status)
+        self.assertIn("server run_rms_simulation", status)
+
+    def test_status_refresh_preserves_values_and_legacy_plans_but_requires_fresh_rms_token(self):
+        agent = agent_module.DIgSILENTAgent
+        database = copy.deepcopy(agent._load_evemtbench_load_database())
+        config = database["powerfactory"]["rms_zip_model"]
+        config["validation"] = "Earlier evidence status"
+        config["limitations"] = "Earlier evidence limitations"
+        grid, bus, app = self.network()
+        options = dict(load_model="zip_rms", type_name="RMS")
+        with patch.object(agent, "_load_evemtbench_load_database", return_value=database):
+            previous = self.call(app, **options)
+            legacy = {mode: agent._evemtbench_load_plan(20., "Load", 4, mode)[1]
+                      for mode in ("constant_power", "zip")}
+        fresh = self.call(app, **options)
+        for field in ("powerfactory_attributes", "zip_coefficients", "type_attributes", "derived_type_attributes"):
+            self.assertEqual(previous["item"][field], fresh["item"][field])
+        for mode, previous_plan in legacy.items():
+            self.assertEqual(previous_plan, agent._evemtbench_load_plan(20., "Load", 4, mode)[1])
+        rejected = self.call(app, confirmation=previous["confirmation_required"], **options)
+        self.assertFalse(rejected["success"])
+        self.assertIn("confirmation must exactly match", rejected["message"])
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+        created = self.call(app, confirmation=fresh["confirmation_required"], **options)
+        self.assertTrue(created["success"], created)
+
+    def network(self, voltage=20., frequency=50.):
+        grid, bus, app = EvEMTBenchLoadTest.network(self, voltage)
+        grid.SetAttribute("frnom", frequency)
+        return grid, bus, app
+
+    def test_rms_plan_keeps_seeded_power_and_zip_coefficients(self):
+        agent = agent_module.DIgSILENTAgent
+        for seed in range(100):
+            _, default = agent._evemtbench_load_plan(20., "Load", seed)
+            _, zip_lf = agent._evemtbench_load_plan(20., "Load", seed, "zip")
+            _, rms = agent._evemtbench_load_plan(20., "Load", seed, "zip_rms")
+            self.assertEqual(rms["powerfactory_attributes"], default["powerfactory_attributes"])
+            self.assertEqual(rms["zip_coefficients"], zip_lf["zip_coefficients"])
+            self.assertEqual(rms["derived_type_attributes"], zip_lf["derived_type_attributes"])
+            self.assertEqual(rms["type_attributes"]["loddy"], 100)
+            self.assertEqual(rms["type_attributes"]["i_nln"], 1)
+            self.assertEqual(rms, agent._evemtbench_load_plan(20., "Load", seed, "zip_rms")[1])
+
+    def test_rms_preview_and_creation_verify_all_settings(self):
+        grid, bus, app = self.network()
+        options = dict(load_model="zip_rms", type_name="RMS ZIP", out_of_service=True)
+        preview = self.call(app, **options)
+        self.assertTrue(preview["success"], preview)
+        self.assertFalse(preview["applied"])
+        self.assertEqual(preview["item"]["resolved_grid_frequency_hz"], 50.)
+        self.assertEqual(grid["ElmLod"], [])
+        self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+        result = self.call(app, confirmation=preview["confirmation_required"], **options)
+        self.assertTrue(result["success"], result)
+        typ = app.equipment_folder["IntPrjfolder"][0]["TypLod"][0]
+        for key, value in preview["item"]["type_attributes"].items():
+            self.assertAlmostEqual(typ.GetAttribute(key), value)
+            self.assertAlmostEqual(result["retained_type_attributes"][key], value)
+        self.assertIs(grid["ElmLod"][0].GetAttribute("typ_id"), typ)
+        self.assertEqual(grid["ElmLod"][0].GetAttribute("outserv"), 1)
+        self.assertEqual(grid.GetAttribute("frnom"), 50.)
+
+    def test_legacy_models_do_not_write_rms_settings_or_require_50hz(self):
+        for mode in ("constant_power", "zip"):
+            with self.subTest(mode=mode):
+                grid, bus, app = self.network(frequency=60.)
+                options = dict(load_model=mode, type_name="ZIP" if mode == "zip" else "")
+                preview = self.call(app, **options)
+                self.assertTrue(preview["success"], preview)
+                self.assertNotIn("rms_configuration", preview["item"])
+                self.assertNotIn("resolved_grid_frequency_hz", preview["item"])
+                for key in ("loddy", "i_nln", "t1", "tpf", "tqf", "tpu", "tqu", "kpf", "kqf"):
+                    self.assertNotIn(key, preview["item"].get("type_attributes", {}))
+                result = self.call(app, confirmation=preview["confirmation_required"], **options)
+                self.assertTrue(result["success"], result)
+                self.assertEqual(grid.GetAttribute("frnom"), 60.)
+
+    def test_wrong_voltage_or_missing_type_fails_before_connection(self):
+        agent = agent_module.DIgSILENTAgent
+        with patch.object(agent, "_get_application") as connect:
+            for voltage, typ in ((110., "RMS"), (345., "RMS"), (20., ""), (20., "x" * 41)):
+                with self.subTest(voltage=voltage, typ=typ):
+                    result = agent.create_evemtbench_component("load", dict(
+                        voltage_kv=voltage, load_name="Load", bus_name="Bus",
+                        load_model="zip_rms", type_name=typ))
+                    self.assertFalse(result["success"])
+            connect.assert_not_called()
+
+    def test_non50_or_invalid_grid_frequency_cannot_create_objects(self):
+        for frequency in (60., 0., float("nan"), float("inf"), None):
+            with self.subTest(frequency=frequency):
+                grid, bus, app = self.network(frequency=frequency)
+                result = self.call(app, load_model="zip_rms", type_name="RMS")
+                self.assertFalse(result["success"], result)
+                self.assertEqual(grid["ElmLod"], [])
+                self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+
+    def test_changed_mode_or_grid_frequency_cannot_reuse_confirmation(self):
+        for initial, changed in (("zip", "zip_rms"), ("zip_rms", "zip")):
+            grid, bus, app = self.network()
+            preview = self.call(app, load_model=initial, type_name="ZIP")
+            result = self.call(app, load_model=changed, type_name="ZIP",
+                               confirmation=preview["confirmation_required"])
+            self.assertFalse(result["success"])
+            self.assertIn("confirmation must exactly match", result["message"])
+            self.assertEqual(grid["ElmLod"], [])
+        grid, bus, app = self.network()
+        preview = self.call(app, load_model="zip_rms", type_name="RMS")
+        grid.SetAttribute("frnom", 60.)
+        result = self.call(app, load_model="zip_rms", type_name="RMS",
+                           confirmation=preview["confirmation_required"])
+        self.assertFalse(result["success"])
+        self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+
+    def test_changed_rms_settings_require_fresh_confirmation(self):
+        agent = agent_module.DIgSILENTAgent
+        grid, bus, app = self.network()
+        preview = self.call(app, load_model="zip_rms", type_name="RMS")
+        database = copy.deepcopy(agent._load_evemtbench_load_database())
+        database["powerfactory"]["rms_zip_model"]["type_attributes"]["tpu"] = .1
+        with patch.object(agent, "_load_evemtbench_load_database", return_value=database):
+            result = self.call(app, load_model="zip_rms", type_name="RMS",
+                               confirmation=preview["confirmation_required"])
+        self.assertFalse(result["success"])
+        self.assertIn("confirmation must exactly match", result["message"])
+        self.assertEqual(grid["ElmLod"], [])
+
+    def test_rms_readback_failure_rolls_back_new_type_and_connections(self):
+        for rejected in ("loddy", "i_nln", "plini"):
+            with self.subTest(rejected=rejected):
+                grid, bus, app = self.network()
+                (grid if rejected == "plini" else app.equipment_folder).reject_attribute = rejected
+                preview = self.call(app, load_model="zip_rms", type_name="RMS")
+                result = self.call(app, load_model="zip_rms", type_name="RMS",
+                                   confirmation=preview["confirmation_required"])
+                self.assertFalse(result["success"], result)
+                self.assertTrue(result["rolled_back"], result)
+                self.assertEqual(app.equipment_folder["IntPrjfolder"], [])
+                self.assertEqual(grid["ElmLod"], [])
+                self.assertEqual(bus["StaCubic"], [])
+
+    def test_partial_rms_load_cleanup_preserves_referenced_type(self):
+        grid, bus, app = self.network()
+        grid.reject_attribute = "plini"
+        preview = self.call(app, load_model="zip_rms", type_name="RMS")
+        create = FakeObject.CreateObject
+        def cannot_delete(parent, cls, name):
+            obj = create(parent, cls, name)
+            if cls == "ElmLod":
+                obj.delete_fails = True
+            return obj
+        with patch.object(FakeObject, "CreateObject", cannot_delete):
+            result = self.call(app, load_model="zip_rms", type_name="RMS",
+                               confirmation=preview["confirmation_required"])
+        self.assertFalse(result["success"])
+        self.assertFalse(result["rolled_back"])
+        self.assertTrue(result["type_created"])
+        self.assertIn("remaining_load", result)
+        self.assertEqual(len(app.equipment_folder["IntPrjfolder"][0]["TypLod"]), 1)
+
+    def test_discovery_advertises_restricted_rms_without_changing_defaults(self):
+        listing = agent_module.DIgSILENTAgent.list_evemtbench_components("load")
+        self.assertEqual(listing["creation_parameters"]["load_model"]["default"], "constant_power")
+        self.assertEqual(listing["powerfactory"]["supported_load_models"], ["constant_power", "zip", "zip_rms"])
+        self.assertEqual(listing["powerfactory"]["rms_zip_model"]["grid_frequency_hz"], 50.)
+
+
 if __name__ == "__main__":
     unittest.main()

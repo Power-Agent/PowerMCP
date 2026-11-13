@@ -1,0 +1,87 @@
+FT-33: Two-frequency YNd11 lossless current reference (60 and 50 Hz)
+================================================================
+
+Classification: compiled contributor-supplied evidence, not an independently
+rerun licensed calculation or continuous MCP transcript.
+
+Complete result: FT-33_ynd11_two_frequency_reference_lab_pc.json
+Standalone script: scripts/lab_transformer_two_frequency_reference_check.py
+Supplied filename: YNd_two_frequency_20261031T122223Z_7a98f6da.json
+Only the PowerFactory account identifier is replaced with <user> in JSON.
+The archived script has the same account replacement plus an instruction
+comment at PROJECT; restore the account before a Lab PC rerun.
+Result file timestamp: 31 October 2026, 12:22:23 UTC (from supplied filename).
+Environment: Lab PC PowerFactory; this JSON does not capture its version/SP.
+Code: standalone two-frequency diagnostic, building on FT-32; not a live
+test of the new unified creator's 50 Hz branch.
+
+Configuration and method
+------------------------
+Original library type: EvEMTBench Test Type 110-20, 20 MVA, 110/20 kV,
+60 Hz, YNd11. Existing library type and integrated elements are not modified.
+The script tests a separate temporary grid and type copy at each frequency:
+60 Hz first, then 50 Hz only after a successful first run and cleanup.
+Retained grid and type frnom: 60/60 and 50/50 respectively.
+Run names: MCP YNd Ref 60Hz bd371340; MCP YNd Ref 50Hz 38a214d5.
+
+Both cases hold input positive/zero-sequence per-unit impedances fixed at the
+selected nominal frequency. They are not a physical frequency sweep of one
+transformer. pfe=0 and curmg=0 on the temporary type remove the magnetizing
+branch for this independent, unloaded sequence-network reference.
+
+Reference equations and assumptions are those documented in FT-32:
+Zbase=UHV^2/Sn=605 ohm; Ibase=Sn/(sqrt(3)*UHV).
+Z1=Zsource1+Ztransformer1; Z2=Z1.
+Z0=R0pu+jX0pu+3*(Rn+jXn)/Zbase, with source Z0 blocked by the delta.
+I3ph=Ibase/abs(Z1); Iearth=3*Ibase/abs(Z1+Z2+Z0).
+HV terminal I0=Iearth/3; LV terminal I0=0.
+Both temporary-source cmax/cmin retained as 1.0. Prefault voltage checked
+against 1.0 p.u. Complete Method code 3 is read from the inspected GUI template.
+No solver fault current is used to fit an input or reference value.
+
+Results (identical at both nominal frequencies with fixed per-unit inputs)
+------------------------------------------------------------------------
+Case                  Measured earth kA     Reference earth kA
+baseline              0.850727859777707     0.8507278521757972
+higher_R0             0.8134800676727756    0.8134800623589546
+higher_X0             0.6640420079137861    0.6640420109815358
+neutral_resistance    0.8088946015064056    0.8088945948632568
+
+Each frequency has four rows with passed=true and absolute_reference_passed=true.
+Neutral resistance is 20 ohm in its diagnostic case. Three-phase current is
+0.7906929703892057 kA in all eight rows, versus reference 0.790692966014283 kA.
+HV I0 agrees with the reference; LV terminal I0 is zero in every row.
+Maximum reported relative current error: 8.935771715854653e-9.
+Predeclared tolerance: 0.005 relative (0.5%) / 0.00001 kA absolute.
+Both source-only controls passed: expected 28.86751345948129 kA,
+measured 28.867514740311133 kA. Prefault HV voltage in all rows is
+0.9999999999973533 p.u.
+
+Restoration and limitations
+--------------------------
+Each run and the combined result report success=true, restored=true,
+cleanup_ok=true and remaining_objects=[]. Both method_template_unchanged
+checks passed. Original case is Case 1, original scenario N, and the original
+four physical grids and source-type snapshot were checked on restoration.
+No error or restoration/cleanup-error fields are present.
+
+No absolute-current certification of the original lossy type or integrated
+transformer is claimed. Physical core/limb, magnetizing, internal-delta YNyn,
+saturation, RMS and EMT are unvalidated. Perturbations are diagnostic controls,
+not Table 10 samples. No additional rating, voltage class or winding is validated.
+
+Integration status: the accompanying patch allows the opt-in equivalent at
+50 or 60 Hz for 20 MVA, 110/20 kV, YNd11 only. Default unchanged, ratio bounds
+and grounding assignments are unchanged. Live integrated 50 Hz creation and
+readback are PENDING; this record must not be described as their validation.
+
+Reproduction
+------------
+Copy the archived standalone script to a writable Lab PC folder and restore
+<user> in PROJECT. Save work, stop powerFactoryUnified, open interactive
+PowerFactory normally and activate test / Case 1. Retain the inspected source
+type at 60 Hz and MCP Complete Method Template with complete selected.
+Execute the external ComPython script once; attach its complete uniquely named
+lab_results/YNd_two_frequency_*.json, not copied Output Window text.
+Existing calculation results may be invalidated. If any case fails, preserve
+the JSON and investigate without fitting inputs or relaxing tolerances.
