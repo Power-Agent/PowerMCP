@@ -42,6 +42,8 @@ def test_line_outage_reports_unsupplied_load_instead_of_generic_solver_error():
         c_nf_per_km=0, max_i_ka=1,
     )
     pp.create_load(net, bus=remote, p_mw=12.5, q_mvar=2.0)
+    # Positive sgen power is generation, not additional unserved demand.
+    pp.create_sgen(net, bus=remote, p_mw=7.5, q_mvar=0.0)
 
     report = run_security_assessment(net, elements=["line"])
 
@@ -67,9 +69,9 @@ def test_element_specific_line_loading_limit_overrides_fallback():
     )
 
     result = next(item for item in report["results"] if item["index"] == line)
-    if result["converged"]:
-        assert result["classification"] == "limit_violations"
-        assert any(item["index"] == line for item in result["violations"]["line_overloads"])
+    assert result["converged"] is True
+    assert result["classification"] == "limit_violations"
+    assert any(item["index"] == line for item in result["violations"]["line_overloads"])
 
 
 def test_invalid_voltage_limits_are_rejected():
