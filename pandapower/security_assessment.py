@@ -7,7 +7,6 @@ voltage-controlling source before attempting an AC power flow.
 from __future__ import annotations
 
 import copy
-import itertools
 import math
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
