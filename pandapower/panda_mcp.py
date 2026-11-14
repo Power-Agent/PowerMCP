@@ -13,6 +13,10 @@ if _server_dir not in sys.path:
     sys.path.insert(0, _server_dir)
 from audit import audit_network as _audit_network
 from operating_point import validate_operating_point as _validate_operating_point
+from security_assessment import (
+    run_security_assessment as _run_security_assessment,
+    run_n2_security_assessment as _run_n2_security_assessment,
+)
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
@@ -250,78 +254,72 @@ def validate_operating_point(
     return {"status": "success", "validation_status": verdict, **report}
 
 @mcp.tool()
-def run_contingency_analysis(contingency_type: str = "N-1", 
-                           elements: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Run contingency analysis on the current network.
-    
+def run_contingency_analysis(
+    contingency_type: str = "N-1",
+    elements: Optional[List[str]] = None,
+    voltage_min_pu: float = 0.95,
+    voltage_max_pu: float = 1.05,
+    line_loading_limit_percent: float = 100.0,
+    trafo_loading_limit_percent: float = 100.0,
+    max_contingencies: int = 10000,
+) -> Dict[str, Any]:
+    """Run topology-aware N-1 or N-2 security assessment on the current network.
+
+    The analysis checks switch-aware islands before solving each outage,
+    reports unsupplied load, and checks voltage plus line and transformer
+    loading. N-2 evaluates simultaneous unordered pairs of selected elements.
+
     Args:
-        contingency_type: Type of contingency analysis ("N-1" or "N-2")
-        elements: List of specific elements to analyze (optional)
-        
+        contingency_type: "N-1" for single outages or "N-2" for outage pairs.
+        elements: Optional pandapower element tables to outage. Defaults to
+            lines and two-winding transformers for backward compatibility.
+        voltage_min_pu: Fallback lower voltage limit; bus min_vm_pu overrides it.
+        voltage_max_pu: Fallback upper voltage limit; bus max_vm_pu overrides it.
+        line_loading_limit_percent: Fallback line loading limit; line-specific
+            max_loading_percent overrides it.
+        trafo_loading_limit_percent: Loading limit for two- and three-winding
+            transformers; element-specific max_loading_percent overrides it.
+        max_contingencies: Maximum number of N-2 outage pairs to evaluate.
+            The request is rejected before simulation if the pair count exceeds
+            this safeguard.
+
     Returns:
-        Dict containing contingency analysis results
+        Structured N-1 or N-2 report with islanding classification,
+        violations, severity components, and summary counts.
     """
-    logger.info("Running contingency analysis")
+    logger.info("Running topology-aware %s security assessment", contingency_type)
     try:
-        net = _get_network()
-        
-        # Store original state
-        orig_net = copy.deepcopy(net)
-        results = []
-        
-        # Define elements to analyze
-        if elements is None:
-            elements = ['line', 'trafo']
-            
-        # Perform contingency analysis
-        for element_type in elements:
-            for idx in net[element_type].index:
-                # Create contingency by taking element out of service
-                contingency_net = copy.deepcopy(orig_net)
-                contingency_net[element_type].at[idx, 'in_service'] = False
-                
-                try:
-                    pp.runpp(contingency_net)
-                    
-                    # Check for violations
-                    violations = {
-                        'voltage_violations': contingency_net.res_bus[
-                            (contingency_net.res_bus.vm_pu < 0.95) | 
-                            (contingency_net.res_bus.vm_pu > 1.05)
-                        ].index.tolist(),
-                        'loading_violations': contingency_net.res_line[
-                            contingency_net.res_line.loading_percent > 100
-                        ].index.tolist()
-                    }
-                    
-                    results.append({
-                        'contingency': f"{element_type}_{idx}",
-                        'converged': contingency_net.converged,
-                        'violations': violations
-                    })
-                    
-                except Exception as e:
-                    results.append({
-                        'contingency': f"{element_type}_{idx}",
-                        'converged': False,
-                        'error': str(e)
-                    })
-        
+        selected_type = contingency_type.strip().upper()
+        if selected_type == "N-1":
+            return _run_security_assessment(
+                _get_network(),
+                elements=elements,
+                voltage_min_pu=voltage_min_pu,
+                voltage_max_pu=voltage_max_pu,
+                line_loading_limit_percent=line_loading_limit_percent,
+                trafo_loading_limit_percent=trafo_loading_limit_percent,
+            )
+        if selected_type == "N-2":
+            return _run_n2_security_assessment(
+                _get_network(),
+                elements=elements,
+                voltage_min_pu=voltage_min_pu,
+                voltage_max_pu=voltage_max_pu,
+                line_loading_limit_percent=line_loading_limit_percent,
+                trafo_loading_limit_percent=trafo_loading_limit_percent,
+                max_contingencies=max_contingencies,
+            )
         return {
-            "status": "success",
-            "message": "Contingency analysis completed",
-            "results": results
+            "status": "error",
+            "message": "contingency_type must be 'N-1' or 'N-2'.",
         }
     except RuntimeError as re:
-        return {
-            "status": "error",
-            "message": str(re)
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Contingency analysis failed: {str(e)}"
-        }
+        return {"status": "error", "message": str(re)}
+    except (TypeError, ValueError) as exc:
+        return {"status": "error", "message": str(exc)}
+    except Exception as exc:
+        logger.exception("Contingency analysis failed")
+        return {"status": "error", "message": f"Contingency analysis failed: {exc}"}
 
 @mcp.tool()
 def get_network_info() -> Dict[str, Any]:
