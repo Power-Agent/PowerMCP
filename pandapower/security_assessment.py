@@ -54,10 +54,11 @@ def _topology_islands(net: Any) -> List[Dict[str, Any]]:
             sources.add(row["bus"])
 
     loads_by_bus: Dict[Any, float] = {}
-    for table in ("load", "sgen", "storage"):
+    # Positive sgen.p_mw is generation, not demand. Storage follows the
+    # pandapower convention: positive p_mw is charging/consumption.
+    for table in ("load", "storage"):
         for _, row in _active_rows(net, table):
             p_mw = _finite_number(row.get("p_mw")) or 0.0
-            # Only positive net consumption contributes to unsupplied demand.
             loads_by_bus[row["bus"]] = loads_by_bus.get(row["bus"], 0.0) + max(p_mw, 0.0)
 
     islands = []
@@ -267,15 +268,26 @@ def run_security_assessment(
                     "error": f"{type(exc).__name__}: {exc}",
                 })
 
-    # Stable, transparent ordering: islanding/unserved load first, then
-    # limit violations by counts and magnitudes, then solver/error outcomes.
-    def rank(item: Dict[str, Any]) -> Tuple[float, int, float, int, str]:
+    # Stable lexicographic ordering keeps unlike engineering quantities
+    # separate: p.u. voltage deviation is never added to thermal percent.
+    # Priority: unserved MW, voltage count/magnitude, thermal count/excess,
+    # then outcome class and contingency identifier.
+    def rank(item: Dict[str, Any]) -> Tuple[float, int, float, int, float, int, str]:
         severity = ((item.get("violations") or {}).get("severity") or {})
+        classification_order = {
+            "islanding": 0,
+            "limit_violations": 1,
+            "power_flow_nonconvergence": 2,
+            "analysis_error": 3,
+            "secure": 4,
+        }
         return (
             -float(severity.get("unserved_load_mw", 0.0)),
-            -int(severity.get("voltage_violation_count", 0)) - int(severity.get("thermal_overload_count", 0)),
-            -float(severity.get("max_voltage_deviation_pu", 0.0)) - float(severity.get("max_thermal_excess_percent", 0.0)),
-            0 if item["classification"] == "islanding" else 1,
+            -int(severity.get("voltage_violation_count", 0)),
+            -float(severity.get("max_voltage_deviation_pu", 0.0)),
+            -int(severity.get("thermal_overload_count", 0)),
+            -float(severity.get("max_thermal_excess_percent", 0.0)),
+            classification_order.get(item["classification"], 5),
             item["contingency"],
         )
     results.sort(key=rank)
