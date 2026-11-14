@@ -13,7 +13,10 @@ if _server_dir not in sys.path:
     sys.path.insert(0, _server_dir)
 from audit import audit_network as _audit_network
 from operating_point import validate_operating_point as _validate_operating_point
-from security_assessment import run_security_assessment as _run_security_assessment
+from security_assessment import (
+    run_security_assessment as _run_security_assessment,
+    run_n2_security_assessment as _run_n2_security_assessment,
+)
 
 _repo_root = str(Path(__file__).resolve().parents[1])
 _repo_root_added = _repo_root not in sys.path
@@ -258,16 +261,16 @@ def run_contingency_analysis(
     voltage_max_pu: float = 1.05,
     line_loading_limit_percent: float = 100.0,
     trafo_loading_limit_percent: float = 100.0,
+    max_contingencies: int = 10000,
 ) -> Dict[str, Any]:
-    """Run topology-aware N-1 security assessment on the current network.
+    """Run topology-aware N-1 or N-2 security assessment on the current network.
 
-    The analysis checks switch-aware islands before solving each outage, reports
-    unsupplied load, and checks bus voltage plus line and transformer loading.
-    Only N-1 is currently implemented; N-2 is rejected rather than silently
-    running single outages under an N-2 label.
+    The analysis checks switch-aware islands before solving each outage,
+    reports unsupplied load, and checks voltage plus line and transformer
+    loading. N-2 evaluates simultaneous unordered pairs of selected elements.
 
     Args:
-        contingency_type: Must be "N-1" (N-2 combinations are not implemented).
+        contingency_type: "N-1" for single outages or "N-2" for outage pairs.
         elements: Optional pandapower element tables to outage. Defaults to
             lines and two-winding transformers for backward compatibility.
         voltage_min_pu: Fallback lower voltage limit; bus min_vm_pu overrides it.
@@ -276,26 +279,40 @@ def run_contingency_analysis(
             max_loading_percent overrides it.
         trafo_loading_limit_percent: Loading limit for two- and three-winding
             transformers; element-specific max_loading_percent overrides it.
+        max_contingencies: Maximum number of N-2 outage pairs to evaluate.
+            The request is rejected before simulation if the pair count exceeds
+            this safeguard.
 
     Returns:
-        Structured N-1 report with islanding classification, violations,
-        severity components, and summary counts.
+        Structured N-1 or N-2 report with islanding classification,
+        violations, severity components, and summary counts.
     """
-    logger.info("Running topology-aware N-1 security assessment")
+    logger.info("Running topology-aware %s security assessment", contingency_type)
     try:
-        if contingency_type.strip().upper() != "N-1":
-            return {
-                "status": "error",
-                "message": "Only N-1 contingency analysis is implemented; N-2 is not silently approximated.",
-            }
-        return _run_security_assessment(
-            _get_network(),
-            elements=elements,
-            voltage_min_pu=voltage_min_pu,
-            voltage_max_pu=voltage_max_pu,
-            line_loading_limit_percent=line_loading_limit_percent,
-            trafo_loading_limit_percent=trafo_loading_limit_percent,
-        )
+        selected_type = contingency_type.strip().upper()
+        if selected_type == "N-1":
+            return _run_security_assessment(
+                _get_network(),
+                elements=elements,
+                voltage_min_pu=voltage_min_pu,
+                voltage_max_pu=voltage_max_pu,
+                line_loading_limit_percent=line_loading_limit_percent,
+                trafo_loading_limit_percent=trafo_loading_limit_percent,
+            )
+        if selected_type == "N-2":
+            return _run_n2_security_assessment(
+                _get_network(),
+                elements=elements,
+                voltage_min_pu=voltage_min_pu,
+                voltage_max_pu=voltage_max_pu,
+                line_loading_limit_percent=line_loading_limit_percent,
+                trafo_loading_limit_percent=trafo_loading_limit_percent,
+                max_contingencies=max_contingencies,
+            )
+        return {
+            "status": "error",
+            "message": "contingency_type must be 'N-1' or 'N-2'.",
+        }
     except RuntimeError as re:
         return {"status": "error", "message": str(re)}
     except (TypeError, ValueError) as exc:
