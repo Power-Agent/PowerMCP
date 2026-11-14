@@ -87,3 +87,102 @@ def test_invalid_voltage_limits_are_rejected():
         assert "Voltage limits" in str(exc)
     else:
         raise AssertionError("Invalid voltage limits were accepted")
+
+
+
+def _three_bus_mesh():
+    net = pp.create_empty_network()
+    buses = [pp.create_bus(net, vn_kv=110) for _ in range(3)]
+    pp.create_ext_grid(net, bus=buses[0])
+    lines = [
+        pp.create_line_from_parameters(
+            net, from_bus=buses[a], to_bus=buses[b], length_km=1,
+            r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+            c_nf_per_km=0, max_i_ka=1,
+        )
+        for a, b in ((0, 1), (1, 2), (0, 2))
+    ]
+    pp.create_load(net, bus=buses[2], p_mw=8.0, q_mvar=1.0)
+    return net, lines, buses
+
+
+def test_n2_assessment_evaluates_simultaneous_pairs_deterministically():
+    from security_assessment import run_n2_security_assessment
+
+    net, lines, _ = _three_bus_mesh()
+    before = net.line.in_service.copy()
+
+    first = run_n2_security_assessment(net, elements=["line"])
+    second = run_n2_security_assessment(net, elements=["line"])
+
+    assert first["status"] == "success"
+    assert first["analysis_type"] == "N-2"
+    assert first["contingency_count"] == 3
+    assert first["results"] == second["results"]
+    assert all(len(result["elements"]) == 2 for result in first["results"])
+    assert {
+        tuple(item["index"] for item in result["elements"])
+        for result in first["results"]
+    } == {(lines[0], lines[1]), (lines[0], lines[2]), (lines[1], lines[2])}
+    assert (net.line.in_service == before).all()
+
+
+def test_n2_assessment_reports_load_islanded_by_two_simultaneous_outages():
+    from security_assessment import run_n2_security_assessment
+
+    net = pp.create_empty_network()
+    source, middle, remote = [
+        pp.create_bus(net, vn_kv=110) for _ in range(3)
+    ]
+    pp.create_ext_grid(net, bus=source)
+    first = pp.create_line_from_parameters(
+        net, from_bus=source, to_bus=middle, length_km=1,
+        r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+        c_nf_per_km=0, max_i_ka=1,
+    )
+    second = pp.create_line_from_parameters(
+        net, from_bus=middle, to_bus=remote, length_km=1,
+        r_ohm_per_km=0.1, x_ohm_per_km=0.1,
+        c_nf_per_km=0, max_i_ka=1,
+    )
+    pp.create_load(net, bus=remote, p_mw=8.0, q_mvar=1.0)
+
+    report = run_n2_security_assessment(net, elements=["line"])
+
+    assert report["contingency_count"] == 1
+    result = report["results"][0]
+    assert result["elements"] == [
+        {"element": "line", "index": first},
+        {"element": "line", "index": second},
+    ]
+    assert result["classification"] == "islanding"
+    assert result["violations"]["severity"]["unserved_load_mw"] == 8.0
+
+
+def test_n2_candidate_limit_rejects_before_running_contingencies():
+    from security_assessment import run_n2_security_assessment
+
+    net, _, _ = _three_bus_mesh()
+    try:
+        run_n2_security_assessment(
+            net, elements=["line"], max_contingencies=2
+        )
+    except ValueError as exc:
+        assert "3 outage pairs" in str(exc)
+        assert "max_contingencies=2" in str(exc)
+    else:
+        raise AssertionError("N-2 candidate limit was not enforced")
+
+
+def test_n2_requires_at_least_two_active_elements():
+    from security_assessment import run_n2_security_assessment
+
+    net = pp.create_empty_network()
+    bus = pp.create_bus(net, vn_kv=110)
+    pp.create_ext_grid(net, bus=bus)
+    try:
+        run_n2_security_assessment(net, elements=["line"])
+    except ValueError as exc:
+        assert "at least two" in str(exc)
+    else:
+        raise AssertionError("N-2 accepted fewer than two candidate elements")
