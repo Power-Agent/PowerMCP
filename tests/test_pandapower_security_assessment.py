@@ -8,7 +8,7 @@ import pandapower.networks as pn
 _SERVER_DIR = str(Path(__file__).resolve().parents[1] / "pandapower")
 sys.path.insert(0, _SERVER_DIR)
 try:
-    from security_assessment import run_security_assessment
+    from security_assessment import _evaluate_results, run_security_assessment
 finally:
     sys.path.remove(_SERVER_DIR)
 
@@ -61,17 +61,22 @@ def test_element_specific_line_loading_limit_overrides_fallback():
     net = pn.case14()
     line = net.line.index[0]
     net.line.at[line, "max_loading_percent"] = 1.0
+    pp.runpp(net)
 
-    report = run_security_assessment(
+    violations = _evaluate_results(
         net,
-        elements=["line"],
+        voltage_min_pu=0.95,
+        voltage_max_pu=1.05,
         line_loading_limit_percent=1000.0,
+        trafo_loading_limit_percent=1000.0,
     )
 
-    result = next(item for item in report["results"] if item["index"] == line)
-    assert result["converged"] is True
-    assert result["classification"] == "limit_violations"
-    assert any(item["index"] == line for item in result["violations"]["line_overloads"])
+    assert any(item["index"] == line for item in violations["line_overloads"])
+    assert all(
+        item["limit_percent"] == 1.0
+        for item in violations["line_overloads"]
+        if item["index"] == line
+    )
 
 
 def test_invalid_voltage_limits_are_rejected():
