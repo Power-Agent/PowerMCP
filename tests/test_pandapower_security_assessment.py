@@ -1,8 +1,16 @@
 """Tests for topology-aware pandapower N-1 security assessment."""
+from pathlib import Path
+import sys
+
 import pandapower as pp
 import pandapower.networks as pn
 
-from pandapower.security_assessment import run_security_assessment
+_SERVER_DIR = str(Path(__file__).resolve().parents[1] / "pandapower")
+sys.path.insert(0, _SERVER_DIR)
+try:
+    from security_assessment import run_security_assessment
+finally:
+    sys.path.remove(_SERVER_DIR)
 
 
 def test_case14_assessment_is_deterministic_and_does_not_mutate_input():
