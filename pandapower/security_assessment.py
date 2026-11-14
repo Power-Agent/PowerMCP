@@ -1,4 +1,4 @@
-"""Topology-aware N-1 security assessment for pandapower networks.
+"""Topology-aware N-1 and N-2 security assessment for pandapower networks.
 
 The assessment operates on private network copies. It uses pandapower's
 switch-aware topology graph to identify load-bearing islands without a
