@@ -39,7 +39,7 @@ mcp = FastMCP("Egret Power System Analysis Server")
 # MATPOWER marks an unlimited branch with rateA/B/C = 0. Egret's own parser
 # stores that as None, which its models read as "no thermal limit", but they
 # index these keys directly, so a converter that leaves them out (powerio 0.11.5
-# does) fails with KeyError: 'rating_long_term'.
+# through 0.12.1 do) fails with KeyError: 'rating_long_term'.
 _BRANCH_RATING_KEYS = ("rating_long_term", "rating_short_term", "rating_emergency")
 
 

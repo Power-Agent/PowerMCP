@@ -40,7 +40,7 @@ python3 --version                    # macOS / Linux
 py -0p                               # Windows: lists every installed Python
 ```
 
-- Python **3.10 to 3.14** is supported. Prefer **3.12 or 3.13**, which every extra
+- Python **3.11 to 3.14** is supported. Prefer **3.12 or 3.13**, which every extra
   supports (`surge` needs 3.12 to 3.14; PLEXOSDB's `r2x` dependencies need 3.11
   to 3.13).
 - **PSS/E and PowerFactory load a vendor Python module built for one Python version.**

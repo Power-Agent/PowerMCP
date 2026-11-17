@@ -5,7 +5,7 @@ A comprehensive Model Context Protocol (MCP) server for PyPSA (Python for Power 
 ## Requirements
 
 - [PyPSA](https://pypsa.org/) >= 0.35.2 and < 2
-- Python 3.10 or higher
+- Python 3.11 or higher
 - MCP Python SDK 2.x
 - At least one LP solver supported by PyPSA:
   - **Open Source**: HiGHS (recommended), CBC, GLPK

@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         # floor of requires-python, and every version the classifiers claim
-        python-version: ["3.10", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
 
@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # [pscad] is psutil, which PSCAD/tests import. [surge] is surge-py,
-          # whose marker (>=3.12,<3.15) leaves it uninstalled on 3.10, where the
+          # whose marker (>=3.12,<3.15) leaves it uninstalled on 3.11, where the
           # suite skips itself.
           python -m pip install -e ".[pscad,surge]" pytest
 
