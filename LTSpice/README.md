@@ -4,7 +4,7 @@ MCP server for LTSpice electronic circuit simulation, enabling automated netlist
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - [PyLTSpice](https://github.com/nunobrum/LTSpice)
 - LTSpice installed on your system (or via Wine on macOS/Linux)
 

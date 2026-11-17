@@ -17,7 +17,7 @@ A professional, robust Model Context Protocol (MCP) server for **Power System Co
 ### 1. Prerequisites
 - **Windows OS**: Required for local PSCAD automation (RMI).
 - **PSCAD Installed**: Ensure PSCAD and its Python libraries are available on your system.
-- **Python 3.10+**: Recommended for best compatibility.
+- **Python 3.11+**: Recommended for best compatibility.
 
 ### 2. Automated Setup
 The easiest way to get started is by running the automated installer:

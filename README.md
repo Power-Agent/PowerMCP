@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/powermcp.svg)](https://pypi.org/project/powermcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.10%20to%203.14-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.11%20to%203.14-blue.svg)](https://www.python.org/downloads/)
 
 PowerMCP is an open-source collection of MCP servers for power system software such as PSS/E, PowerWorld, PowerFactory, PSLF, PSCAD, OpenDSS, pandapower, and PyPSA. These tools enable LLMs to directly interact with power system applications, facilitating intelligent coordination, simulation, and control in the energy domain.
 
@@ -99,7 +99,7 @@ After it finishes, restart your MCP client (start a new Claude Code or Codex ses
 
 ### Install it yourself
 
-PowerMCP installs as a single Python package with an interactive CLI. Python 3.10 through 3.14 is supported.
+PowerMCP installs as a single Python package with an interactive CLI. Python 3.11 through 3.14 is supported.
 
 ```bash
 pip install powermcp
@@ -185,12 +185,14 @@ These tools wrap commercial or locally-installed software, so PowerMCP stores th
 ### Case compilation between servers (PowerIO)
 
 PowerIO IR is the exchange format of this repository. PowerMCP runs the
-server shipped in PowerIO 0.11.2 (`powermcp run powerio` is `python -m
+server shipped in PowerIO 0.12 (`powermcp run powerio` is `python -m
 powerio.mcp`); that server parses every grid exchange format, emits every
 target, summarizes, diagnoses, normalizes, lowers multiconductor networks, and
-calculates matrices. Its `parse` tool returns serialized **PowerIO IR
-generation 2** (`"schema": "pio-ir"`, `"version": 2`), a typed module carrying
-the electrical value, its provenance and its diagnostics. Every other server
+calculates matrices. Its `parse` tool returns serialized **PowerIO IR**
+(`"schema": "pio-ir"`, with `"version"` naming the PowerIO release that wrote
+it, such as `"0.12.1"`; documents from PowerIO 0.11 state `2` and still
+read), a typed module carrying the electrical value, its provenance and its
+diagnostics. Every other server
 here consumes that document: the pandapower, PyPSA, ANDES and Egret adapters
 turn it into their own model with PowerIO's writers. PowerMCP itself never
 re-parses, re-validates, or recomputes what PowerIO states; it routes a

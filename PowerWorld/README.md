@@ -4,7 +4,7 @@ MCP server for PowerWorld Simulator via Easy SimAuto (ESA), enabling power flow 
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - [Easy SimAuto (ESA)](https://github.com/mzy2240/ESA)
 
 Install dependencies:

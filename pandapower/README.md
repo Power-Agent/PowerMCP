@@ -4,7 +4,7 @@ MCP server for pandapower transmission system analysis, enabling network creatio
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - [pandapower](https://github.com/e2nIEE/pandapower)
 
 Install dependencies:
