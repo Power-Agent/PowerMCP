@@ -6,7 +6,7 @@ MCP server for ANDES (Python-based power system dynamic analysis), enabling powe
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - [ANDES](https://andes.readthedocs.io/)
 
 Install dependencies:
