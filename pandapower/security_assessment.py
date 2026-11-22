@@ -71,8 +71,8 @@ def _topology_islands(net: Any) -> List[Dict[str, Any]]:
         load_mw = sum(loads_by_bus.get(bus, 0.0) for bus in component)
         island_sources = sorted((bus for bus in component if bus in sources), key=str)
         islands.append({
-            "buses": sorted(component, key=str),
-            "source_buses": island_sources,
+            "buses": sorted((int(bus) for bus in component),),
+            "source_buses": sorted((int(bus) for bus in island_sources),),
             "load_mw": round(load_mw, 9),
             "supplied": bool(island_sources) or load_mw <= 1e-9,
         })
