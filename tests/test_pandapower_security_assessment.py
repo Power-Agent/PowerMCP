@@ -1,5 +1,6 @@
 """Tests for topology-aware pandapower N-1 security assessment."""
 from pathlib import Path
+import json
 import sys
 
 import pandapower as pp
@@ -186,3 +187,24 @@ def test_n2_requires_at_least_two_active_elements():
         assert "at least two" in str(exc)
     else:
         raise AssertionError("N-2 accepted fewer than two candidate elements")
+
+
+def test_n1_and_n2_reports_are_json_serializable_and_use_native_bus_ids():
+    from security_assessment import run_n2_security_assessment
+
+    n1_net = pn.case14()
+    n1_report = run_security_assessment(n1_net)
+    json.dumps(n1_report)
+    assert all(type(bus) is int for island in n1_report["base_islands"] for bus in island["buses"])
+    assert all(type(bus) is int for island in n1_report["base_islands" ] for bus in island["source_buses"])
+
+
+    n2_net, _, _ = _three_bus_mesh()
+    n2_report = run_n2_security_assessment(n2_net, elements=["line"])
+    json.dumps(n2_report)
+    assert all(type(bus) is int for island in n2_report["base_islands"] for bus in island["buses"])
+    assert all(type(bus) is int for island in n2_report["base_islands"] for bus in island["source_buses"])
+    for result in n2_report["results"]:
+        for island in result.get("islands", []):
+            assert all(type(bus) is int for bus in island["buses"])
+            assert all(type(bus) is int for bus in island["source_buses"])
