@@ -26,7 +26,7 @@
   "powerfactory": {
     "element_class": "ElmLod",
     "model": "balanced constant-power load",
-    "supported_load_models": ["constant_power", "zip"],
+    "supported_load_models": ["constant_power", "zip", "zip_rms"],
     "zip_model": {
       "type_class": "TypLod",
       "scope": "balanced steady-state load flow; RMS and EMT unvalidated",
@@ -40,6 +40,19 @@
         "kpu0": 0.0, "kpu1": 1.0, "kpu": 2.0,
         "kqu0": 0.0, "kqu1": 1.0, "kqu": 2.0
       }
+    },
+    "rms_zip_model": {
+      "scope": "20 kV, 50 Hz grid, balanced settled RMS voltage response with zero time constants",
+      "voltage_kv": 20.0,
+      "grid_frequency_hz": 50.0,
+      "type_attributes": {
+        "loddy": 100, "i_nln": 1,
+        "t1": 0.0, "tpf": 0.0, "tqf": 0.0, "tpu": 0.0, "tqu": 0.0,
+        "kpf": 0.0, "kqf": 0.0
+      },
+      "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
+      "validation": "FT-35 positive-P/Q diagnostic and FT-36 creation/readback passed; FT-37 six sampled ZIP cases covering both Q signs and six constant-power controls passed; FT-38 actual unified-creator loads passed settled RMS response for seeds 0 (inductive) and 4 (capacitive), with restoration and cleanup",
+      "limitations": "Six sampled cases and two end-to-end seeds only, not the full sampled domain; no transient recovery, nonzero time-constant, frequency-response, other voltage/frequency, unbalanced RMS, EMT or server run_rms_simulation validation; the retained FT-36 load was not simulated"
     },
     "mapped_attributes": {
       "active_power_mw": "plini",

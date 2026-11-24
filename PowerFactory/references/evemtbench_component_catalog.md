@@ -189,7 +189,10 @@ Values are 5th, 50th, and 95th percentiles of generated cables.
 ## Transformer zero-sequence and limb data - Table 10
 
 The executable opt-in `ynd11_equivalent` is restricted to 20 MVA, 110/20 kV,
-60 Hz YNd11 with explicit ratios from the three-limb numerical intervals.
+50 or 60 Hz YNd11 with explicit ratios from the three-limb numerical intervals.
+The two-frequency lossless reference passed (FT-33); integrated 50 Hz creation
+and readback also passed (FT-34), with the new transformer out of service and
+no calculation run.
 This is an impedance equivalent, not a physical limb/core implementation.
 Other rows below remain catalog data; see [mapping limits](evemtbench.md#restricted-table-10-ynd11-equivalent).
 
@@ -396,7 +399,7 @@ creator and must not be represented as a complete motor database.
 |---|---|---|---|
 | Events/faults | yes | partial, existing tools | not planned as a library type |
 | External grids | yes | validated on PowerFactory 2026 SP1 | implemented |
-| Loads | yes | power mapped (`plini`, `qlini`); opt-in ZIP `TypLod` for load flow | constant power default; RMS/EMT ZIP unvalidated |
+| Loads | yes | power mapped; opt-in `zip` for load flow; `zip_rms` restricted to balanced settled 20 kV / 50 Hz response with zero time constants | constant power default; FT-37 six sampled ZIP cases with both Q signs plus six controls passed; FT-38 two actual unified-creator loads passed RMS response; full sampled domain, transient dynamics, other operating modes and EMT unvalidated |
 | Underground cables | yes | sequence equivalent validated on SP1 | implemented |
 | Overhead lines/conductors | yes | sequence equivalent validated on SP1 | implemented |
 | Transformers | yes, Tables 10-12 | Table 11; restricted opt-in Table 10 YNd11 equivalent | full core/limb and Table 12 unsupported |

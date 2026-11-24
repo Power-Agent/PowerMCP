@@ -1,0 +1,75 @@
+Use ONLY powerFactoryUnified for PowerFactory operations. Never call PSCAD.
+Local file read/save tools are allowed for the state and raw-response capture.
+Do not run Python scripts, calculations, or simulations during this MCP phase.
+
+The user authorizes exactly two temporary out-of-service ZIP RMS load/type
+creations using preview followed by exact confirmation, as specified below.
+Do not alter existing equipment, frequencies, service states or calculation settings.
+
+1. Read this complete state file:
+Z:\Studenten\KrishnaPoyil\PowerMCP\PowerFactory\lab_results\ZIP_RMS_E2E_state.json
+Require schema=1, ready=true, closed=false, no preparation_error, project=
+\LAB_USER.IntUser\test.IntPrj, and requests containing exactly seeds 0 and 4.
+If absent, incomplete or different, STOP. Never invent names or create a replacement grid.
+The prepared temporary case/grid/bus names and exact paths are in this file.
+Do not overwrite the state or run its cleanup.
+
+2. Activate test / Case 1 with powerFactoryUnified-create_study_case using:
+{"case_name":"Case 1","base_study_case":"0. Base","open_digsilent":true}
+Then call get_active_project and get_active_study_case. Require exact full paths:
+\LAB_USER.IntUser\test.IntPrj
+\LAB_USER.IntUser\test.IntPrj\Study Cases.IntPrjfolder\Case 1.IntCase
+Do not reject a shortened config path if these actual active paths match.
+
+3. Inspect the existing temporary IntCase by its name/class (state.tag + .IntCase).
+Verify exactly one existing case at state.case. If none/ambiguous, STOP; do not
+create or clone a missing case. Activate that existing case with create_study_case,
+case_name=state.tag, base_study_case="Case 1", open_digsilent=true.
+Re-read active project/case and require state.project and state.case exactly.
+
+4. Read grid and bus attributes by name/class and verify exact returned paths:
+state.grid: frnom=50; state.bus: uknom=20, outserv=0.
+Absolute-path get_parameters queries have failed on this installation; use
+name-and-class queries, then verify returned full_name. If responses truncate,
+read their complete saved output before continuing. Do not infer hidden values.
+Stop if a requested load/type already exists or the expected grid/bus is absent
+or ambiguous. Do not create buses, grids or folders.
+
+5. In seed order 0 then 4, take the corresponding state.requests object unchanged.
+Call create_evemtbench_component with component_type="load", parameters=request.
+This is the preview: no confirmation key or an empty confirmation string.
+Verify the complete response: success=true, applied=false, load_created=false,
+type_created=false, load_model=zip_rms, correct seed, exact target grid/bus,
+target.out_of_service=true, item.resolved_grid_frequency_hz=50, and nonempty
+confirmation_required. Require item.powerfactory_attributes, type_attributes
+and derived_type_attributes to match the corresponding state.plans object.
+Require seed 0 qlini>0 and seed 4 qlini<0. Read complete saved outputs if needed.
+
+6. Only after that verification, call create_evemtbench_component again with
+the identical component_type and request parameters, adding confirmation equal
+to the exact complete confirmation_required string from THAT preview.
+Do not hand-reconstruct the token. Do not reuse a token between loads or
+silently retry a rejected confirmation. Require success=true, applied=true,
+load_created=true, type_created=true and expected exact created_load/type paths.
+If anything fails, STOP and preserve every response; no further creation.
+
+7. Save complete returned JSON OBJECTS in:
+Z:\Studenten\KrishnaPoyil\PowerMCP\PowerFactory\lab_results\ZIP_RMS_E2E_capture.json
+with this exact top-level shape:
+{
+  "0": {"preview": <complete seed-0 preview object>, "creation": <complete seed-0 creation object>},
+  "4": {"preview": <complete seed-4 preview object>, "creation": <complete seed-4 creation object>}
+}
+Preserve every response field; do not truncate, summarize, replace numerical
+values, insert placeholders, or manually transcribe values from visible previews.
+Recover complete saved tool-output files where necessary and parse their JSON.
+Write UTF-8, do not overwrite an existing capture. The angle-bracket values above
+describe objects, not literal text. If exact file saving is unavailable, STOP
+and give the complete saved-output paths so the user can recover them; do not
+claim a complete capture was saved. On failure save a separately named failure
+capture with all available responses, never fabricate successful responses.
+
+8. Return only the capture path and concise creation status. Leave both created
+loads out of service. No simulation, cleanup, service-state edits, PSCAD calls,
+git commands or repository changes. Tell the user to save PowerFactory, stop
+MCP, reopen PowerFactory interactively, and run the standalone script's run phase.

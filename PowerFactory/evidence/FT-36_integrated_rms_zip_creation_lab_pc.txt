@@ -1,0 +1,81 @@
+FT-36: Integrated restricted RMS ZIP load creation and readback
+=============================================================
+
+Classification: compiled contributor-supplied evidence, not an independently
+rerun licensed test or continuous raw MCP transcript.
+Companion: FT-36_integrated_rms_zip_creation_lab_pc.json
+Supplied filename: zip_rms_integration_evidence_20261031_153623_ed42d2da.json
+The complete supplied file is retained with only the account identifier replaced
+by <user>. Its raw_response_text values are JSON strings, parsed separately.
+
+Provenance matters: the Lab assistant recovered four complete first JSON
+payloads (catalog, preview, creation, type_readback) from saved client tool
+outputs. The remaining seven responses (activation/project/case, grid/bus
+preflight, load readback and grid reread) were manually transcribed into
+here-strings from visible tool output. The supplied file's label 'raw
+PowerFactory Unified tool responses' is preserved, but this record does not
+represent all eleven entries as independently captured raw responses.
+No local paths or transient tool files were independently fetched from the
+Lab PC. No PowerFactory version/service-pack field is included in the capture.
+
+Code under test: patch 0122, feat/powerfactory-load-zip-rms, before commit.
+Lab PC automated run: 214 tests, 472 subtests passed in 11.92s.
+
+Operation and scope
+-------------------
+The client activated test / Case 1, verified the actual context, and inspected
+the patched load catalog. Default load_model remained constant_power and
+supported_load_models advertised constant_power, zip and zip_rms. The RMS
+mapping requires 20 kV and an existing 50 Hz destination grid.
+
+Grid MCP Confirmation Check 20261013 was already 50 Hz. Bus MCP Confirmation
+MV 20 was uniquely identified under it, with uknom=20 kV. A fresh preview
+reported success=true and applied/load_created/type_created=false. Exactly
+one matching confirmation request was reported, followed by success=true,
+applied=true, load_created=true and type_created=true. The archived preview
+and creation confirmation_required strings are identical; they are not
+independently rehashed against original client transport messages.
+
+New type: MCP RMS ZIP Load Type Integration 01.TypLod.
+New load: MCP RMS ZIP Load Integration 01.ElmLod.
+Parameters: voltage_kv=20, seed=42, load_model=zip_rms, out_of_service=true.
+The type destination is Equipment Type Library / Load Types. The load's bus
+reference is its cubicle under MCP Confirmation MV 20. The creation response
+returns live type references as full-name strings, and readback retains <l3>
+display markup. Exactly one type and one load matched the read queries.
+
+Retained settings
+-----------------
+loddy=100; i_nln=1.
+t1=tpf=tqf=tpu=tqu=kpf=kqf=0.
+P/Q exponents: 0,1,2.
+aP=.45320945978164673; bP=.022793669253587723; cP=.5239968709647655.
+aQ=1.2318488359451294; bQ=-1.965647578239441; cQ=1.7337987422943115.
+Coefficients and derived values match the fresh preview within float precision.
+plini=1.013841 MW; qlini=-.306438 Mvar; outserv=1.
+The negative sampled Q was retained, not replaced with a positive diagnostic
+operating point. Final grid frnom=50 Hz, matching preflight. No attribute errors
+are present in successful readbacks.
+
+Checker and client issues
+-------------------------
+The first local evidence-check command failed because it read grid frequency
+from the preview's top level instead of item.resolved_grid_frequency_hz and
+looked for cP/cQ in retained_type_attributes instead of retained_derived_attributes.
+The corrected checker passed. This was not a creator, confirmation or rollback
+failure. One client Read call used an invalid reversed view_range; the complete
+type-readback payload was subsequently preserved and parsed.
+
+No rollback or remaining-object fields were returned by the successful creator.
+New objects were intentionally retained, with the load out of service. No
+cleanup, failure-path rollback or simulation is established by this operation.
+No existing equipment, grid-frequency or calculation settings were reported
+changed. The supplied evidence explicitly states no calculations or simulations
+were run. This is integrated creation/readback validation only.
+
+FT-35 remains the separate balanced 50 Hz settled-response diagnostic, using
+one coefficient set and positive P/Q. FT-36 does not validate RMS response of
+this integrated load or capacitive-Q behavior. General sampled-input behavior,
+transient recovery, nonzero time constants, frequency response, other voltages
+or frequencies, unbalanced RMS and EMT remain unvalidated. Existing constant_power
+and load-flow-only zip defaults/behavior remain unchanged.

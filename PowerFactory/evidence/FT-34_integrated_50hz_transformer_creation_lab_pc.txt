@@ -1,0 +1,73 @@
+FT-34: Integrated opt-in 50 Hz YNd11 transformer creation and readback
+===================================================================
+
+Classification: compiled contributor-supplied evidence, not an independent
+licensed rerun or a continuous raw tool capture. The companion JSON preserves
+the complete creation-response and post-creation-readback JSON blocks from
+the supplied client transcript, parsed/reformatted with account identifiers
+replaced by <user>. Other context and query failures are identified as reported
+summaries. Confirmation text is retained as supplied, not independently checked
+against the original temporary tool-output files.
+
+Companion: FT-34_integrated_50hz_transformer_creation_lab_pc.json
+Original attachment: Pasted text.txt supplied after the integrated test.
+The Lab assistant reported saving Transformer_Integration_Evidence_20261031.json
+with catalog/preview responses. That file was not supplied for this record;
+the complete preview and original raw activation/query-failure responses are
+not claimed as archived here. No additional Lab PC execution was needed.
+
+Environment: Lab PC PowerFactory; version/service pack not captured in these
+responses. Code under test: patch 0119 on feat/powerfactory-ynd11-50hz.
+No post-patch feature commit hash was supplied. Lab PC automated test output:
+204 tests and 500 subtests passed in 27.28s.
+
+Reported sequence
+-----------------
+Case 1 was activated in test and actual project/case paths were checked.
+The catalog advertised zero_sequence_model default unchanged and partial
+mapping nominal_frequencies_hz=[50,60]. Grid and buses were uniquely identified.
+Grid MCP Confirmation Check 20261013 was 50 Hz before creation and after it.
+HV/MV buses were MCP Confirmation HV 110 (110 kV) and MCP Confirmation MV 20
+(20 kV), both under that grid. No grid-frequency change was reported.
+
+A fresh preview was reviewed with no equipment creation reported, followed by
+one creation request using its exact returned confirmation. Configuration:
+20 MVA, 110/20 kV, 50 Hz, YNd11, seed=42, zero_sequence_model=ynd11_equivalent,
+r0_r1_ratio=2.15, x0_x1_ratio=0.925, out_of_service=true.
+New type: MCP YNd Z0 50Hz Type Integration 01.TypTr2.
+New transformer: MCP YNd Z0 50Hz Integration 01.ElmTr2.
+
+Creation and retained values
+---------------------------
+success=true, applied=true, type_created=true, transformer_created=true.
+The type read returned one matching object at the intended library path:
+strn=20, frnom=50, utrn_h=110, utrn_l=20, tr2cn_h=YN, tr2cn_l=D, nt2ag=11.
+r1pu=0.004756252747029066; x1pu=0.11268821358680725.
+r0pu=0.01022594328969717; x0pu=0.10423660278320312.
+ur0tr=1.0225943326950073%; uk0tr=10.473699569702148%.
+Ratios agree with 2.15 and 0.925 within floating-point precision.
+
+The element read returned one matching object. typ_id references the new type;
+bushv and buslv reference cubicles under the intended HV and MV buses.
+outserv=1, neutConfig=0, cgnd_h=0, re0tr_h=0 ohm, xe0tr_h=0 ohm.
+The final grid read retained frnom=50. Successful reads contain no attribute
+errors. Returned <l3> reference markup is preserved in the companion JSON.
+
+Query failures and scope limits
+-------------------------------
+Three initial get_parameters calls using absolute object-path queries failed
+with 'PowerFactory read failed: method call failed'. Subsequent name-and-class
+queries succeeded and returned exactly one intended object with its full path.
+This is a disclosed query-form limitation, not a creator failure or rollback.
+
+No rollback or remaining-object fields were returned by the successful creation.
+The new objects were intentionally retained, with the transformer out of service.
+Cleanup and failure-path rollback are not asserted by this record.
+No calculations, existing-equipment changes or grid-setting changes were reported.
+This is integrated creation/readback validation, not a 50 Hz network simulation.
+
+FT-33 remains the separate two-frequency lossless sequence-network reference.
+No absolute-current certification of the original lossy/integrated transformer,
+physical core/limb, magnetizing, internal-delta YNyn, saturation, RMS or EMT
+validation is claimed. Supported ratings, voltage classes and windings are
+not widened beyond 20 MVA, 110/20 kV, YNd11 at nominal 50 or 60 Hz.

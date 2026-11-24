@@ -16,9 +16,60 @@ SPEC = importlib.util.spec_from_file_location(
 )
 probe = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(probe)
+TWO_SPEC = importlib.util.spec_from_file_location(
+    "two_frequency_reference_probe",
+    EVIDENCE / "scripts" / "lab_transformer_two_frequency_reference_check.py",
+)
+two_probe = importlib.util.module_from_spec(TWO_SPEC)
+TWO_SPEC.loader.exec_module(two_probe)
 
 
 class ReferenceEvidenceTest(unittest.TestCase):
+    def test_two_frequency_record_is_complete_and_reproducible(self):
+        record = json.loads((EVIDENCE / "FT-33_ynd11_two_frequency_reference_lab_pc.json")
+                            .read_text(encoding="utf-8"))
+        self.assertTrue(record["success"])
+        self.assertEqual([r["frequency_hz"] for r in record["runs"]], [60, 50])
+        for run in record["runs"]:
+            self.assertTrue(run["success"])
+            self.assertTrue(run["restored"])
+            self.assertTrue(run["cleanup_ok"])
+            self.assertEqual(run["remaining_objects"], [])
+            self.assertTrue(run["source_only_control"]["passed"])
+            self.assertTrue(run["method_template_unchanged"])
+            self.assertEqual(run["retained_frequency_hz"],
+                             {"grid": run["frequency_hz"], "type": run["frequency_hz"]})
+            self.assertEqual([r["label"] for r in run["rows"]],
+                             ["baseline", "higher_R0", "higher_X0", "neutral_resistance"])
+            typ, source = run["original_type"], run["source_inputs"]
+            for row in run["rows"]:
+                expected = two_probe.reference_currents(
+                    typ["strn"], typ["utrn_h"], source["snss"], source["rntxn"],
+                    typ["r1pu"], typ["x1pu"], row["retained_r0pu"],
+                    row["retained_x0pu"], row["neutral_resistance_ohm"])
+                self.assertTrue(two_probe.compare_reference(dict(row), expected))
+                for key in ("three_phase_ka", "earth_fault_ka", "hv_terminal_I0_ka"):
+                    self.assertAlmostEqual(row["reference"][key], expected[key], places=12)
+
+    def test_two_frequency_success_requires_both_clean_runs(self):
+        runs = [dict(success=True, frequency_hz=f, restored=True, cleanup_ok=True,
+                     remaining_objects=[]) for f in (60, 50)]
+        with patch.object(two_probe, "validate_frequency", side_effect=runs) as validate:
+            result = two_probe.validate(None)
+        self.assertTrue(result["success"])
+        self.assertEqual(validate.call_args_list[0].args, (None, 60))
+        self.assertEqual(validate.call_args_list[1].args, (None, 50))
+
+    def test_two_frequency_failure_stops_later_run_and_reports_survivors(self):
+        failed = dict(success=False, restored=False, cleanup_ok=False,
+                      remaining_objects=["temporary grid"])
+        with patch.object(two_probe, "validate_frequency", return_value=failed) as validate:
+            result = two_probe.validate(None)
+        validate.assert_called_once_with(None, 60)
+        self.assertFalse(result["success"])
+        self.assertFalse(result["cleanup_ok"])
+        self.assertEqual(result["remaining_objects"], ["temporary grid"])
+
     def test_simple_reactance_only_hand_reference(self):
         result = probe.reference_currents(100, 100, 1000, 0, 0, .1, 0, .1)
         ibase = 1 / math.sqrt(3)

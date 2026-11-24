@@ -112,7 +112,9 @@ select equipment. See the [equipment examples](references/tool_guide.md#evemtben
 - Transformer zero sequence has a restricted opt-in YNd11 impedance equivalent;
   full core/limb and saturation mappings remain unsupported.
   Loads default to constant power; opt-in `load_model="zip"` creates a new
-  type for voltage-dependent load flow. RMS/EMT ZIP behavior is unvalidated.
+  type for voltage-dependent load flow. Separate `load_model="zip_rms"` adds
+  explicit zero-time-constant settings for restricted balanced 50 Hz RMS
+  voltage response; integrated creation/readback passed. EMT is unvalidated.
   Synchronous-machine creation supports round rotors only.
 - Sampled research inputs need engineering review. Retained-value checks do not
   establish a complete dynamic model or suitability for an energized network.

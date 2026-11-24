@@ -1,0 +1,107 @@
+FT-35: Isolated 50 Hz RMS ZIP settled-voltage diagnostic
+======================================================
+
+Classification: compiled contributor-supplied evidence with the complete saved
+JSON and standalone diagnostic script. Not an independent licensed rerun.
+Result: FT-35_zip_rms_diagnostic_lab_pc.json
+Script: scripts/lab_zip_rms_diagnostic.py
+Supplied filename: ZIP_RMS_20261031T141418Z_265d875d.json
+Only account identifiers are replaced with <user> in JSON. The script has the
+same account replacement and an instruction comment at PROJECT; no calculation
+logic is changed from the successfully executed script.
+The result has no PowerFactory version/service-pack field.
+
+Context and preliminary inspection
+----------------------------------
+The source type is MCP ZIP Load Type Integration 01.TypLod, in the test
+project's Equipment Type Library / Load Types. Read-only inspection showed
+loddy=0, i_nln=0 and all requested delay, voltage/frequency time constants
+and frequency coefficients equal to zero. The integrated source load was
+out of service and was not used or changed by this experiment.
+The General Load Type had different RMS settings and was not edited.
+
+An initial diagnostic stopped before RMS initialization because it used
+unsupported ComInc.start. Restoration and cleanup succeeded. Subsequent Lab
+PC readback established ComInc.tstart (seconds), iopt_sim='rms', iopt_net='sym',
+dtgrd, p_event and p_resvar. The archived successful script uses tstart=0.
+The failed setup file was supplied separately; it is not part of this JSON.
+
+Experiment
+----------
+Three independent temporary 50 Hz cases/grids/types were used. Diagnostic
+inputs are P0=1 MW, Q0=0.4 Mvar on 20 kV buses. Two parallel 1 km feeder
+branches use R1=10 ohm/km, X1=40 ohm/km and zero capacitance. A branch opens
+at 1 s and recloses at 3 s; the simulation ends at 5 s with nominal step .01 s.
+These feeder, RMS and timing values are explicit diagnostic choices, not
+EvEMTBench sampled equipment or paper-derived dynamic/recovery parameters.
+
+Source coefficients retained in creator_unchanged and nonlinear_zip:
+aP=.45320945978164673, bP=.022793669253587723, cP=.5239968709647655;
+aQ=1.2318488359451294, bQ=-1.965647578239441, cQ=1.7337987422943115.
+P/Q exponents are 0,1,2. Negative Q-current coefficient is retained.
+Expected ZIP powers use measured receiving-terminal u:
+P=P0*(aP+bP*u+cP*u^2); Q=Q0*(aQ+bQ*u+cQ*u^2).
+Settled windows: .5-.9 s, 2-2.8 s and 4-4.8 s.
+Power tolerance: relative .005 (0.5%), absolute .0001 MW/Mvar.
+Voltage dip must exceed .01 p.u.; settling and recovery are checked.
+Measured RMS channels are m:u, m:Psum:bus1 and m:Qsum:bus1, in p.u./MW/Mvar.
+Each case has 503 complete trace samples; 1509 samples are archived in total.
+
+Results
+-------
+1. creator_unchanged: the copied type retains all inspected attributes,
+   including loddy=0, i_nln=0. The settled response matches constant impedance
+   relative to its initial operating point, NOT the original ZIP polynomial.
+   At dip: u=.9340329443513854,
+   P=.9006952645048028 MW versus ZIP expected .9316435595159899 MW,
+   Q=.35543226148821594 Mvar versus ZIP expected .3633862705832443 Mvar.
+   matches_zip=false; matches_initial_constant_impedance=true.
+
+2. nonlinear_zip: only the temporary copy is explicitly set to loddy=100,
+   i_nln=1, with t1/tpf/tqf/tpu/tqu/kpf/kqf all zero. ZIP coefficients and
+   exponents are unchanged. All three settled windows match the polynomial.
+   At dip: u=.9320832456834328,
+   P=.9296926272470015 MW versus expected .9296926272470016 MW,
+   Q=.3623959622249947 Mvar versus expected .3623959622249946 Mvar.
+   matches_zip=true; control_passed=true.
+
+3. constant_power_control: the same explicit diagnostic RMS settings with
+   aP=aQ=1 and bP=bQ=cP=cQ=0. P stays 1 MW and Q stays .4 Mvar, including
+   the dip at u=.9248928414000325. control_passed=true.
+   matches_zip=true in this case means the constant-power special case of
+   the polynomial, not reproduction of the original sampled ZIP mixture.
+
+Combined success=true means the experiment and configured controls passed.
+creator_rms_zip_validated=false is the essential finding: the unchanged
+creator type is NOT validated as an RMS ZIP model by this experiment.
+All cases recovered, restored the original Case 1/grid/scenario selection
+and source-type snapshot, and cleaned up. Combined and per-case restored=true,
+cleanup_ok=true, remaining_objects=[]. No error fields are present.
+
+Scope for the opt-in creator extension
+-------------------------------------
+The accompanying implementation adds load_model=zip_rms separately from the
+unchanged constant_power default and unchanged load-flow-only zip mode.
+It creates a new type with the explicit settings from nonlinear_zip, restricted
+to 20 kV loads on a 50 Hz destination grid, without changing that grid or any
+existing equipment or calculation commands. Grid frequency and RMS attributes
+are part of the resolved confirmation plan.
+
+FT-35 is one isolated diagnostic with positive P/Q and one coefficient set.
+It does not validate every seeded mixture, capacitive-Q RMS response, nonzero
+time constants, recovery dynamics, frequency response, unbalanced RMS, 60 Hz,
+EMT, or the integrated creator path. Integrated zip_rms creation/readback is
+PENDING and must be recorded separately. No original integrated load was
+simulated. No claim is made about the separate server RMS-run command workflow.
+
+Reproduction
+------------
+Restore <user> in the archived script's PROJECT, copy it to a writable Lab PC
+folder, save work, stop powerFactoryUnified and open interactive PowerFactory
+normally. Activate test / Case 1 and retain the inspected source ZIP type.
+Execute the external ComPython script once. Attach the complete uniquely named
+lab_results/ZIP_RMS_*.json, not the short Output Window summary.
+Do not fit inputs or relax tolerances if a case fails. If setup, simulation,
+restoration or cleanup fails, preserve the JSON/survivors for investigation.
+Existing calculation results may be invalidated; prior result files are not
+recreated. This does not alter PR #146 or the existing transformer work.

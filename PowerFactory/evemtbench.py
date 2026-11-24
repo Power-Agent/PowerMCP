@@ -1185,6 +1185,8 @@ class EvEMTBenchMixin:
         seed: int,
         load_model: str = "constant_power",
     ):
+        if load_model == "zip_rms" and voltage_kv != 20.0:
+            raise RuntimeError("zip_rms supports only 20 kV loads on a 50 Hz grid")
         database = cls._load_evemtbench_load_database()
         class_name, profile = next(
             (
@@ -1261,7 +1263,7 @@ class EvEMTBenchMixin:
             "catalog_only": database["catalog_only"],
         }
 
-        if load_model == "zip":
+        if load_model in ("zip", "zip_rms"):
             # A separate stream keeps the existing seeded P/Q samples unchanged.
             zip_rng = random.Random(f"evemtbench-load-zip:{seed}")
             specs = database["catalog_only"]["load_model_coefficients"]
@@ -1308,6 +1310,20 @@ class EvEMTBenchMixin:
                     "RMS and EMT ZIP behavior have not been validated.",
                 ],
             })
+            if load_model == "zip_rms":
+                rms = database["powerfactory"]["rms_zip_model"]
+                item["type_attributes"].update(rms["type_attributes"])
+                item["model"] = "balanced ZIP load with explicit zero-time-constant RMS voltage dependence"
+                item["rms_configuration"] = rms
+                item["limitations"] = [
+                    "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
+                    "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
+                    "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
+                    "FT-37 passed six sampled ZIP cases covering inductive/capacitive Q and six constant-power controls; not the full sampled domain.",
+                    "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
+                    "FT-38 passed unified-creator creation through actual-load RMS response for seeds 0 (inductive) and 4 (capacitive), with restoration and cleanup.",
+                    "Transient recovery dynamics, nonzero time constants, frequency response, other voltages/frequencies, unbalanced RMS, EMT and server run_rms_simulation are unvalidated.",
+                ]
         return class_name, item
 
     @classmethod
@@ -1424,9 +1440,10 @@ class EvEMTBenchMixin:
         if zero_sequence_model == "unchanged" and (r0_r1_ratio is not None or x0_x1_ratio is not None):
             raise RuntimeError("Zero-sequence ratios require zero_sequence_model=ynd11_equivalent")
         if zero_sequence_model == "ynd11_equivalent":
-            if (voltage_class, rated_power_mva, nominal_frequency_hz, vector_group, clock_number) != (
-                    "110/20", 20.0, 60.0, "YNd", 11):
-                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 60 Hz YNd11")
+            if ((voltage_class, rated_power_mva, vector_group, clock_number) != (
+                    "110/20", 20.0, "YNd", 11)
+                    or nominal_frequency_hz not in (50.0, 60.0)):
+                raise RuntimeError("ynd11_equivalent supports only 20 MVA 110/20 kV 50 or 60 Hz YNd11")
         database = cls._load_evemtbench_database()
         source = database["classes"][voltage_class]
         rng = random.Random(seed)
@@ -1544,7 +1561,7 @@ class EvEMTBenchMixin:
                     "Explicit impedance equivalent only; no physical limb/core model is configured.",
                     "Uses Table 10 three-limb numeric intervals without claiming limb/core validation.",
                     "HV star point is connected with zero neutral impedance; delta side has no star point.",
-                    "No independent absolute fault-current reference or RMS/EMT validation.",
+                    "Independent lossless reference only; original lossy-type absolute currents and RMS/EMT remain unvalidated.",
                     "Other ratings, frequencies, vector groups, internal-delta and magnetizing models are unsupported.",
                 ],
             }
@@ -2649,15 +2666,15 @@ class EvEMTBenchMixin:
             if not isinstance(value, bool):
                 return failure(f"{field_name} must be a boolean")
 
-        if load_model not in ("constant_power", "zip"):
-            return failure("load_model must be constant_power or zip")
+        if load_model not in ("constant_power", "zip", "zip_rms"):
+            return failure("load_model must be constant_power, zip or zip_rms")
         if not isinstance(type_name, str):
             return failure("type_name must be a string")
         type_name = type_name.strip()
-        if load_model == "zip" and (not type_name or len(type_name) > cls._max_loc_name_length):
+        if load_model in ("zip", "zip_rms") and (not type_name or len(type_name) > cls._max_loc_name_length):
             return failure(f"ZIP type_name must contain 1 to {cls._max_loc_name_length} characters")
         if load_model == "constant_power" and type_name:
-            return failure("type_name is only supported for load_model=zip")
+            return failure("type_name is only supported for load_model=zip or zip_rms")
 
         for field_name, value in (
             ("load_name", load_name),
@@ -2702,7 +2719,7 @@ class EvEMTBenchMixin:
             app = cls._get_application(open_digsilent)
             if app.GetActiveProject() is None:
                 raise RuntimeError("No PowerFactory project is active")
-            if load_model == "zip":
+            if load_model in ("zip", "zip_rms"):
                 equipment_folder = app.GetProjectFolder("equip")
                 if equipment_folder is None:
                     raise RuntimeError("Equipment Type Library is unavailable")
@@ -2719,6 +2736,11 @@ class EvEMTBenchMixin:
                     "type_name": type_name,
                 }
             grid = cls._select_grid(app, grid_name)
+            if load_model == "zip_rms":
+                frequency = float(grid.GetAttribute("frnom"))
+                if not math.isfinite(frequency) or frequency != 50.0:
+                    raise RuntimeError("zip_rms requires a 50 Hz destination grid; no grid settings were changed")
+                item["resolved_grid_frequency_hz"] = frequency
             if cls._find_named_contents(grid, load_name, "ElmLod"):
                 raise RuntimeError(
                     "Load already exists in the selected grid: " + load_name
@@ -2790,7 +2812,7 @@ class EvEMTBenchMixin:
 
             creating = True
             retained_type = retained_derived = None
-            if load_model == "zip":
+            if load_model in ("zip", "zip_rms"):
                 if type_folder is None:
                     type_folder = equipment_folder.CreateObject("IntPrjfolder", "Load Types")
                     if type_folder is None:
@@ -2850,7 +2872,7 @@ class EvEMTBenchMixin:
             extra = {"item": item}
             if creating:
                 extra["rolled_back"] = "rolled_back=True" in message
-            if load_model == "zip":
+            if load_model in ("zip", "zip_rms"):
                 # Never remove a type still referenced by a failed element rollback.
                 survivors = cls._find_named_contents(grid, load_name, "ElmLod") if creating else []
                 if survivors:

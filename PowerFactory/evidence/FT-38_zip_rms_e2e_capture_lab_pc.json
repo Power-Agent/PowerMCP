@@ -1,0 +1,720 @@
+{
+  "0": {
+    "preview": {
+  "success": true,
+  "applied": false,
+  "load_created": false,
+  "type_created": false,
+  "load_model": "zip_rms",
+  "voltage_class": "20",
+  "seed": 0,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [
+      5
+    ]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "target": {
+    "grid": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet",
+    "load_name": "MCP ZIP E2E baeae8e8 Load 0",
+    "bus": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\Receiving 20.ElmTerm",
+    "out_of_service": true
+  },
+  "item": {
+    "name": "MCP ZIP E2E baeae8e8 Load 0",
+    "catalog_id": "evemtbench-loads-table-5-v1",
+    "source_tables": [
+      5
+    ],
+    "voltage_class": "20",
+    "seed": 0,
+    "parameters": {
+      "nominal_voltage_kv": 20.0,
+      "active_power_mw": 1.252887,
+      "reactive_power_mvar": 0.545856,
+      "apparent_power_mva": 1.366633,
+      "power_factor": 0.91677,
+      "power_factor_mode": "inductive",
+      "reactive_power_angle_deg": 23.541713
+    },
+    "powerfactory_attributes": {
+      "plini": 1.252887,
+      "qlini": 0.545856
+    },
+    "model": "balanced ZIP load with explicit zero-time-constant RMS voltage dependence",
+    "load_model": "zip_rms",
+    "catalog_only": {
+      "load_model_coefficients": {
+        "kP_Z": {
+          "min": 0.2,
+          "max": 1.31
+        },
+        "kP_I": {
+          "min": -1.14,
+          "max": 0.5
+        },
+        "kP_P": {
+          "min": 0.14,
+          "max": 0.83
+        },
+        "kQ_Z": {
+          "min": 0.43,
+          "max": 4.74
+        },
+        "kQ_I": {
+          "min": -6.19,
+          "max": 0.71
+        },
+        "kQ_P": {
+          "min": -0.14,
+          "max": 2.45
+        },
+        "constraints": [
+          "kP_Z + kP_I + kP_P = 1",
+          "kQ_Z + kQ_I + kQ_P = 1"
+        ],
+        "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
+      }
+    },
+    "zip_coefficients": {
+      "kP_Z": 0.5830181786675634,
+      "kP_I": -0.01838385827019895,
+      "kP_P": 0.4353656796026355,
+      "kQ_Z": 0.5929477196221704,
+      "kQ_I": -0.5474492225525012,
+      "kQ_P": 0.9545015029303308
+    },
+    "type_attributes": {
+      "kpu0": 0.0,
+      "kpu1": 1.0,
+      "kpu": 2.0,
+      "kqu0": 0.0,
+      "kqu1": 1.0,
+      "kqu": 2.0,
+      "aP": 0.4353656796026355,
+      "bP": -0.01838385827019895,
+      "aQ": 0.9545015029303308,
+      "bQ": -0.5474492225525012,
+      "loddy": 100,
+      "i_nln": 1,
+      "t1": 0.0,
+      "tpf": 0.0,
+      "tqf": 0.0,
+      "tpu": 0.0,
+      "tqu": 0.0,
+      "kpf": 0.0,
+      "kqf": 0.0
+    },
+    "derived_type_attributes": {
+      "cP": 0.5830181786675634,
+      "cQ": 0.5929477196221704
+    },
+    "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+    "limitations": [
+      "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
+      "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
+      "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
+      "FT-35 used one coefficient set with positive P/Q; it does not validate all sampled inputs or capacitive-Q RMS response.",
+      "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
+      "Transient recovery dynamics, nonzero time constants, frequency response and EMT are unvalidated."
+    ],
+    "rms_configuration": {
+      "scope": "20 kV, 50 Hz grid, balanced settled RMS voltage response with zero time constants",
+      "voltage_kv": 20.0,
+      "grid_frequency_hz": 50.0,
+      "type_attributes": {
+        "loddy": 100,
+        "i_nln": 1,
+        "t1": 0.0,
+        "tpf": 0.0,
+        "tqf": 0.0,
+        "tpu": 0.0,
+        "tqu": 0.0,
+        "kpf": 0.0,
+        "kqf": 0.0
+      },
+      "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
+      "validation": "FT-35 separate diagnostic passed for one coefficient set and positive P/Q; FT-36 integrated creation/readback passed without simulation",
+      "limitations": "No general sampled-input, capacitive-Q, transient recovery, nonzero time-constant, frequency-response or EMT validation"
+    },
+    "type_destination": {
+      "equipment_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder",
+      "load_types_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder",
+      "create_folder": false,
+      "type_name": "MCP ZIP E2E baeae8e8 Type 0"
+    },
+    "resolved_grid_frequency_hz": 50.0
+  },
+  "confirmation_required": "CREATE MCP ZIP E2E baeae8e8 Load 0 AT Receiving 20 20kV seed=0 grid=MCP ZIP E2E baeae8e8 out_of_service=1 plan=9f84b07ac6c4a749a92628494fc1cdbd41e6a00ca7d44a769f47d237c34dc0aa",
+  "message": "Preview only; no type, load, cubicle, or switch was created. Table 5 power intervals were sampled reproducibly.",
+  "component_type": "load"
+},
+    "creation": {
+  "success": true,
+  "applied": true,
+  "load_created": true,
+  "type_created": true,
+  "load_model": "zip_rms",
+  "voltage_class": "20",
+  "seed": 0,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [
+      5
+    ]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "target": {
+    "grid": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet",
+    "load_name": "MCP ZIP E2E baeae8e8 Load 0",
+    "bus": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\Receiving 20.ElmTerm",
+    "out_of_service": true
+  },
+  "item": {
+    "name": "MCP ZIP E2E baeae8e8 Load 0",
+    "catalog_id": "evemtbench-loads-table-5-v1",
+    "source_tables": [
+      5
+    ],
+    "voltage_class": "20",
+    "seed": 0,
+    "parameters": {
+      "nominal_voltage_kv": 20.0,
+      "active_power_mw": 1.252887,
+      "reactive_power_mvar": 0.545856,
+      "apparent_power_mva": 1.366633,
+      "power_factor": 0.91677,
+      "power_factor_mode": "inductive",
+      "reactive_power_angle_deg": 23.541713
+    },
+    "powerfactory_attributes": {
+      "plini": 1.252887,
+      "qlini": 0.545856
+    },
+    "model": "balanced ZIP load with explicit zero-time-constant RMS voltage dependence",
+    "load_model": "zip_rms",
+    "catalog_only": {
+      "load_model_coefficients": {
+        "kP_Z": {
+          "min": 0.2,
+          "max": 1.31
+        },
+        "kP_I": {
+          "min": -1.14,
+          "max": 0.5
+        },
+        "kP_P": {
+          "min": 0.14,
+          "max": 0.83
+        },
+        "kQ_Z": {
+          "min": 0.43,
+          "max": 4.74
+        },
+        "kQ_I": {
+          "min": -6.19,
+          "max": 0.71
+        },
+        "kQ_P": {
+          "min": -0.14,
+          "max": 2.45
+        },
+        "constraints": [
+          "kP_Z + kP_I + kP_P = 1",
+          "kQ_Z + kQ_I + kQ_P = 1"
+        ],
+        "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
+      }
+    },
+    "zip_coefficients": {
+      "kP_Z": 0.5830181786675634,
+      "kP_I": -0.01838385827019895,
+      "kP_P": 0.4353656796026355,
+      "kQ_Z": 0.5929477196221704,
+      "kQ_I": -0.5474492225525012,
+      "kQ_P": 0.9545015029303308
+    },
+    "type_attributes": {
+      "kpu0": 0.0,
+      "kpu1": 1.0,
+      "kpu": 2.0,
+      "kqu0": 0.0,
+      "kqu1": 1.0,
+      "kqu": 2.0,
+      "aP": 0.4353656796026355,
+      "bP": -0.01838385827019895,
+      "aQ": 0.9545015029303308,
+      "bQ": -0.5474492225525012,
+      "loddy": 100,
+      "i_nln": 1,
+      "t1": 0.0,
+      "tpf": 0.0,
+      "tqf": 0.0,
+      "tpu": 0.0,
+      "tqu": 0.0,
+      "kpf": 0.0,
+      "kqf": 0.0
+    },
+    "derived_type_attributes": {
+      "cP": 0.5830181786675634,
+      "cQ": 0.5929477196221704
+    },
+    "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+    "limitations": [
+      "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
+      "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
+      "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
+      "FT-35 used one coefficient set with positive P/Q; it does not validate all sampled inputs or capacitive-Q RMS response.",
+      "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
+      "Transient recovery dynamics, nonzero time constants, frequency response and EMT are unvalidated."
+    ],
+    "rms_configuration": {
+      "scope": "20 kV, 50 Hz grid, balanced settled RMS voltage response with zero time constants",
+      "voltage_kv": 20.0,
+      "grid_frequency_hz": 50.0,
+      "type_attributes": {
+        "loddy": 100,
+        "i_nln": 1,
+        "t1": 0.0,
+        "tpf": 0.0,
+        "tqf": 0.0,
+        "tpu": 0.0,
+        "tqu": 0.0,
+        "kpf": 0.0,
+        "kqf": 0.0
+      },
+      "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
+      "validation": "FT-35 separate diagnostic passed for one coefficient set and positive P/Q; FT-36 integrated creation/readback passed without simulation",
+      "limitations": "No general sampled-input, capacitive-Q, transient recovery, nonzero time-constant, frequency-response or EMT validation"
+    },
+    "type_destination": {
+      "equipment_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder",
+      "load_types_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder",
+      "create_folder": false,
+      "type_name": "MCP ZIP E2E baeae8e8 Type 0"
+    },
+    "resolved_grid_frequency_hz": 50.0
+  },
+  "confirmation_required": "CREATE MCP ZIP E2E baeae8e8 Load 0 AT Receiving 20 20kV seed=0 grid=MCP ZIP E2E baeae8e8 out_of_service=1 plan=9f84b07ac6c4a749a92628494fc1cdbd41e6a00ca7d44a769f47d237c34dc0aa",
+  "message": "Created ElmLod 'MCP ZIP E2E baeae8e8 Load 0' and connected it to 'Receiving 20'",
+  "created_load": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\MCP ZIP E2E baeae8e8 Load 0.ElmLod",
+  "retained_powerfactory_attributes": {
+    "plini": 1.252887,
+    "qlini": 0.545856,
+    "outserv": 1,
+    "typ_id": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP E2E baeae8e8 Type 0.TypLod"
+  },
+  "created_type": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP E2E baeae8e8 Type 0.TypLod",
+  "retained_type_attributes": {
+    "kpu0": 0.0,
+    "kpu1": 1.0,
+    "kpu": 2.0,
+    "kqu0": 0.0,
+    "kqu1": 1.0,
+    "kqu": 2.0,
+    "aP": 0.4353656768798828,
+    "bP": -0.01838385872542858,
+    "aQ": 0.9545015096664429,
+    "bQ": -0.5474492311477661,
+    "loddy": 100,
+    "i_nln": 1,
+    "t1": 0.0,
+    "tpf": 0.0,
+    "tqf": 0.0,
+    "tpu": 0.0,
+    "tqu": 0.0,
+    "kpf": 0.0,
+    "kqf": 0.0
+  },
+  "retained_derived_attributes": {
+    "cP": 0.5830181818455458,
+    "cQ": 0.5929477214813232
+  },
+  "component_type": "load"
+}
+  },
+  "4": {
+    "preview": {
+  "success": true,
+  "applied": false,
+  "load_created": false,
+  "type_created": false,
+  "load_model": "zip_rms",
+  "voltage_class": "20",
+  "seed": 4,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [
+      5
+    ]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "target": {
+    "grid": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet",
+    "load_name": "MCP ZIP E2E baeae8e8 Load 4",
+    "bus": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\Receiving 20.ElmTerm",
+    "out_of_service": true
+  },
+  "item": {
+    "name": "MCP ZIP E2E baeae8e8 Load 4",
+    "catalog_id": "evemtbench-loads-table-5-v1",
+    "source_tables": [
+      5
+    ],
+    "voltage_class": "20",
+    "seed": 4,
+    "parameters": {
+      "nominal_voltage_kv": 20.0,
+      "active_power_mw": 0.443285,
+      "reactive_power_mvar": -0.098388,
+      "apparent_power_mva": 0.454072,
+      "power_factor": 0.976243,
+      "power_factor_mode": "capacitive",
+      "reactive_power_angle_deg": -12.514058
+    },
+    "powerfactory_attributes": {
+      "plini": 0.443285,
+      "qlini": -0.098388
+    },
+    "model": "balanced ZIP load with explicit zero-time-constant RMS voltage dependence",
+    "load_model": "zip_rms",
+    "catalog_only": {
+      "load_model_coefficients": {
+        "kP_Z": {
+          "min": 0.2,
+          "max": 1.31
+        },
+        "kP_I": {
+          "min": -1.14,
+          "max": 0.5
+        },
+        "kP_P": {
+          "min": 0.14,
+          "max": 0.83
+        },
+        "kQ_Z": {
+          "min": 0.43,
+          "max": 4.74
+        },
+        "kQ_I": {
+          "min": -6.19,
+          "max": 0.71
+        },
+        "kQ_P": {
+          "min": -0.14,
+          "max": 2.45
+        },
+        "constraints": [
+          "kP_Z + kP_I + kP_P = 1",
+          "kQ_Z + kQ_I + kQ_P = 1"
+        ],
+        "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
+      }
+    },
+    "zip_coefficients": {
+      "kP_Z": 0.7517124734296317,
+      "kP_I": 0.03973603087955291,
+      "kP_P": 0.20855149569081544,
+      "kQ_Z": 1.6345124983597041,
+      "kQ_I": -2.2728370721644158,
+      "kQ_P": 1.6383245738047116
+    },
+    "type_attributes": {
+      "kpu0": 0.0,
+      "kpu1": 1.0,
+      "kpu": 2.0,
+      "kqu0": 0.0,
+      "kqu1": 1.0,
+      "kqu": 2.0,
+      "aP": 0.20855149569081544,
+      "bP": 0.03973603087955291,
+      "aQ": 1.6383245738047116,
+      "bQ": -2.2728370721644158,
+      "loddy": 100,
+      "i_nln": 1,
+      "t1": 0.0,
+      "tpf": 0.0,
+      "tqf": 0.0,
+      "tpu": 0.0,
+      "tqu": 0.0,
+      "kpf": 0.0,
+      "kqf": 0.0
+    },
+    "derived_type_attributes": {
+      "cP": 0.7517124734296317,
+      "cQ": 1.6345124983597041
+    },
+    "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+    "limitations": [
+      "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
+      "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
+      "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
+      "FT-35 used one coefficient set with positive P/Q; it does not validate all sampled inputs or capacitive-Q RMS response.",
+      "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
+      "Transient recovery dynamics, nonzero time constants, frequency response and EMT are unvalidated."
+    ],
+    "rms_configuration": {
+      "scope": "20 kV, 50 Hz grid, balanced settled RMS voltage response with zero time constants",
+      "voltage_kv": 20.0,
+      "grid_frequency_hz": 50.0,
+      "type_attributes": {
+        "loddy": 100,
+        "i_nln": 1,
+        "t1": 0.0,
+        "tpf": 0.0,
+        "tqf": 0.0,
+        "tpu": 0.0,
+        "tqu": 0.0,
+        "kpf": 0.0,
+        "kqf": 0.0
+      },
+      "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
+      "validation": "FT-35 separate diagnostic passed for one coefficient set and positive P/Q; FT-36 integrated creation/readback passed without simulation",
+      "limitations": "No general sampled-input, capacitive-Q, transient recovery, nonzero time-constant, frequency-response or EMT validation"
+    },
+    "type_destination": {
+      "equipment_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder",
+      "load_types_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder",
+      "create_folder": false,
+      "type_name": "MCP ZIP E2E baeae8e8 Type 4"
+    },
+    "resolved_grid_frequency_hz": 50.0
+  },
+  "confirmation_required": "CREATE MCP ZIP E2E baeae8e8 Load 4 AT Receiving 20 20kV seed=4 grid=MCP ZIP E2E baeae8e8 out_of_service=1 plan=3910ace9c34d94d5f762db66bb61f2423026fb38573d35d770fb10f12ad30457",
+  "message": "Preview only; no type, load, cubicle, or switch was created. Table 5 power intervals were sampled reproducibly.",
+  "component_type": "load"
+},
+    "creation": {
+  "success": true,
+  "applied": true,
+  "load_created": true,
+  "type_created": true,
+  "load_model": "zip_rms",
+  "voltage_class": "20",
+  "seed": 4,
+  "catalog_id": "evemtbench-loads-table-5-v1",
+  "source": {
+    "title": "A simulation based dataset of faults and events for machine learning in power systems",
+    "authors": [
+      "Georg Kordowich",
+      "Jonathan Loebel",
+      "Julian Oelhaf",
+      "Andreas Maier",
+      "Siming Bayer",
+      "Christian Bergler",
+      "Johann Jaeger"
+    ],
+    "arxiv": "2608.19777",
+    "year": 2026,
+    "tables": [
+      5
+    ]
+  },
+  "affiliation": "Institute of Electrical Energy Systems, Friedrich-Alexander-Universität Erlangen-Nürnberg (FAU)",
+  "target": {
+    "grid": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet",
+    "load_name": "MCP ZIP E2E baeae8e8 Load 4",
+    "bus": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\Receiving 20.ElmTerm",
+    "out_of_service": true
+  },
+  "item": {
+    "name": "MCP ZIP E2E baeae8e8 Load 4",
+    "catalog_id": "evemtbench-loads-table-5-v1",
+    "source_tables": [
+      5
+    ],
+    "voltage_class": "20",
+    "seed": 4,
+    "parameters": {
+      "nominal_voltage_kv": 20.0,
+      "active_power_mw": 0.443285,
+      "reactive_power_mvar": -0.098388,
+      "apparent_power_mva": 0.454072,
+      "power_factor": 0.976243,
+      "power_factor_mode": "capacitive",
+      "reactive_power_angle_deg": -12.514058
+    },
+    "powerfactory_attributes": {
+      "plini": 0.443285,
+      "qlini": -0.098388
+    },
+    "model": "balanced ZIP load with explicit zero-time-constant RMS voltage dependence",
+    "load_model": "zip_rms",
+    "catalog_only": {
+      "load_model_coefficients": {
+        "kP_Z": {
+          "min": 0.2,
+          "max": 1.31
+        },
+        "kP_I": {
+          "min": -1.14,
+          "max": 0.5
+        },
+        "kP_P": {
+          "min": 0.14,
+          "max": 0.83
+        },
+        "kQ_Z": {
+          "min": 0.43,
+          "max": 4.74
+        },
+        "kQ_I": {
+          "min": -6.19,
+          "max": 0.71
+        },
+        "kQ_P": {
+          "min": -0.14,
+          "max": 2.45
+        },
+        "constraints": [
+          "kP_Z + kP_I + kP_P = 1",
+          "kQ_Z + kQ_I + kQ_P = 1"
+        ],
+        "status": "available through opt-in load_model=zip; legacy catalog_only grouping retained for compatibility"
+      }
+    },
+    "zip_coefficients": {
+      "kP_Z": 0.7517124734296317,
+      "kP_I": 0.03973603087955291,
+      "kP_P": 0.20855149569081544,
+      "kQ_Z": 1.6345124983597041,
+      "kQ_I": -2.2728370721644158,
+      "kQ_P": 1.6383245738047116
+    },
+    "type_attributes": {
+      "kpu0": 0.0,
+      "kpu1": 1.0,
+      "kpu": 2.0,
+      "kqu0": 0.0,
+      "kqu1": 1.0,
+      "kqu": 2.0,
+      "aP": 0.20855149569081544,
+      "bP": 0.03973603087955291,
+      "aQ": 1.6383245738047116,
+      "bQ": -2.2728370721644158,
+      "loddy": 100,
+      "i_nln": 1,
+      "t1": 0.0,
+      "tpf": 0.0,
+      "tqf": 0.0,
+      "tpu": 0.0,
+      "tqu": 0.0,
+      "kpf": 0.0,
+      "kqf": 0.0
+    },
+    "derived_type_attributes": {
+      "cP": 0.7517124734296317,
+      "cQ": 1.6345124983597041
+    },
+    "sampling_method": "sequential uniform feasible Z and conditional I; P = 1 - Z - I",
+    "limitations": [
+      "Enable Consider Voltage Dependency of Loads in ComLdf for ZIP load flow; no commands are changed.",
+      "Restricted to 20 kV loads on a 50 Hz grid; balanced RMS settled voltage response only.",
+      "RMS settings are explicit diagnostic choices, not paper-derived dynamic parameters.",
+      "FT-35 used one coefficient set with positive P/Q; it does not validate all sampled inputs or capacitive-Q RMS response.",
+      "Integrated zip_rms creation/readback passed in FT-36; no simulation was run on that load.",
+      "Transient recovery dynamics, nonzero time constants, frequency response and EMT are unvalidated."
+    ],
+    "rms_configuration": {
+      "scope": "20 kV, 50 Hz grid, balanced settled RMS voltage response with zero time constants",
+      "voltage_kv": 20.0,
+      "grid_frequency_hz": 50.0,
+      "type_attributes": {
+        "loddy": 100,
+        "i_nln": 1,
+        "t1": 0.0,
+        "tpf": 0.0,
+        "tqf": 0.0,
+        "tpu": 0.0,
+        "tqu": 0.0,
+        "kpf": 0.0,
+        "kqf": 0.0
+      },
+      "parameter_basis": "Explicit settings tested in FT-35; not paper-derived dynamic parameters",
+      "validation": "FT-35 separate diagnostic passed for one coefficient set and positive P/Q; FT-36 integrated creation/readback passed without simulation",
+      "limitations": "No general sampled-input, capacitive-Q, transient recovery, nonzero time-constant, frequency-response or EMT validation"
+    },
+    "type_destination": {
+      "equipment_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder",
+      "load_types_folder": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder",
+      "create_folder": false,
+      "type_name": "MCP ZIP E2E baeae8e8 Type 4"
+    },
+    "resolved_grid_frequency_hz": 50.0
+  },
+  "confirmation_required": "CREATE MCP ZIP E2E baeae8e8 Load 4 AT Receiving 20 20kV seed=4 grid=MCP ZIP E2E baeae8e8 out_of_service=1 plan=3910ace9c34d94d5f762db66bb61f2423026fb38573d35d770fb10f12ad30457",
+  "message": "Created ElmLod 'MCP ZIP E2E baeae8e8 Load 4' and connected it to 'Receiving 20'",
+  "created_load": "\\LAB_USER.IntUser\\test.IntPrj\\Network Model.IntPrjfolder\\Network Data.IntPrjfolder\\MCP ZIP E2E baeae8e8.ElmNet\\MCP ZIP E2E baeae8e8 Load 4.ElmLod",
+  "retained_powerfactory_attributes": {
+    "plini": 0.443285,
+    "qlini": -0.098388,
+    "outserv": 1,
+    "typ_id": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP E2E baeae8e8 Type 4.TypLod"
+  },
+  "created_type": "\\LAB_USER.IntUser\\test.IntPrj\\Library.IntPrjfolder\\Equipment Type Library.IntPrjfolder\\Load Types.IntPrjfolder\\MCP ZIP E2E baeae8e8 Type 4.TypLod",
+  "retained_type_attributes": {
+    "kpu0": 0.0,
+    "kpu1": 1.0,
+    "kpu": 2.0,
+    "kqu0": 0.0,
+    "kqu1": 1.0,
+    "kqu": 2.0,
+    "aP": 0.20855149626731873,
+    "bP": 0.039736032485961914,
+    "aQ": 1.6383246183395386,
+    "bQ": -2.2728371620178223,
+    "loddy": 100,
+    "i_nln": 1,
+    "t1": 0.0,
+    "tpf": 0.0,
+    "tqf": 0.0,
+    "tpu": 0.0,
+    "tqu": 0.0,
+    "kpf": 0.0,
+    "kqf": 0.0
+  },
+  "retained_derived_attributes": {
+    "cP": 0.7517124712467194,
+    "cQ": 1.6345125436782837
+  },
+  "component_type": "load"
+}
+  }
+}
