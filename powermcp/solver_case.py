@@ -21,7 +21,6 @@ from powermcp.sandbox import checked_path, checked_read_tree
 
 _IR_FORMATS = frozenset({"pio-ir", "pio"})
 IR_SCHEMA = "pio-ir"
-IR_VERSION = 2
 
 
 _QUIET_SEVERITIES = frozenset({"remark", "note"})
@@ -85,15 +84,9 @@ def diagnostic_records(items: Any) -> list[dict[str, Any]]:
 
 
 def value_type_name(module: powerio.PioModule) -> str:
-    """The PowerIO structural type of a module's value.
-
-    powerio 0.11.2 publishes no accessor for it; its own MCP server reads the
-    same private attribute in `_canonical_type`. Isolating it here makes a
-    future public accessor a one-line change.
-    """
-    inner = getattr(module, "_inner", None)
-    name = getattr(inner, "_type_name", None)
-    return str(name) if name else f"powerio.{type(module.value).__name__}"
+    """The PowerIO structural type of a module's value, such as
+    ``powerio.BalancedNetwork`` (``PioModule.type_name``, public since 0.12)."""
+    return module.type_name
 
 
 def check_diagnostics(items: Any) -> None:
@@ -428,7 +421,9 @@ def resolve_solver_case(
 
     ``powerio_ir`` is the serialized module the powerio server's ``parse``,
     ``to_normalized`` or ``to_balanced`` tools return; ``network_json`` is its
-    compatibility alias and must carry the same generation-2 document.
+    compatibility alias and must carry the same document. IR is recognized by
+    its ``"schema": "pio-ir"`` header alone; powerio decides which header
+    versions it reads (0.12 reads its own release series and 0.11's ``2``).
     ``operating_point`` is a compatibility spelling for ``time_index``. Study
     history belongs to Tellegen; legacy package commits require migration.
     ``edits`` are typed updates applied before validation; ``to_balanced``

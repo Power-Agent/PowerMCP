@@ -65,6 +65,20 @@ def _optimize(network: Network, **kwargs):
     return network.optimize(**kwargs)
 
 
+def _line_loading_pct(network: Network):
+    """Loading of each line in the first snapshot, as a percentage of the
+    bound PyPSA enforces, ``s_nom * s_max_pu``.
+
+    powerio >= 0.12 writes an unlimited branch as a positive placeholder
+    ``s_nom`` with ``s_max_pu = inf``, so ``s_nom`` alone is not a limit. A line
+    with no bound, or with a zero bound, reads 0 %.
+    """
+    flow = np.sqrt(network.lines_t.p0.iloc[0] ** 2 + network.lines_t.q0.iloc[0] ** 2)
+    s_max_pu = network.get_switchable_as_dense("Line", "s_max_pu").iloc[0]
+    loading = flow / (network.lines.s_nom * s_max_pu) * 100
+    return loading.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+
 # ============= Network Information =============
 
 @mcp.tool()
@@ -175,11 +189,7 @@ def run_contingency_analysis(
         network.pf(use_seed=True)
 
         base_v = network.buses_t.v_mag_pu.iloc[0]
-        base_p0 = network.lines_t.p0.iloc[0]
-        base_q0 = network.lines_t.q0.iloc[0]
-        base_s_nom = network.lines.s_nom
-        base_loading = np.sqrt(base_p0**2 + base_q0**2) / base_s_nom * 100
-        base_loading = base_loading.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+        base_loading = _line_loading_pct(network)
 
         base_case = {
             "converged": True,
@@ -248,11 +258,7 @@ def run_contingency_analysis(
                     voltage_violations.append({"bus": bus, "vm_pu": round(v, 4)})
 
             # Check thermal violations
-            p0 = n.lines_t.p0.iloc[0]
-            q0 = n.lines_t.q0.iloc[0]
-            s_nom = n.lines.s_nom
-            loading = np.sqrt(p0**2 + q0**2) / s_nom * 100
-            loading = loading.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+            loading = _line_loading_pct(n)
 
             loading_violations = []
             for line_id_inner in loading.index:
@@ -820,7 +826,9 @@ def import_case_from_any(
         source_format: Input format name (matpower, powermodels-json,
             egret-json, psse, powerworld); inferred from the file extension
             when omitted
-        overwrite_zero_s_nom: Replacement s_nom for branches with rating 0
+        overwrite_zero_s_nom: Replacement s_nom for branches whose thermal
+            bound is zero. An unlimited branch (MATPOWER rate 0, an absent
+            Egret rating) arrives unbounded, with s_max_pu = inf, and is kept
         operating_point: Compatibility alias for time_index
         study_commit: Retired package selector; export a Tellegen Study state as IR
         time_index: Explicit TimeSeries index
@@ -906,7 +914,9 @@ def import_case_from_json(
     Args:
         network_json: The JSON transport string from powerio
         output_path: Where to save the imported network (.nc)
-        overwrite_zero_s_nom: Replacement s_nom for branches with rating 0
+        overwrite_zero_s_nom: Replacement s_nom for branches whose thermal
+            bound is zero. An unlimited branch (MATPOWER rate 0, an absent
+            Egret rating) arrives unbounded, with s_max_pu = inf, and is kept
         operating_point: Compatibility alias for time_index
         study_commit: Retired package selector; export a Tellegen Study state as IR
         time_index: Explicit TimeSeries index

@@ -14,7 +14,10 @@ sys.path.insert(0, str(PACKAGE_ROOT / "src"))
 from hope_mcp_server.core import (
     _Job,
     _jobs,
+    build_debug_solver_environment_command,
+    build_optional_solver_probe_command,
     build_run_command,
+    check_optional_solvers_available,
     hope_cancel_job,
     hope_case_info,
     hope_debug_solver_environment,
@@ -145,6 +148,7 @@ class HopeCoreTests(unittest.TestCase):
         self.assertIn("hope_cancel_job", tool_names)
         self.assertIn("hope_debug_solver_environment", tool_names)
         self.assertIn("hope_debug_solver_environment_async", tool_names)
+        self.assertIn("hope_holistic_status", tool_names)
 
     def test_read_only_server_accepts_configured_public_hostname(self) -> None:
         with mock.patch.dict(
@@ -193,9 +197,59 @@ class HopeCoreTests(unittest.TestCase):
                 "--startup-file=no",
                 f"--project={REPO_ROOT}",
                 "-e",
-                f"using HOPE; HOPE.run_hope({julia_string_literal(case_path)})",
+                "using HOPE; HOPE.run_hope(ARGS[1])",
+                str(case_path),
             ],
         )
+
+    def test_julia_string_literal_escapes_interpolation(self) -> None:
+        self.assertEqual(julia_string_literal("$solver"), '"\\$solver"')
+
+    def test_debug_command_passes_dynamic_values_as_arguments(self) -> None:
+        case_path = REPO_ROOT / "ModelCases" / "$case"
+        command = build_debug_solver_environment_command(
+            REPO_ROOT,
+            JULIA_BIN,
+            case_path,
+            "$solver",
+        )
+        script_index = command.index("-e") + 1
+        script = command[script_index]
+        self.assertIn("case = ARGS[1]", script)
+        self.assertIn("solver = ARGS[2]", script)
+        self.assertNotIn(str(case_path), script)
+        self.assertNotIn("$solver", script)
+        self.assertEqual(command[script_index + 1 :], [str(case_path), "$solver"])
+
+    def test_optional_solver_probe_does_not_load_hope(self) -> None:
+        command = build_optional_solver_probe_command(REPO_ROOT, JULIA_BIN, "Gurobi")
+        script = command[command.index("-e") + 1]
+        self.assertIn("Base.find_package(pkg)", script)
+        self.assertIn("Sys.iswindows()", script)
+        self.assertNotIn("using HOPE", script)
+        self.assertEqual(command[-1], "Gurobi")
+
+    def test_missing_optional_solver_returns_actionable_error(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=[],
+            returncode=3,
+            stdout="DEPOT_PATH=/depot\nLOAD_PATH=/project:/version\nPACKAGE_PATH=\n",
+            stderr="",
+        )
+        with mock.patch(
+            "hope_mcp_server.core.subprocess.run",
+            return_value=completed,
+        ):
+            result = check_optional_solvers_available(
+                REPO_ROOT,
+                JULIA_BIN,
+                ["gurobi"],
+            )
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["error_type"], "optional_solver_unavailable")
+        self.assertEqual(result["package"], "Gurobi")
+        self.assertIn("Pkg.add", result["install_command"])
 
     def test_missing_julia_path_returns_structured_error(self) -> None:
         with mock.patch.dict(
@@ -311,6 +365,37 @@ class HopeCoreTests(unittest.TestCase):
         self.assertEqual(result["probe"]["PROBE_STATUS"], "ok")
         run_mock.assert_called_once()
 
+    def test_debug_solver_environment_rejects_invalid_solver(self) -> None:
+        with (
+            mock.patch("hope_mcp_server.core.validate_julia_command", return_value=(JULIA_BIN, None)),
+            mock.patch("hope_mcp_server.core.subprocess.run") as run_mock,
+        ):
+            result = hope_debug_solver_environment(
+                case_id="MD_GTEP_clean_case",
+                solver="$unsupported",
+            )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "invalid_solver")
+        self.assertEqual(
+            result["allowed_solvers"],
+            ["cbc", "clp", "highs", "scip", "gurobi", "cplex"],
+        )
+        run_mock.assert_not_called()
+
+    def test_debug_solver_environment_rejects_invalid_configured_solver(self) -> None:
+        with (
+            mock.patch("hope_mcp_server.core.validate_julia_command", return_value=(JULIA_BIN, None)),
+            mock.patch(
+                "hope_mcp_server.core.read_yaml",
+                return_value={"solver": "$unsupported"},
+            ),
+            mock.patch("hope_mcp_server.core.subprocess.run") as run_mock,
+        ):
+            result = hope_debug_solver_environment(case_id="MD_GTEP_clean_case")
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "invalid_solver")
+        run_mock.assert_not_called()
+
     def test_debug_solver_environment_reports_timeout_progress(self) -> None:
         timeout_error = subprocess.TimeoutExpired(
             cmd=["julia"],
@@ -341,6 +426,19 @@ class HopeCoreTests(unittest.TestCase):
         self.assertEqual(result["solver"], "gurobi")
         self.assertIn("--startup-file=no", result["command"])
         launch_mock.assert_called_once()
+
+    def test_debug_solver_environment_async_rejects_invalid_solver(self) -> None:
+        with (
+            mock.patch("hope_mcp_server.core.validate_julia_command", return_value=(JULIA_BIN, None)),
+            mock.patch("hope_mcp_server.core._launch_job") as launch_mock,
+        ):
+            result = hope_debug_solver_environment_async(
+                case_id="MD_GTEP_clean_case",
+                solver="$unsupported",
+            )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_type"], "invalid_solver")
+        launch_mock.assert_not_called()
 
     def test_setup_command_disables_startup_file(self) -> None:
         command = setup_command(REPO_ROOT, JULIA_BIN)

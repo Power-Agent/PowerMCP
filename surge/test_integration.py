@@ -29,7 +29,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import pytest
 
 # ``surge-py`` is an optional extra whose marker is ``>=3.12,<3.15`` and which
-# ships no sdist, so it is legitimately absent on Python 3.10. Skipping rather
+# ships no sdist, so it is legitimately absent on Python 3.11. Skipping rather
 # than failing keeps that honest.
 #
 # The ``__file__`` check is the load-bearing part. This repository has its own

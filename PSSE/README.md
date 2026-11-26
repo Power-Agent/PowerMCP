@@ -4,7 +4,7 @@ MCP server for PSS/E (Siemens PTI) power system analysis. Supports PSSE 35+ with
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - PSSE 35+ installed with Python API (PSSPY)
 - [mcp](https://pypi.org/project/mcp/)
 

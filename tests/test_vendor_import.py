@@ -22,7 +22,7 @@ def _load(mod_name: str, path) -> types.ModuleType:
     return mod
 
 
-def test_psse_import_side_effect_free_then_inits_once(monkeypatch):
+def test_psse_import_side_effect_free_then_inits_once(monkeypatch, isolated_config):
     init_calls = []
     fake_psspy = types.ModuleType("psspy")
     fake_psspy.psseinit = lambda n: init_calls.append(n)
@@ -39,7 +39,7 @@ def test_psse_import_side_effect_free_then_inits_once(monkeypatch):
     # First use initializes exactly once; second use is memoized.
     mod._ensure_psse()
     mod._ensure_psse()
-    assert init_calls == [50]
+    assert init_calls == [0]  # 0 = PSS/E's default bus size level
     assert mod.psspy is fake_psspy
 
     monkeypatch.delitem(sys.modules, "psse_mcp_under_test", raising=False)

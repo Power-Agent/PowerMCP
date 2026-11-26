@@ -188,6 +188,11 @@ Values are 5th, 50th, and 95th percentiles of generated cables.
 
 ## Transformer zero-sequence and limb data - Table 10
 
+The executable opt-in `ynd11_equivalent` is restricted to 20 MVA, 110/20 kV,
+60 Hz YNd11 with explicit ratios from the three-limb numerical intervals.
+This is an impedance equivalent, not a physical limb/core implementation.
+Other rows below remain catalog data; see [mapping limits](evemtbench.md#restricted-table-10-ynd11-equivalent).
+
 | Class | Rating range | Limb/vector condition | `x0/x1` | `r0/r1` |
 |---|---|---|---|---|
 | 20/0.4 | all | `Dyn` | `[0.95; 1.0]` | `[1.2; 1.8]` |
@@ -391,10 +396,10 @@ creator and must not be represented as a complete motor database.
 |---|---|---|---|
 | Events/faults | yes | partial, existing tools | not planned as a library type |
 | External grids | yes | validated on PowerFactory 2026 SP1 | implemented |
-| Loads | yes | power mapped (`plini`, `qlini`); ZIP pending | power creator implemented |
+| Loads | yes | power mapped (`plini`, `qlini`); opt-in ZIP `TypLod` for load flow | constant power default; RMS/EMT ZIP unvalidated |
 | Underground cables | yes | sequence equivalent validated on SP1 | implemented |
 | Overhead lines/conductors | yes | sequence equivalent validated on SP1 | implemented |
-| Transformers | yes, Tables 10-12 | Table 11 validated on SP1; Tables 10/12 pending | implemented for Table 11 |
+| Transformers | yes, Tables 10-12 | Table 11; restricted opt-in Table 10 YNd11 equivalent | full core/limb and Table 12 unsupported |
 | Synchronous machines | yes | round-rotor attributes inspected on SP1; open-circuit time-input correction awaits creation retest | round-rotor creator implemented; salient profile catalog-only |
 | AC1A exciters | yes | pending | pending |
 | IBRs | yes | pending | pending |

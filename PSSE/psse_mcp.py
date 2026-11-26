@@ -24,7 +24,8 @@ mcp = FastMCP("PSSE 35+ Positive Sequence Load Flow Program")
 # ---------------------------------------------------------------------------
 # Lazy, memoized PSS/E engine initialization.
 #
-# psspy lives in a local PSS/E install dir and psseinit() starts the engine.
+# psspy lives in a local PSS/E install dir and psseinit() starts the engine,
+# sized by _resolve_bus_size().
 # Both used to run at import time, which crashed this module on any machine
 # without PSS/E and blocked packaging/discovery. They now run once, on the first
 # tool call. The PSSPYxxx / PSSBIN dirs come from ~/.powermcp/config.toml (keys
@@ -50,11 +51,44 @@ def _resolve_psse_paths():
         return _PSSE_LEGACY["python_lib"], _PSSE_LEGACY["bin"]
 
 
+def _resolve_bus_size() -> int:
+    """Return the bus capacity passed to psseinit().
+
+    POWERMCP_PSSE_BUS_SIZE, then [psse].bus_size in ~/.powermcp/config.toml,
+    else 0, which asks PSS/E for its default size level: the bus size set in the
+    PSS/E GUI's network options (50,000 unless changed). The old psseinit(50)
+    got the 1,000-bus minimum. The size must be right at startup: a second
+    psseinit() in the process is ignored, and raising bus_size_level() later
+    does not grow working memory, so a RAW read into a smaller engine drops the
+    buses past the limit while still returning ierr=0. Only saved-case reads
+    (psspy.case) grow it on their own.
+    """
+    raw = os.environ.get("POWERMCP_PSSE_BUS_SIZE")
+    if raw is None:
+        try:
+            from powermcp.config import get
+            raw = get("psse", "bus_size")
+        except Exception:
+            raw = None
+    if raw is None or not str(raw).strip():
+        return 0
+    text = str(raw).strip()
+    if not text.isdigit():
+        raise RuntimeError(
+            f"Invalid PSS/E bus size {text!r}: psse.bus_size must be a whole number "
+            "of buses, or 0 for the PSS/E default. Fix it with "
+            "`powermcp config set psse.bus_size <buses>` or the "
+            "POWERMCP_PSSE_BUS_SIZE environment variable."
+        )
+    return int(text)
+
+
 def _ensure_psse():
-    """Inject PSS/E paths, import psspy, and call psseinit(50) exactly once."""
+    """Inject PSS/E paths, import psspy, and call psseinit() exactly once."""
     global psspy, _psse_ready
     if _psse_ready:
         return psspy
+    bus_size = _resolve_bus_size()
     python_lib, bin_dir = _resolve_psse_paths()
     for p in (python_lib, bin_dir):
         if not p:
@@ -71,7 +105,7 @@ def _ensure_psse():
             "are configured: `powermcp config set psse.python_lib <PSSPYxxx dir>` and "
             "`powermcp config set psse.bin <PSSBIN dir>`. Original error: " + repr(e)
         )
-    _psspy.psseinit(50)  # 50 = PSS/E 35+ bus mode; do NOT change
+    _psspy.psseinit(bus_size)
     psspy = _psspy
     _psse_ready = True
     return psspy

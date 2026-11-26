@@ -44,9 +44,22 @@ def test_ir_preserves_auditable_context(tmp_path):
     resolved = resolve_solver_case(file_path=str(source))
     assert resolved.network.n_buses == 9
     assert resolved.package["schema"] == "pio-ir"
-    assert resolved.package["generation"] == 2
+    # From 0.12 the IR header states the writing release as a string.
+    assert resolved.package["generation"] == powerio.versions()["powerio_ir"]["version"]
     assert resolved.package["producer"]["name"] == "powerio"
     assert resolved.package["selection"] == {}
+
+
+def test_ir_written_by_powerio_0_11_still_resolves(tmp_path):
+    # powerio 0.12 reads the integer "version": 2 header every 0.11 release
+    # wrote; recognising IR by its schema alone keeps those documents usable.
+    document = json.loads(ir(powerio.parse(CASE9)))
+    document["version"] = 2
+    source = tmp_path / "case.pio.json"
+    source.write_text(json.dumps(document))
+    resolved = resolve_solver_case(file_path=str(source))
+    assert resolved.network.n_buses == 9
+    assert resolved.package["generation"] == 2
 
 
 def test_invalid_identities_cannot_reuse_stale_diagnostics():

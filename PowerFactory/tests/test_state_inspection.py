@@ -9,10 +9,13 @@ from unittest.mock import Mock, patch
 
 class FakeFastMCP:
     def __init__(self, *args, **kwargs):
-        pass
+        self.registered_tools = []
 
     def tool(self):
-        return lambda function: function
+        def register(function):
+            self.registered_tools.append(function.__name__)
+            return function
+        return register
 
 
 class FakeAgent:
@@ -1245,6 +1248,21 @@ class StateInspectionTest(unittest.TestCase):
             parameters,
             structured=True,
         )
+
+    def test_only_unified_evemtbench_tools_are_registered(self):
+        self.assertEqual(
+            {name for name in mcp_module.mcp.registered_tools if "evemtbench" in name},
+            {"list_evemtbench_components", "create_evemtbench_component"},
+        )
+
+    def test_unified_listing_passes_filters_without_opening_powerfactory(self):
+        filters = {"voltage_kv": 110}
+        with patch.object(FakeAgent, "list_evemtbench_components",
+                          return_value={"success": True, "component_type": "load"},
+                          create=True) as listing:
+            result = json.loads(mcp_module.list_evemtbench_components("load", filters))
+        self.assertTrue(result["success"])
+        listing.assert_called_once_with("load", filters)
 
     def test_get_parameters_serializes_object_lists(self):
         reference = FakeObject(

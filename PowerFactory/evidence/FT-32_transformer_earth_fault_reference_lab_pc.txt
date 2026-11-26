@@ -1,0 +1,108 @@
+FT-32: Independent YNd11 lossless earth-fault current reference
+============================================================
+
+Classification: compiled evidence record with a complete user-supplied JSON
+result and the standalone diagnostic script used to produce it. Not an
+independently rerun or continuous MCP transcript.
+
+Files:
+- FT-32_transformer_earth_fault_reference_lab_pc.json: complete saved result;
+  only the PowerFactory account identifier is replaced with <user>.
+- scripts/lab_transformer_earth_fault_reference_check.py: diagnostic script;
+  only the account identifier is replaced with <user> and an instruction
+  comment is added at PROJECT. Restore that identifier before a Lab PC rerun.
+
+Source filename supplied by the contributor:
+YNd_reference_20261023T162832Z_57813821.json
+Result test_name: MCP YNd Reference c8c7e260
+Environment: licensed PowerFactory on the Lab PC. The preceding console
+capture identified PowerFactory 2026 SP1; this saved JSON has no version field.
+Repository feature baseline: d284c30. The standalone diagnostic script is
+separate from the unified creator and was not part of that commit.
+
+Purpose and independent reference
+---------------------------------
+Compare PowerFactory Complete Method currents against a sequence-network
+calculation using input impedances, not fitted solver fault-current results.
+The temporary network is unloaded and has no magnetizing branch: pfe and
+curmg are zeroed only on a temporary copy of the 20 MVA, 110/20 kV, 60 Hz
+YNd11 source type. The existing source type and integrated transformer are
+not modified. Neutral resistance is applied on the HV star side.
+
+On transformer rated-power and HV-voltage bases:
+  Zbase = UHV^2 / Sn = 605 ohm
+  Ibase = Sn / (sqrt(3) * UHV) = 0.1049727762162956 kA
+  abs(Zsource1) = Sn / Sk_source (source c-factor = 1)
+  Xsource1 = abs(Zsource1) / sqrt(1 + (R/X)^2)
+  Rsource1 = (R/X) * Xsource1
+  Z1 = Zsource1 + R1pu + j*X1pu
+  Z2 = Z1
+  Z0 = R0pu + j*X0pu + 3*(Rn + j*Xn)/Zbase
+  I3ph = Ibase / abs(Z1)
+  Iearth = 3*Ibase / abs(Z1 + Z2 + Z0)
+  I0_HV = Iearth/3; I0_LV = 0
+
+The delta winding blocks source zero-sequence impedance from the HV fault
+loop. Source negative-sequence impedance is configured equal to positive
+sequence; transformer Z2=Z1 is an assumption of this reference model.
+Source cmax and cmin are explicitly set to 1.0 on the temporary source.
+An independent source-only check runs before the transformer comparisons.
+Prefault HV voltage is checked against 1.0 p.u., not fitted to fault results.
+
+Predeclared tolerances: relative 0.005 (0.5%); absolute 0.00001 kA.
+
+Saved results
+-------------
+Case                  Measured earth kA     Reference earth kA
+baseline              0.850727859777707     0.8507278521757972
+higher_R0             0.8134800676727756    0.8134800623589546
+higher_X0             0.6640420079137861    0.6640420109815358
+neutral_resistance    0.8088946015064056    0.8088945948632568
+
+All four rows report passed=true and absolute_reference_passed=true.
+The neutral-resistance case uses 20 ohm, contributing 3*20/605 p.u. to Z0.
+Three-phase current is unchanged across the four cases:
+  measured 0.7906929703892057 kA; reference 0.790692966014283 kA.
+Maximum reported relative error over I3ph, Iearth and HV I0 is
+8.935771715854653e-9. LV-terminal I0 is zero in all four cases.
+Prefault HV voltage is 0.9999999999973533 p.u. in all four cases.
+
+Source-only control:
+  expected 28.86751345948129 kA; measured 28.867514740311133 kA; passed=true.
+Temporary-source cmax: before 1.100000023841858; retained 1.0.
+Temporary-source cmin: before 1.0; retained 1.0.
+Method code 3 comes from the operator-selected Complete Method template.
+
+Completion and limits
+---------------------
+success=true; restored=true; cleanup_ok=true; remaining_objects=[].
+method_template_unchanged=true. No error or restoration/cleanup-error field
+is present. The script checks original case/grid/scenario selection and the
+source-type snapshot before cleanup. Calculation results may be invalidated.
+
+This is independent numerical agreement for the lossless, unloaded equivalent
+only. It does not certify absolute currents for the original lossy type or
+the integrated transformer. FT-30 remains the separate sensitivity test;
+FT-31 remains the separate out-of-service unified-creator readback test.
+Physical core/limb, zero-sequence magnetizing, internal-delta YNyn,
+saturation, RMS and EMT are not validated. The perturbed impedances are
+diagnostic controls, not Table 10 samples. No creator restriction is widened.
+
+Reproduction on the Lab PC
+--------------------------
+1. Save work and stop powerFactoryUnified. Launch interactive PowerFactory
+   normally, without NON-INTERACTIVE MODE; activate test and Case 1.
+2. Retain the inspected EvEMTBench Test Type 110-20 and the dedicated
+   MCP Complete Method Template in Case 1, with complete selected (code 3).
+3. Copy the archived script to a writable Lab PC working folder. Replace
+   <user> in PROJECT with the actual PowerFactory account. Do not run this
+   script against a production project or change the current tolerances.
+4. Execute once through an external ComPython script object. The script
+   checks the exact context, creates an isolated temporary case/network/type,
+   runs controls and comparisons, then restores and cleans up.
+5. Attach the uniquely named lab_results/YNd_reference_*.json beside the
+   script. The Output Window contains a short summary, not the full JSON.
+   The export opens its destination before running validation and never
+   overwrites an earlier file. An export error is not a confirmed pass.
+6. If success, restoration or cleanup fails, keep the full result and
+   investigate; do not fit inputs or relax tolerances to obtain a pass.

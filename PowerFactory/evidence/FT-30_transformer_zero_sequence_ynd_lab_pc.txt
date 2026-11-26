@@ -1,0 +1,62 @@
+FT-30: YNd11 zero-sequence type mapping and isolated earth-fault checks
+=====================================================================
+
+Classification: compiled summary of user-supplied JSON and GUI inspection.
+This is not an independent rerun or a verbatim continuous transcript.
+Numeric tables below are rounded summaries; no service pack or executable
+revision identifier was captured in the supplied runtime output.
+Environment: Lab PC, PowerFactory 2026 in interactive mode, MCP stopped.
+
+Inspected source: EvEMTBench Test Type 110-20.TypTr2 in project test.
+Rating: 20 MVA, 110/20 kV, 60 Hz, YNd11. it0mt read as 0.
+The GUI input settings object OptTyptr2 selected reactance/resistance in p.u.;
+its radio-button order was not used to infer the meaning of it0mt.
+Original source: r1pu=0.004756252747029066, x1pu=0.11268821358680725,
+                 r0pu=0, x0pu=0.029999999329447746, uk0tr=3%, ur0tr=0%.
+Grounding inspection on the existing out-of-service element confirmed:
+neutConfig=0 (no external neutral conductor), cgnd_h=0 (HV star connected),
+re0tr_h=0 Ohm, xe0tr_h=0 Ohm.
+
+Temporary unconnected type write test: MCP Z0 Write 14b8cf5e.
+Ratios R0/R1=2.15 and X0/X1=0.925, Table 10 three-limb interval midpoints.
+Native assignments retained r0pu=0.01022594328969717 and
+x0pu=0.10423660278320312. Derived ur0tr=1.0225943326950073% and
+uk0tr=10.473699569702148% matched the expected formulas within tolerance.
+User result: success=true, source_unchanged=true, cleanup_ok=true,
+remaining_objects=[]. No physical limb/core setting was changed or validated.
+
+Earth-fault test: MCP YNd Fault 0aaa6556.
+Temporary study case, network, transformer element and copied type.
+Source on LV delta bus: snss=1000 MVA, rntxn=0.10000000149011612,
+x0tx1=1, r0tx0=0.10000000149011612, usetp=1 pu.
+Faults at HV grounded star bus: 3psc and spgf, Rf=Xf=0 Ohm.
+The UI-configured MCP Complete Method Template supplied method_code=3.
+Method metadata itself returned only 'Method', not enum choices. An earlier
+attempt stopped for this reason, with restoration and cleanup successful.
+The template was not modified by the successful test.
+
+Scenario           I3-phase kA  Iearth kA  HV I0 kA   LV I0 kA
+baseline           0.778937     0.841556   0.280519   0
+higher R0          0.778937     0.805240   0.268413   0
+higher X0          0.778937     0.658410   0.219470   0
+20 Ohm HV neutral  0.778937     0.800774   0.266925   0
+
+Baseline retained R0/X0: 0.01022594328969717 / 0.10423660278320312 pu.
+Higher-R0 control: R0=0.10225943475961685 pu, X0 unchanged.
+Higher-X0 control: X0=0.20847317576408386 pu, R0 unchanged.
+The last scenario retained baseline R0/X0 and re0tr_h=20 Ohm.
+Perturbations are diagnostic controls, not Table 10 samples.
+
+All four scenarios reported passed=true. Three-phase current was unchanged;
+earth-fault current decreased for each perturbation. HV 3*I0 matched fault
+current; LV delta terminal I0 remained zero. These are relative sensitivity
+and connection checks, not an independent absolute-current comparison.
+
+User result: success=true, restored=true, cleanup_ok=true,
+remaining_objects=[], method_template_unchanged=true.
+Original Case 1, four real grids, scenario N and source type were restored
+or verified unchanged by the script. No calculation reran the original grid.
+
+Limits: no physical core/limb, internal-delta YNyn, zero-sequence magnetizing,
+saturation, RMS/EMT or other rating/frequency/winding-case validation.
+The integrated opt-in creator introduced by this patch has not yet run live.
