@@ -1021,6 +1021,54 @@ class ComponentCreationTest(unittest.TestCase):
         self.assertEqual(buses["Bus 02"]["StaCubic"], [])
         self.assertEqual(buses["Bus 30"]["StaCubic"], [])
 
+    def test_create_and_assign_reusable_line_type(self):
+        grid = FakeObject(None, "ElmNet", "Grid")
+        bus1 = grid.CreateObject("ElmTerm", "Bus 1")
+        bus2 = grid.CreateObject("ElmTerm", "Bus 2")
+        bus1.SetAttribute("uknom", 138.0)
+        bus2.SetAttribute("uknom", 138.0)
+        library = FakeObject(None, "IntPrjfolder", "Equipment Type Library")
+        app = FakeApplication([grid])
+        app.GetProjectFolder = lambda _: library
+        self.use_application(app)
+
+        created = agent_module.DIgSILENTAgent.create_equipment_type(
+            "TypLne", "Test 138 kV Type", {"uline": 138.0, "rline": 0.1},
+            open_digsilent=False,
+        )
+        self.assertTrue(created["success"], created)
+        line_type = library.GetContents("*", 1)[0].GetContents("*", 1)[0]
+        line = grid.CreateObject("ElmLne", "Test Line")
+        app.objects["Test Line.ElmLne"] = [line]
+        app.GetProjectFolder = lambda _: library
+        assigned = agent_module.DIgSILENTAgent.assign_equipment_type(
+            "Test Line.ElmLne", line_type.GetFullName(), "ElmLne",
+            open_digsilent=False,
+        )
+        self.assertTrue(assigned["success"], assigned)
+        self.assertIs(line.GetAttribute("typ_id"), line_type)
+
+    def test_create_equipment_type_rejects_invalid_class_and_assignment_failure(self):
+        self.network()
+        result = agent_module.DIgSILENTAgent.create_equipment_type(
+            "TypFoo", "Invalid", {}, open_digsilent=False,
+        )
+        self.assertFalse(result["success"])
+        result = agent_module.DIgSILENTAgent.assign_equipment_type(
+            "Missing.ElmLne", "Missing.TypLne", "ElmLne", open_digsilent=False,
+        )
+        self.assertFalse(result["success"])
+
+    def test_line_type_rejects_inconsistent_derived_susceptance(self):
+        result = agent_module.DIgSILENTAgent.create_equipment_type(
+            "TypLne", "Inconsistent Type",
+            {"frnom": 60.0, "cline": 0.01, "bline": 10.0},
+            open_digsilent=False,
+        )
+        self.assertFalse(result["success"])
+        self.assertEqual(result["failure_stage"], "parameter_normalization")
+        self.assertIn("derived from cline", result["message"])
+
     def test_add_component_validation(self):
         self.assert_failed(
             self.add_component(
@@ -1030,6 +1078,49 @@ class ComponentCreationTest(unittest.TestCase):
             ),
             "Unsupported component type",
         )
+
+    def test_type_resolution_accepts_exact_full_path_and_unique_name(self):
+        project = FakeObject(None, "IntPrj", "Project")
+        library = project.CreateObject("IntPrjfolder", "Equipment Type Library")
+        line_type = library.CreateObject("TypLne", "Line Type(2)")
+        app = Mock()
+        app.GetCalcRelevantObjects.return_value = []
+        app.GetProjectFolder.return_value = library
+
+        resolved_path = agent_module.DIgSILENTAgent._get_template_type(
+            app, line_type.GetFullName(), "ElmLne", "line", "line type"
+        )
+        resolved_name = agent_module.DIgSILENTAgent._get_template_type(
+            app, "Line Type(2)", "ElmLne", "line", "line type"
+        )
+
+        self.assertIs(resolved_path, line_type)
+        self.assertIs(resolved_name, line_type)
+
+    def test_type_resolution_rejects_ambiguous_missing_and_wrong_class(self):
+        project = FakeObject(None, "IntPrj", "Project")
+        library = project.CreateObject("IntPrjfolder", "Equipment Type Library")
+        first = library.CreateObject("IntPrjfolder", "First")
+        second = library.CreateObject("IntPrjfolder", "Second")
+        first_type = first.CreateObject("TypLne", "Duplicate")
+        second.CreateObject("TypLne", "Duplicate")
+        wrong = library.CreateObject("TypTr2", "Wrong Class")
+        app = Mock()
+        app.GetCalcRelevantObjects.return_value = []
+        app.GetProjectFolder.return_value = library
+
+        with self.assertRaisesRegex(RuntimeError, "ambiguous"):
+            agent_module.DIgSILENTAgent._get_template_type(
+                app, "Duplicate", "ElmLne", "line", "line type"
+            )
+        with self.assertRaisesRegex(RuntimeError, "Template line not found"):
+            agent_module.DIgSILENTAgent._get_template_type(
+                app, "Missing", "ElmLne", "line", "line type"
+            )
+        with self.assertRaisesRegex(RuntimeError, "class validation|not found"):
+            agent_module.DIgSILENTAgent._get_template_type(
+                app, wrong.GetFullName(), "ElmLne", "line", "line type"
+            )
 
         self.assert_failed(
             self.add_component(

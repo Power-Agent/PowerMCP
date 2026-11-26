@@ -1396,6 +1396,39 @@ class StateInspectionTest(unittest.TestCase):
         self.assertFalse(failure["success"])
         self.assertIn("project lookup failed", failure["message"])
 
+    def test_activate_project_tool_returns_activation_result(self):
+        expected = {
+            "success": True,
+            "name": "first-project",
+            "full_name": r"\pf-user\first-project.IntPrj",
+            "message": r"Project activated: \pf-user\first-project.IntPrj",
+        }
+        with patch.object(
+            FakeAgent,
+            "activate_project",
+            return_value=expected,
+            create=True,
+        ) as activate_project:
+            result = json.loads(mcp_module.activate_project("first-project"))
+
+        self.assertEqual(result, expected)
+        activate_project.assert_called_once_with("first-project")
+
+    def test_activate_project_tool_surfaces_activation_failure(self):
+        expected = {
+            "success": False,
+            "message": "Project not found: first-project",
+        }
+        with patch.object(
+            FakeAgent,
+            "activate_project",
+            return_value=expected,
+            create=True,
+        ):
+            result = json.loads(mcp_module.activate_project("first-project"))
+
+        self.assertEqual(result, expected)
+
     def test_delete_component_preserves_partial_deletion_result(self):
         expected = {
             "success": False,

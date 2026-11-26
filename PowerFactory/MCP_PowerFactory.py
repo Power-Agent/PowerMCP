@@ -13,6 +13,7 @@ Tools
   ping                                  Connectivity check.
   get_config                            Return simulation_config.json as a JSON string.
   get_active_project                    Return the active PowerFactory project.
+  activate_project                      Activate an existing PowerFactory project.
   get_active_study_case                 Return the active PowerFactory study case.
   get_parameters                        Read selected attributes from matching objects.
   list_objects                          List objects using a PowerFactory object query.
@@ -65,6 +66,7 @@ import json
 import math
 import time
 import concurrent.futures
+import traceback
 from datetime import datetime
 from typing import Any
 
@@ -160,6 +162,26 @@ _pf_executor = concurrent.futures.ThreadPoolExecutor(
 def _pf(fn, *args, **kwargs):
     """Run fn(*args, **kwargs) on the dedicated PowerFactory thread."""
     return _pf_executor.submit(fn, *args, **kwargs).result()
+
+
+def _safe_pf_tool(operation: str, fn) -> str:
+    """Execute a PF tool and preserve diagnostics without corrupting stdio."""
+    try:
+        return _pf(fn)
+    except Exception as exc:
+        diagnostic = traceback.format_exc()
+        try:
+            with open(os.path.join(os.path.dirname(__file__), "powermcp_diagnostics.log"), "a", encoding="utf-8") as handle:
+                handle.write(f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] {operation}\n{diagnostic}\n")
+        except Exception:
+            pass
+        return json.dumps({
+            "success": False,
+            "operation": operation,
+            "stage": "executor_or_tool",
+            "error_type": type(exc).__name__,
+            "message": str(exc),
+        })
 
 
 def _agent_result(method_name: str, *args, structured: bool = False) -> str:
@@ -601,6 +623,26 @@ def get_active_project() -> str:
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
 
 @mcp.tool()
+def activate_project(project_name: str) -> str:
+    """Activate an existing PowerFactory project in the shared API session.
+
+    This changes only the active-project context. It does not create, import,
+    delete, or modify project data, and it does not run a simulation.
+
+    Parameters
+    ----------
+    project_name : str
+        Existing project name or PowerFactory project path, for example
+        ``"first-project"`` or ``r"\\pf-user\\first-project"``.
+    """
+    _, DIgSILENTAgent = _load_modules()
+    return _agent_result(
+        "activate_project",
+        project_name,
+        structured=True,
+    )
+
+@mcp.tool()
 def get_active_study_case() -> str:
     """Return the currently active PowerFactory study case."""
     _, DIgSILENTAgent = _load_modules()
@@ -735,6 +777,48 @@ def get_parameters(
         }
 
     return _to_json(_pf(_read_only_result, DIgSILENTAgent, _impl))
+
+@mcp.tool()
+def create_equipment_type(
+    type_class: str,
+    type_name: str,
+    attributes: dict,
+    open_digsilent: bool = True,
+) -> str:
+    """Create and verify a reusable TypLne or TypTr2 in the equipment library."""
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(_pf(
+        DIgSILENTAgent.create_equipment_type,
+        type_class, type_name, attributes, open_digsilent,
+    ))
+
+@mcp.tool()
+def assign_equipment_type(
+    component_query: str,
+    type_identifier: str,
+    component_class: str,
+    open_digsilent: bool = True,
+) -> str:
+    """Assign and verify an existing TypLne or TypTr2 on one element."""
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(_pf(
+        DIgSILENTAgent.assign_equipment_type,
+        component_query, type_identifier, component_class, open_digsilent,
+    ))
+
+@mcp.tool()
+def delete_equipment_type(
+    type_identifier: str,
+    type_class: str,
+    confirmation: str = "",
+    open_digsilent: bool = True,
+) -> str:
+    """Preview or delete one unreferenced TypLne or TypTr2 by exact full path."""
+    _, DIgSILENTAgent = _load_modules()
+    return _to_json(_pf(
+        DIgSILENTAgent.delete_equipment_type,
+        type_identifier, type_class, confirmation, open_digsilent,
+    ))
 
 _COMPONENT_QUERIES = {
     "buses": ("*.ElmTerm",),
@@ -1187,6 +1271,94 @@ def export_active_grid_pdf(
         diagram_name,
         open_digsilent,
     )
+
+
+@mcp.tool()
+def export_project_backup(destination_path: str = "") -> str:
+    """Export the active PowerFactory project to a new, verified .pfd backup."""
+    if not destination_path:
+        return json.dumps({"success": False, "message": "destination_path is required"})
+    _, agent = _load_modules()
+    return _pf(lambda: _to_json(agent.export_project_backup(destination_path)))
+
+
+@mcp.tool()
+def export_line_loadings_xlsx(
+    destination_path: str,
+    run_loadflow: bool = True,
+    include_out_of_service: bool = True,
+) -> str:
+    """Export all active-project transmission-line loadings to a verified XLSX.
+
+    The destination must be inside ``POWERIO_MCP_ALLOWED_ROOTS`` and must not
+    already exist.  When ``run_loadflow`` is true, the active study case is
+    recalculated before reading ``c:loading`` (falling back to ``m:loading``).
+    """
+    if not destination_path:
+        return json.dumps({"success": False, "message": "destination_path is required"})
+    destination_path = checked_path(
+        destination_path,
+        purpose="XLSX export path",
+        for_write=True,
+    )
+    _, agent = _load_modules()
+    return _pf(
+        lambda: _to_json(
+            agent.export_line_loadings_xlsx(
+                destination_path,
+                run_loadflow,
+                include_out_of_service,
+            )
+        )
+    )
+
+
+@mcp.tool()
+def create_network_diagram(
+    project_name: str = "",
+    network_name: str = "",
+    diagram_name: str = "",
+) -> str:
+    """Create a new diagram populated with existing network objects only."""
+    if not project_name or not network_name or not diagram_name:
+        return json.dumps({"success": False, "message": "project_name, network_name, and diagram_name are required"})
+    _, agent = _load_modules()
+    return _pf(lambda: _to_json(agent.create_network_diagram(project_name, network_name, diagram_name)))
+
+
+@mcp.tool()
+def list_diagram_graphics(project_name: str, diagram_name: str, limit: int = 10, offset: int = 0) -> str:
+    """List immediate graphical children of a PowerFactory diagram."""
+    _, agent = _load_modules()
+    return _safe_pf_tool("list_diagram_graphics", lambda: _to_json(agent.list_diagram_graphics(project_name, diagram_name, limit, offset)))
+
+
+@mcp.tool()
+def inspect_diagram_graphic(project_name: str, diagram_name: str, graphic_name: str) -> str:
+    """Inspect one immediate diagram graphic and its referenced electrical object."""
+    _, agent = _load_modules()
+    return _safe_pf_tool("inspect_diagram_graphic", lambda: _to_json(agent.inspect_diagram_graphic(project_name, diagram_name, graphic_name)))
+
+
+@mcp.tool()
+def diagnose_diagram_contents(project_name: str, diagram_name: str, sample_limit: int = 5) -> str:
+    """Run bounded read-only GetContents diagnostics for one diagram."""
+    _, agent = _load_modules()
+    return _safe_pf_tool("diagnose_diagram_contents", lambda: _to_json(agent.diagnose_diagram_contents(project_name, diagram_name, sample_limit)))
+
+
+@mcp.tool()
+def create_single_diagram_graphic(project_name: str, diagram_name: str, object_name: str, object_class: str, center_x: float | None = None, center_y: float | None = None) -> str:
+    """Create exactly one validated graphical reference to an existing object."""
+    _, agent = _load_modules()
+    return _safe_pf_tool("create_single_diagram_graphic", lambda: _to_json(agent.create_single_diagram_graphic(project_name, diagram_name, object_name, object_class, center_x, center_y)))
+
+
+@mcp.tool()
+def update_diagram_graphic_geometry(project_name: str, diagram_name: str, graphic_name: str, rCenterX: float | None = None, rCenterY: float | None = None, rSizeX: float | None = None, rSizeY: float | None = None) -> str:
+    """Update approved geometry attributes on one existing IntGrf."""
+    _, agent = _load_modules()
+    return _safe_pf_tool("update_diagram_graphic_geometry", lambda: _to_json(agent.update_diagram_graphic_geometry(project_name, diagram_name, graphic_name, rCenterX, rCenterY, rSizeX, rSizeY)))
 
 
 @mcp.tool()

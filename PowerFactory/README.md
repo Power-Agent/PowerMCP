@@ -51,6 +51,7 @@ Output folder:  CSV results, PNG plots, optional .pfd export
 | `close_digsilent` | Closes the PowerFactory session. |
 | `get_config` | Returns the active `simulation_config.json` as a JSON string. |
 | `get_active_project` | Returns the active PowerFactory project without modifying it. |
+| `activate_project` | Activates an existing PowerFactory project without modifying project data or running a simulation. |
 | `get_active_study_case` | Returns the active PowerFactory study case without modifying it. |
 | `get_parameters` | Reads selected attributes from matching calculation-relevant objects, with opt-in metadata and active-project library inspection. |
 | `list_objects` | Lists calculation-relevant objects using a raw PowerFactory query. |

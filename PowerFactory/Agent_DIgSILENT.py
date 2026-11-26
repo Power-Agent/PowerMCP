@@ -17,6 +17,8 @@ import csv
 import math
 import re
 import time
+import zipfile
+from xml.sax.saxutils import escape as _xml_escape
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from datetime import datetime
@@ -49,6 +51,39 @@ def _add_plot_legend(ax, series_count: int) -> None:
         )
     else:
         ax.legend(loc="best", fontsize=9)
+
+
+def _xlsx_cell(value: Any, row: int, col: int) -> str:
+    """Return one minimal SpreadsheetML cell for the XLSX writer."""
+    ref = f"{chr(65 + col)}{row}"
+    if isinstance(value, bool):
+        return f'<c r="{ref}" t="b"><v>{1 if value else 0}</v></c>'
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return f'<c r="{ref}"><v>{value}</v></c>'
+    text = "" if value is None else str(value)
+    return f'<c r="{ref}" t="inlineStr"><is><t>{_xml_escape(text)}</t></is></c>'
+
+
+def _write_xlsx(path: str, headers: list[str], rows: list[list[Any]], sheet_name: str = "Line Loadings") -> None:
+    """Write a dependency-free, valid XLSX workbook."""
+    safe_sheet = _xml_escape(sheet_name[:31] or "Sheet1")
+    sheet_rows = [
+        "<row r=\"1\">" + "".join(_xlsx_cell(v, 1, i) for i, v in enumerate(headers)) + "</row>"
+    ]
+    for r, values in enumerate(rows, 2):
+        sheet_rows.append(
+            f'<row r="{r}">' + "".join(_xlsx_cell(v, r, i) for i, v in enumerate(values)) + "</row>"
+        )
+    files = {
+        "[Content_Types].xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/><Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/></Types>",
+        "_rels/.rels": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>",
+        "xl/_rels/workbook.xml.rels": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet1.xml\"/></Relationships>",
+        "xl/workbook.xml": f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets><sheet name=\"{safe_sheet}\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>",
+        "xl/worksheets/sheet1.xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>" + "".join(sheet_rows) + "</sheetData></worksheet>",
+    }
+    with zipfile.ZipFile(path, "x", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
 
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _repo_root_added = _repo_root not in sys.path
@@ -463,6 +498,109 @@ class DIgSILENTAgent(EvEMTBenchMixin):
 
         return True, "Connected and project activated"
 
+    @classmethod
+    def activate_project(
+        cls,
+        project_name: str,
+        open_digsilent: bool = False,
+    ) -> dict[str, Any]:
+        """Activate an existing project in the shared PowerFactory session.
+
+        This changes only PowerFactory's active-project context. It does not
+        create, import, delete, or otherwise modify project data.
+        """
+        project_name = (project_name or "").strip()
+        if not project_name:
+            return {
+                "success": False,
+                "message": "project_name cannot be empty",
+            }
+
+        try:
+            app = cls._get_application(open_digsilent=open_digsilent)
+            activation_status = app.ActivateProject(project_name)
+            # PowerFactory returns an integer status code here, not the
+            # activated project object. Zero means success; non-zero means
+            # activation failed.
+            if not isinstance(activation_status, int):
+                return {
+                    "success": False,
+                    "message": (
+                        "Project activation returned an unexpected status: "
+                        f"{activation_status!r}"
+                    ),
+                }
+            if activation_status != 0:
+                return {
+                    "success": False,
+                    "message": (
+                        f"Project activation failed for {project_name} "
+                        f"(status code {activation_status})"
+                    ),
+                }
+
+            active_project = app.GetActiveProject()
+            if active_project is None:
+                return {
+                    "success": False,
+                    "message": (
+                        "PowerFactory did not report an active project after "
+                        f"activating: {project_name}"
+                    ),
+                }
+
+            active_full_name = active_project.GetFullName()
+            active_name = active_project.GetAttribute("loc_name")
+            requested_name = project_name.rstrip("\\/").rsplit("\\", 1)[-1]
+            requested_name = requested_name.rsplit("/", 1)[-1]
+            if requested_name.lower().endswith(".intprj"):
+                requested_name = requested_name[:-6]
+            requested_full_name = project_name.rstrip("\\/").lower()
+            active_matches_request = (
+                active_name.lower() == requested_name.lower()
+                or active_full_name.lower() == requested_full_name
+                or active_full_name.lower().endswith(
+                    "\\" + requested_name.lower() + ".intprj"
+                )
+            )
+            if not active_matches_request:
+                return {
+                    "success": False,
+                    "message": (
+                        "PowerFactory activated a different project: "
+                        f"{active_full_name} (requested {project_name})"
+                    ),
+                }
+
+            cls._shared_project = active_project
+            cls._shared_project_path = project_name
+            study_case = app.GetActiveStudyCase()
+            if study_case is None:
+                return {
+                    "success": False,
+                    "name": active_name,
+                    "full_name": active_full_name,
+                    "message": (
+                        "Project activated, but no active study case was "
+                        f"reported for: {active_full_name}"
+                    ),
+                }
+            study_case_name = study_case.GetAttribute("loc_name")
+            study_case_full_name = study_case.GetFullName()
+            return {
+                "success": True,
+                "name": active_name,
+                "full_name": active_full_name,
+                "study_case": study_case_name,
+                "study_case_full_name": study_case_full_name,
+                "message": f"Project activated: {active_full_name}",
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "message": f"Project activation failed: {exc}",
+            }
+
     # ──────────────────────────────────────────────────────────────
     # STEP 2 — Activate study case
     # ──────────────────────────────────────────────────────────────
@@ -521,6 +659,67 @@ class DIgSILENTAgent(EvEMTBenchMixin):
     # ──────────────────────────────────────────────────────────────
     # STEP 4 — Run load flow
     # ──────────────────────────────────────────────────────────────
+
+    @classmethod
+    def export_line_loadings_xlsx(
+        cls,
+        destination_path: str,
+        run_loadflow: bool = True,
+        include_out_of_service: bool = True,
+    ) -> dict[str, Any]:
+        """Export calculated line loadings from the active project to XLSX."""
+        destination_path = checked_path(destination_path, purpose="XLSX export path", for_write=True)
+        if not destination_path.lower().endswith(".xlsx"):
+            return {"success": False, "message": "destination_path must end with .xlsx"}
+        if os.path.exists(destination_path):
+            return {"success": False, "message": "Refusing to overwrite existing XLSX", "path": destination_path}
+        app = cls._get_application(open_digsilent=False)
+        if run_loadflow:
+            command = app.GetFromStudyCase("ComLdf")
+            if command is None:
+                return {"success": False, "message": "ComLdf not found in active study case"}
+            status = command.Execute()
+            if status:
+                return {"success": False, "message": f"Load flow failed with status code {status}"}
+
+        objects = list(app.GetCalcRelevantObjects("*.ElmLne") or [])
+        project = app.GetActiveProject()
+        if project is not None:
+            objects.extend(project.GetContents("*.ElmLne", 1) or [])
+        unique = {}
+        for obj in objects:
+            unique[obj.GetFullName()] = obj
+
+        rows = []
+        for obj in sorted(unique.values(), key=lambda item: item.GetFullName()):
+            try:
+                outserv = int(obj.GetAttribute("e:outserv"))
+            except Exception:
+                outserv = None
+            if not include_out_of_service and outserv:
+                continue
+            loading = None
+            for attribute in ("c:loading", "m:loading"):
+                try:
+                    loading = float(obj.GetAttribute(attribute))
+                    break
+                except Exception:
+                    pass
+            rows.append([obj.GetAttribute("loc_name"), obj.GetFullName(), loading, outserv])
+
+        _write_xlsx(
+            destination_path,
+            ["Line", "PowerFactory path", "Loading (%)", "Out of service"],
+            rows,
+        )
+        if not os.path.isfile(destination_path) or os.path.getsize(destination_path) == 0:
+            return {"success": False, "message": "XLSX was not created or is empty", "path": destination_path}
+        return {
+            "success": True,
+            "path": destination_path,
+            "line_count": len(rows),
+            "load_flow_executed": run_loadflow,
+        }
 
     def run_loadflow(self) -> tuple[bool, str]:
         log.section("STEP 4 — Load Flow (ComLdf)")
@@ -758,6 +957,310 @@ class DIgSILENTAgent(EvEMTBenchMixin):
         except Exception as e:
             log.error(f"PFD export failed: {e}")
             return False, str(e)
+
+    @classmethod
+    def export_project_backup(cls, destination_path: str) -> dict:
+        """Export the active project without running a simulation."""
+        try:
+            path = checked_path(destination_path, purpose="project backup", for_write=True)
+            if not str(path).lower().endswith(".pfd"):
+                raise ValueError("destination_path must end with .pfd")
+            if os.path.exists(path):
+                raise FileExistsError(f"Backup already exists: {path}")
+            project = cls._get_application(False).GetActiveProject()
+            if project is None:
+                raise RuntimeError("No active project")
+            command = cls._get_application(False).GetFromStudyCase("ComPfdexport")
+            if command is None:
+                raise RuntimeError("ComPfdexport command not found in study case")
+            command.SetAttribute("g_objects", [project])
+            command.SetAttribute("g_file", str(path))
+            error = command.Execute()
+            if error:
+                raise RuntimeError(f"ComPfdexport.Execute() returned error code {error}")
+            if not os.path.isfile(path) or os.path.getsize(path) == 0:
+                raise RuntimeError("PowerFactory reported success but backup is missing or empty")
+            return {"success": True, "backup_path": str(path), "bytes": os.path.getsize(path)}
+        except Exception as exc:
+            return {"success": False, "operation": "export_project_backup", "error_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def create_network_diagram(cls, project_name: str, network_name: str, diagram_name: str) -> dict:
+        """Create a new IntGrfnet and populate it with existing network objects."""
+        try:
+            app = cls._get_application(False)
+            project = app.GetActiveProject()
+            if project is None or str(project.loc_name) != project_name:
+                raise RuntimeError(f"Active project is not {project_name}")
+            grids = app.GetCalcRelevantObjects(f"{network_name}.ElmNet") or []
+            if len(grids) != 1:
+                raise RuntimeError(f"Expected one network named {network_name}, found {len(grids)}")
+            existing = [x for x in (project.GetContents("*.IntGrfnet", 1) or []) if str(x.loc_name) == diagram_name]
+            if existing:
+                diagram = existing[0]
+                existing_graphics = diagram.GetContents("*.IntGrf", 1) or []
+                if existing_graphics:
+                    raise FileExistsError(
+                        f"Diagram already contains graphical objects: {diagram_name}"
+                    )
+            else:
+                diagrams = project.GetContents("*.IntGrfnet", 1) or []
+                if not diagrams:
+                    raise RuntimeError(
+                        "Diagram container unavailable: no existing IntGrfnet parent could be resolved"
+                    )
+                parent = None
+                for candidate in diagrams:
+                    try:
+                        parent = candidate.GetParent()
+                    except Exception:
+                        parent = None
+                    if parent is not None:
+                        break
+                if parent is None:
+                    raise RuntimeError(
+                        "Diagram container unavailable: existing IntGrfnet objects expose no parent"
+                    )
+                diagram = parent.CreateObject("IntGrfnet", diagram_name)
+                if diagram is None:
+                    raise RuntimeError(
+                        f"Failed to create diagram '{diagram_name}': parent.CreateObject returned None"
+                    )
+            if str(diagram.GetClassName()) != "IntGrfnet":
+                raise RuntimeError(
+                    f"Failed to create diagram '{diagram_name}': returned class "
+                    f"{diagram.GetClassName()!s}, expected IntGrfnet"
+                )
+            initial_graphic_count = len(diagram.GetContents("*.IntGrf", 0) or [])
+            objects = grids[0].GetContents("*.Elm*", 1) or []
+            graphics = []
+            for obj in objects:
+                if str(obj.GetClassName()) not in {"ElmTerm", "ElmLne", "ElmTr2", "ElmSym", "ElmLod"}:
+                    continue
+                graphic = diagram.CreateObject("IntGrf", f"{obj.loc_name}__graphic")
+                if graphic is None:
+                    raise RuntimeError(
+                        f"Failed to create graphical object for {obj.GetFullName()}: "
+                        "diagram.CreateObject returned None"
+                    )
+                if str(graphic.GetClassName()) != "IntGrf":
+                    raise RuntimeError(
+                        f"Failed to create graphical object for {obj.GetFullName()}: "
+                        f"returned class {graphic.GetClassName()!s}, expected IntGrf"
+                    )
+                parent = graphic.GetParent()
+                if parent is None or parent.GetFullName() != diagram.GetFullName():
+                    raise RuntimeError(
+                        f"Graphic parent validation failed for {obj.GetFullName()}: "
+                        f"expected {diagram.GetFullName()}, got "
+                        f"{parent.GetFullName() if parent is not None else None}"
+                    )
+                if not graphic.GetFullName().startswith(diagram.GetFullName() + "\\"):
+                    raise RuntimeError(
+                        f"Graphic path validation failed for {obj.GetFullName()}: "
+                        f"{graphic.GetFullName()}"
+                    )
+                graphic.SetAttribute("pDataObj", obj)
+                reference = graphic.GetAttribute("pDataObj")
+                if reference is None or reference.GetFullName() != obj.GetFullName():
+                    raise RuntimeError(
+                        f"Graphic reference validation failed for {obj.GetFullName()}"
+                    )
+                current_graphic_count = len(diagram.GetContents("*.IntGrf", 0) or [])
+                if current_graphic_count != initial_graphic_count + len(graphics) + 1:
+                    raise RuntimeError(
+                        f"Graphic child-count validation failed: expected "
+                        f"{initial_graphic_count + len(graphics) + 1}, got {current_graphic_count}"
+                    )
+                graphics.append(graphic)
+            if hasattr(diagram, "WriteChangesToDb"):
+                diagram.WriteChangesToDb()
+            persisted = len(diagram.GetContents("*.IntGrf", 0) or [])
+            if persisted != initial_graphic_count + len(graphics):
+                raise RuntimeError(
+                    f"Persistence validation failed: expected {initial_graphic_count + len(graphics)}, got {persisted}"
+                )
+            return {"success": True, "diagram": diagram.GetFullName(), "network": grids[0].GetFullName(), "graphics": len(graphics), "layout": "not_available_for_new_diagram"}
+        except Exception as exc:
+            return {"success": False, "operation": "create_network_diagram", "error_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def _resolve_diagram(cls, project_name: str, diagram_name: str):
+        app = cls._get_application(False)
+        project = app.GetActiveProject()
+        if project is None or str(project.loc_name) != project_name:
+            raise RuntimeError(f"Active project is not {project_name}")
+        diagrams = project.GetContents("*.IntGrfnet", 1) or []
+        matches = [d for d in diagrams if str(d.loc_name) == diagram_name]
+        if len(matches) != 1:
+            raise LookupError(f"Expected one diagram named {diagram_name}, found {len(matches)}")
+        diagram = matches[0]
+        if str(diagram.GetClassName()) != "IntGrfnet":
+            raise TypeError(f"Resolved diagram has class {diagram.GetClassName()}, expected IntGrfnet")
+        return diagram
+
+    @classmethod
+    def list_diagram_graphics(cls, project_name: str, diagram_name: str, limit: int = 10, offset: int = 0) -> dict:
+        try:
+            if limit < 1 or limit > 25 or offset < 0:
+                raise ValueError("limit must be 1..25 and offset must be non-negative")
+            diagram = cls._resolve_diagram(project_name, diagram_name)
+            children = diagram.GetContents("*.IntGrf", 1) or []
+            results = []
+            for graphic in children[offset:offset + limit]:
+                results.append({
+                    "name": str(graphic.loc_name),
+                    "class_name": str(graphic.GetClassName()),
+                    "full_name": graphic.GetFullName(),
+                })
+            return {"success": True, "diagram": diagram.GetFullName(), "total_count": len(children), "offset": offset, "limit": limit, "results": results}
+        except Exception as exc:
+            return {"success": False, "operation": "list_diagram_graphics", "error_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def inspect_diagram_graphic(cls, project_name: str, diagram_name: str, graphic_name: str) -> dict:
+        try:
+            diagram = cls._resolve_diagram(project_name, diagram_name)
+            children = diagram.GetContents("*.IntGrf", 1) or []
+            matches = [g for g in children if str(g.loc_name) == graphic_name]
+            if len(matches) != 1:
+                raise LookupError(f"Expected one graphic named {graphic_name}, found {len(matches)}")
+            graphic = matches[0]
+            if str(graphic.GetClassName()) != "IntGrf":
+                raise TypeError(f"Resolved graphic has class {graphic.GetClassName()}, expected IntGrf")
+            values, errors = {}, {}
+            for attr in ("pDataObj", "rCenterX", "rCenterY", "rSizeX", "rSizeY"):
+                try:
+                    value = graphic.GetAttribute(attr)
+                    values[attr] = value.GetFullName() if attr == "pDataObj" and value is not None else value
+                except Exception as exc:
+                    errors[attr] = f"{type(exc).__name__}: {exc}"
+            ref = None
+            try:
+                ref = graphic.GetAttribute("pDataObj")
+            except Exception:
+                pass
+            return {"success": True, "diagram": diagram.GetFullName(), "graphic": graphic.GetFullName(), "class_name": "IntGrf", "values": values, "errors": errors, "reference_class": ref.GetClassName() if ref is not None else None, "reference_full_name": ref.GetFullName() if ref is not None else None}
+        except Exception as exc:
+            return {"success": False, "operation": "inspect_diagram_graphic", "error_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def diagnose_diagram_contents(cls, project_name: str, diagram_name: str, sample_limit: int = 5) -> dict:
+        """Run bounded, read-only GetContents diagnostics on one diagram."""
+        started = time.perf_counter()
+        try:
+            if sample_limit < 1 or sample_limit > 10:
+                raise ValueError("sample_limit must be between 1 and 10")
+            diagram = cls._resolve_diagram(project_name, diagram_name)
+            checks = (("unfiltered", None, 0), ("filtered_nonrecursive", "*.IntGrf", 0), ("filtered_recursive", "*.IntGrf", 1))
+            results = {}
+            for label, pattern, depth in checks:
+                check_started = time.perf_counter()
+                try:
+                    children = diagram.GetContents() if pattern is None else diagram.GetContents(pattern, depth)
+                    children = children or []
+                    samples = []
+                    for obj in children[:sample_limit]:
+                        samples.append({"name": str(obj.loc_name), "class_name": str(obj.GetClassName()), "full_name": obj.GetFullName()})
+                    results[label] = {"count": len(children), "duration_ms": round((time.perf_counter() - check_started) * 1000, 3), "samples": samples}
+                except Exception as exc:
+                    results[label] = {"error_type": type(exc).__name__, "message": str(exc), "duration_ms": round((time.perf_counter() - check_started) * 1000, 3)}
+            return {"success": True, "diagram": diagram.GetFullName(), "class_name": "IntGrfnet", "duration_ms": round((time.perf_counter() - started) * 1000, 3), "checks": results}
+        except Exception as exc:
+            return {"success": False, "operation": "diagnose_diagram_contents", "error_type": type(exc).__name__, "message": str(exc), "duration_ms": round((time.perf_counter() - started) * 1000, 3)}
+
+    @classmethod
+    def create_single_diagram_graphic(cls, project_name: str, diagram_name: str, object_name: str, object_class: str, center_x: float | None = None, center_y: float | None = None) -> dict:
+        """Create and persist exactly one IntGrf under a target diagram."""
+        try:
+            if object_class not in {"ElmTerm", "ElmLne", "ElmTr2", "ElmSym", "ElmLod"}:
+                raise ValueError(f"Object class is not graphically eligible: {object_class}")
+            app = cls._get_application(False)
+            diagram = cls._resolve_diagram(project_name, diagram_name)
+            matches = app.GetCalcRelevantObjects(f"{object_name}.{object_class}") or []
+            if len(matches) != 1:
+                raise LookupError(f"Expected one {object_class} named {object_name}, found {len(matches)}")
+            target = matches[0]
+            children = diagram.GetContents("*.IntGrf", 0) or []
+            for graphic in children:
+                try:
+                    ref = graphic.GetAttribute("pDataObj")
+                    if ref is not None and ref.GetFullName() == target.GetFullName():
+                        return {"success": True, "created": False, "duplicate": True, "graphic": graphic.GetFullName(), "reference": target.GetFullName(), "direct_count": len(children)}
+                except Exception:
+                    continue
+            initial = len(children)
+            graphic = diagram.CreateObject("IntGrf", f"{object_name}__graphic")
+            if graphic is None or str(graphic.GetClassName()) != "IntGrf":
+                raise RuntimeError("IntGrf creation or class validation failed")
+            parent = graphic.GetParent()
+            if parent is None or parent.GetFullName() != diagram.GetFullName():
+                raise RuntimeError("IntGrf parent validation failed")
+            graphic.SetAttribute("pDataObj", target)
+            if center_x is not None:
+                graphic.SetAttribute("rCenterX", center_x)
+            if center_y is not None:
+                graphic.SetAttribute("rCenterY", center_y)
+            ref = graphic.GetAttribute("pDataObj")
+            if ref is None or ref.GetFullName() != target.GetFullName():
+                raise RuntimeError("IntGrf pDataObj validation failed")
+            after = len(diagram.GetContents("*.IntGrf", 0) or [])
+            if after != initial + 1:
+                raise RuntimeError(f"Direct IntGrf count mismatch: expected {initial + 1}, got {after}")
+            if hasattr(diagram, "WriteChangesToDb"):
+                diagram.WriteChangesToDb()
+            reread = cls._resolve_diagram(project_name, diagram_name)
+            persisted = reread.GetContents("*.IntGrf", 0) or []
+            retained = [g for g in persisted if g.GetFullName() == graphic.GetFullName()]
+            if len(retained) != 1:
+                raise RuntimeError("Persistence verification failed: graphic was not retained")
+            return {"success": True, "created": True, "duplicate": False, "graphic": graphic.GetFullName(), "reference": target.GetFullName(), "direct_count_before": initial, "direct_count_after": after, "persisted": True, "geometry": {"rCenterX": center_x, "rCenterY": center_y}}
+        except Exception as exc:
+            return {"success": False, "operation": "create_single_diagram_graphic", "error_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def update_diagram_graphic_geometry(cls, project_name: str, diagram_name: str, graphic_name: str, rCenterX: float | None = None, rCenterY: float | None = None, rSizeX: float | None = None, rSizeY: float | None = None) -> dict:
+        """Update only explicitly supplied geometry on one direct IntGrf."""
+        try:
+            updates = {"rCenterX": rCenterX, "rCenterY": rCenterY, "rSizeX": rSizeX, "rSizeY": rSizeY}
+            updates = {key: value for key, value in updates.items() if value is not None}
+            if not updates:
+                raise ValueError("At least one geometry value is required")
+            for key, value in updates.items():
+                if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                    raise ValueError(f"{key} must be a finite numeric value")
+            diagram = cls._resolve_diagram(project_name, diagram_name)
+            matches = [g for g in (diagram.GetContents("*.IntGrf", 0) or []) if str(g.loc_name) == graphic_name]
+            if len(matches) != 1:
+                raise LookupError(f"Expected one graphic named {graphic_name}, found {len(matches)}")
+            graphic = matches[0]
+            if str(graphic.GetClassName()) != "IntGrf":
+                raise TypeError("Resolved graphic is not IntGrf")
+            parent = graphic.GetParent()
+            if parent is None or parent.GetFullName() != diagram.GetFullName():
+                raise RuntimeError("Graphic parent validation failed")
+            reference = graphic.GetAttribute("pDataObj")
+            before = {key: graphic.GetAttribute(key) for key in ("rCenterX", "rCenterY", "rSizeX", "rSizeY")}
+            reference_path = reference.GetFullName() if reference is not None else None
+            for key, value in updates.items():
+                graphic.SetAttribute(key, value)
+            after = {key: graphic.GetAttribute(key) for key in updates}
+            for key, value in updates.items():
+                if abs(float(after[key]) - float(value)) > 1e-9:
+                    raise RuntimeError(f"{key} write verification failed: expected {value}, got {after[key]}")
+            reref = graphic.GetAttribute("pDataObj")
+            if (reref.GetFullName() if reref is not None else None) != reference_path:
+                raise RuntimeError("pDataObj changed during geometry update")
+            if hasattr(graphic, "WriteChangesToDb"):
+                graphic.WriteChangesToDb()
+            reread_diagram = cls._resolve_diagram(project_name, diagram_name)
+            reread = [g for g in (reread_diagram.GetContents("*.IntGrf", 0) or []) if str(g.loc_name) == graphic_name]
+            if len(reread) != 1:
+                raise RuntimeError("Graphic re-resolution failed")
+            persisted = {key: reread[0].GetAttribute(key) for key in updates}
+            return {"success": True, "graphic": reread[0].GetFullName(), "before": before, "after": persisted, "pDataObj": reference_path, "database_write": hasattr(graphic, "WriteChangesToDb")}
+        except Exception as exc:
+            return {"success": False, "operation": "update_diagram_graphic_geometry", "error_type": type(exc).__name__, "message": str(exc)}
 
     # ──────────────────────────────────────────────────────────────
     # STEP 8 — Generate standard plots from CSV
@@ -1675,35 +2178,419 @@ class DIgSILENTAgent(EvEMTBenchMixin):
     @staticmethod
     def _get_template_type(
         app,
-        template_query: str,
+        template_identifier: str,
         class_name: str,
         label: str,
         type_label: str,
     ):
-        templates = (
-            app.GetCalcRelevantObjects(template_query) or []
-        )
-        if not templates:
-            raise RuntimeError(
-                f"Template {label} not found: {template_query}"
-            )
-        if len(templates) > 1:
-            raise RuntimeError(
-                f"Multiple template {label}s matched: {template_query}"
+        """Resolve a component template to its actual PowerFactory type object.
+
+        Calculation-relevant searches do not reliably include equipment
+        library objects, so exact full paths are resolved by walking the
+        project equipment folders and name-only identifiers are matched there
+        (with a legacy element-template fallback for existing tests/models).
+        """
+        requested = str(template_identifier or "").strip()
+        diagnostics = {
+            "requested": requested,
+            "component_class": class_name,
+            "lookup_strategy": [],
+            "candidates": [],
+        }
+        target_type_class = {
+            "line type": "TypLne",
+            "transformer type": "TypTr2",
+        }.get(str(type_label).casefold())
+        if not requested:
+            raise RuntimeError(f"Template resolution failed: {diagnostics}")
+
+        def full_name(obj):
+            try:
+                return str(obj.GetFullName())
+            except Exception:
+                return ""
+
+        def class_name_of(obj):
+            try:
+                return str(obj.GetClassName())
+            except Exception:
+                return ""
+
+        # Preserve the established element-template contract for generators
+        # and loads; only line/transformer templates need library resolution.
+        if target_type_class is None:
+            diagnostics["lookup_strategy"].append("legacy element template")
+            try:
+                templates = app.GetCalcRelevantObjects(requested) or []
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Template resolution failed: {diagnostics}; "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            if not templates:
+                raise RuntimeError(
+                    f"Template {label} not found: {requested}; "
+                    f"diagnostics={diagnostics}"
+                )
+            if len(templates) > 1:
+                diagnostics["candidates"] = [
+                    str(obj.GetFullName()) for obj in templates
+                ]
+                raise RuntimeError(
+                    f"Template resolution failed: ambiguous {label}: {diagnostics}"
+                )
+            template = templates[0]
+            if class_name_of(template) != class_name:
+                raise RuntimeError(
+                    f"Template resolution failed at class validation: {diagnostics}"
+                )
+            template_type = template.GetAttribute("typ_id")
+            if template_type is None:
+                raise RuntimeError(
+                    f"Template resolution failed: {label} has no {type_label}"
+                )
+            return template_type
+
+        def full_name(obj):
+            try:
+                return str(obj.GetFullName())
+            except Exception:
+                return ""
+
+        def class_name_of(obj):
+            try:
+                return str(obj.GetClassName())
+            except Exception:
+                return ""
+
+        candidates = []
+        legacy_type_resolved = False
+
+        def add(objects):
+            for obj in objects or []:
+                if obj is None:
+                    continue
+                obj_full_name = full_name(obj).casefold()
+                if obj_full_name:
+                    if any(
+                        full_name(item).casefold() == obj_full_name
+                        for item in candidates
+                    ):
+                        continue
+                elif any(obj is item for item in candidates):
+                    continue
+                candidates.append(obj)
+
+        # First accept a direct full-name lookup when the API supports it.
+        diagnostics["lookup_strategy"].append("GetCalcRelevantObjects exact path")
+        try:
+            add(app.GetCalcRelevantObjects(requested) or [])
+        except Exception as exc:
+            diagnostics["lookup_strategy"].append(
+                f"exact path error: {type(exc).__name__}: {exc}"
             )
 
-        template = templates[0]
-        if template.GetClassName() != class_name:
-            raise RuntimeError(
-                f"template_{label} must reference an {class_name}"
+        # Equipment types live below the project equipment folder and are not
+        # guaranteed to be calculation relevant.
+        try:
+            diagnostics["lookup_strategy"].append("project equipment folders")
+            equip_root = app.GetProjectFolder("equip")
+            stack = [equip_root] if equip_root is not None else []
+            while stack:
+                folder = stack.pop()
+                try:
+                    contents = folder.GetContents("*", 1) or []
+                except Exception:
+                    continue
+                for obj in contents:
+                    obj_class = class_name_of(obj)
+                    if obj_class == target_type_class:
+                        add([obj])
+                    try:
+                        if obj.GetContents("*", 1):
+                            stack.append(obj)
+                    except Exception:
+                        pass
+        except Exception as exc:
+            diagnostics["lookup_strategy"].append(
+                f"equipment folder error: {type(exc).__name__}: {exc}"
             )
 
-        template_type = template.GetAttribute("typ_id")
-        if template_type is None:
+        requested_cf = requested.casefold()
+
+        # Compatibility fallback: existing component templates can expose the
+        # required type through typ_id even when their type is in a library.
+        try:
+            diagnostics["lookup_strategy"].append("calculation-relevant element fallback")
+            element_class = {"TypLne": "ElmLne", "TypTr2": "ElmTr2"}.get(target_type_class)
+            if element_class:
+                for query in (f"*.{element_class}", requested):
+                    for element in app.GetCalcRelevantObjects(query) or []:
+                        if class_name_of(element) != element_class:
+                            continue
+                        template_type = element.GetAttribute("typ_id")
+                        if (
+                            template_type is not None
+                            and class_name_of(template_type) == target_type_class
+                        ):
+                            add([template_type])
+                            # A legacy identifier may name an ElmLne/ElmTr2
+                            # template object rather than the library type.
+                            # Its typ_id is the authoritative type object.
+                            element_name = str(element.GetAttribute("loc_name"))
+                            requested_leaf = requested.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+                            if requested_leaf.casefold().endswith(
+                                "." + element_class.casefold()
+                            ):
+                                requested_leaf = requested_leaf[: -(len(element_class) + 1)]
+                            if (
+                                full_name(element).casefold() == requested_cf
+                                or element_name.casefold() == requested_leaf.casefold()
+                            ):
+                                candidates = [template_type]
+                                legacy_type_resolved = True
+        except Exception as exc:
+            diagnostics["lookup_strategy"].append(
+                f"element fallback error: {type(exc).__name__}: {exc}"
+            )
+
+        if legacy_type_resolved and len(candidates) == 1:
+            template_type = candidates[0]
+            if class_name_of(template_type) != target_type_class:
+                raise RuntimeError(
+                    f"Template resolution failed at class validation: {diagnostics}"
+                )
+            return template_type
+
+        exact = [
+            obj for obj in candidates
+            if full_name(obj).casefold() == requested_cf
+            and class_name_of(obj) == target_type_class
+        ]
+        if exact:
+            candidates = exact
+        else:
+            leaf = requested.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+            if "." in leaf:
+                leaf = leaf.rsplit(".", 1)[0]
+            candidates = [
+                obj for obj in candidates
+                if str(getattr(obj, "loc_name", "") or "").casefold() == leaf.casefold()
+                or str(obj.GetAttribute("loc_name")).casefold() == leaf.casefold()
+            ]
+
+        diagnostics["candidates"] = [full_name(obj) for obj in candidates]
+        if not candidates:
             raise RuntimeError(
-                f"Template {label} has no {type_label}"
+                f"Template {label} not found: {requested}; "
+                f"diagnostics={diagnostics}"
+            )
+        if len(candidates) > 1:
+            raise RuntimeError(
+                f"Template resolution failed: ambiguous {label}: {diagnostics}"
+            )
+
+        template_type = candidates[0]
+        if class_name_of(template_type) != target_type_class:
+            raise RuntimeError(
+                f"Template resolution failed at class validation: {diagnostics}; "
+                f"resolved class={class_name_of(template_type)!r}"
             )
         return template_type
+
+    @classmethod
+    def create_equipment_type(
+        cls,
+        type_class: str,
+        type_name: str,
+        attributes: dict[str, Any],
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Create and verify one reusable TypLne or TypTr2 in the library."""
+        expected_class = str(type_class or "").strip()
+        if expected_class not in {"TypLne", "TypTr2"}:
+            return {"success": False, "message": "type_class must be TypLne or TypTr2"}
+        name = str(type_name or "").strip()
+        if not name or not isinstance(attributes, dict):
+            return {"success": False, "message": "type_name and attributes are required"}
+        created = None
+        normalized = dict(attributes)
+        derived = {}
+        if expected_class == "TypLne":
+            has_b = "bline" in normalized
+            has_c = "cline" in normalized
+            if has_b and has_c:
+                frequency = float(normalized.get("frnom", 60.0))
+                expected_b = 2.0 * math.pi * frequency * float(normalized["cline"])
+                if not math.isclose(float(normalized["bline"]), expected_b, rel_tol=1e-5, abs_tol=1e-6):
+                    return {"success": False, "class_name": expected_class, "name": name,
+                            "failure_stage": "parameter_normalization",
+                            "exception_type": "ValueError",
+                            "message": "bline is derived from cline: expected "
+                            f"{expected_b:g} uS/km at {frequency:g} Hz, got "
+                            f"{normalized['bline']:g} uS/km"}
+                normalized.pop("cline", None)
+                derived["bline"] = expected_b
+            elif has_c and not has_b:
+                frequency = float(normalized.get("frnom", 60.0))
+                normalized["bline"] = 2.0 * math.pi * frequency * float(normalized.pop("cline"))
+        try:
+            app = cls._get_application(open_digsilent)
+            root = app.GetProjectFolder("equip")
+            if root is None:
+                raise RuntimeError("Equipment Type Library is unavailable")
+            folder_name = "Line Types" if expected_class == "TypLne" else "Transformer Types"
+            folders = cls._find_named_contents(root, folder_name, "IntPrjfolder")
+            folder = folders[0] if folders else root.CreateObject("IntPrjfolder", folder_name)
+            if folder is None:
+                raise RuntimeError(f"Could not create {folder_name} folder")
+            if cls._find_named_contents(folder, name, expected_class):
+                raise RuntimeError(f"Type already exists: {name}")
+            created = folder.CreateObject(expected_class, name)
+            if created is None or created.GetClassName() != expected_class:
+                raise RuntimeError(f"PowerFactory created an unexpected type class for {name}")
+            cls._set_and_verify_attributes(created, normalized, expected_class)
+            if hasattr(created, "WriteChangesToDb"):
+                created.WriteChangesToDb()
+            cls._verify_attributes(created, normalized, expected_class, "after database commit")
+            if expected_class == "TypLne" and "cline" in normalized:
+                actual_b = float(created.GetAttribute("bline"))
+                expected_b = 2.0 * math.pi * float(normalized.get("frnom", 60.0)) * float(normalized["cline"])
+                if not math.isclose(actual_b, expected_b, rel_tol=1e-5, abs_tol=1e-6):
+                    raise RuntimeError(
+                        f"PowerFactory derived unexpected bline: expected {expected_b:g}, got {actual_b:g}"
+                    )
+                derived["bline"] = actual_b
+            elif expected_class == "TypLne" and "bline" in normalized:
+                actual_b = float(created.GetAttribute("bline"))
+                frequency = float(normalized.get("frnom", 60.0))
+                expected_c = actual_b / (2.0 * math.pi * frequency)
+                actual_c = float(created.GetAttribute("cline"))
+                if not math.isclose(actual_c, expected_c, rel_tol=1e-5, abs_tol=1e-6):
+                    raise RuntimeError(
+                        f"PowerFactory derived unexpected cline: expected {expected_c:g}, got {actual_c:g}"
+                    )
+                derived["cline"] = actual_c
+            return {"success": True, "class_name": expected_class, "name": name,
+                    "full_name": created.GetFullName(), "attributes": normalized,
+                    "derived_attributes": derived}
+        except Exception as exc:
+            if created is not None:
+                try:
+                    created.Delete()
+                except Exception:
+                    pass
+            return {"success": False, "class_name": expected_class, "name": name,
+                    "exception_type": type(exc).__name__, "message": str(exc)}
+
+    @classmethod
+    def assign_equipment_type(
+        cls,
+        component_query: str,
+        type_identifier: str,
+        component_class: str,
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Assign and verify a TypLne/TypTr2 on one existing element."""
+        expected_element = str(component_class or "").strip()
+        type_class = {"ElmLne": "TypLne", "ElmTr2": "TypTr2"}.get(expected_element)
+        if type_class is None:
+            return {"success": False, "message": "component_class must be ElmLne or ElmTr2"}
+        try:
+            app = cls._get_application(open_digsilent)
+            elements = app.GetCalcRelevantObjects(component_query) or []
+            elements = [e for e in elements if e.GetClassName() == expected_element]
+            if len(elements) != 1:
+                raise RuntimeError(f"Expected exactly one {expected_element}; found {len(elements)}")
+            target = cls._get_template_type(app, type_identifier, expected_element,
+                                            "line" if type_class == "TypLne" else "transformer",
+                                            "line type" if type_class == "TypLne" else "transformer type")
+            elements[0].SetAttribute("typ_id", target)
+            cls._verify_attributes(elements[0], {"typ_id": target}, expected_element,
+                                   "after type assignment")
+            return {"success": True, "component": elements[0].GetFullName(),
+                    "type": target.GetFullName(), "class_name": type_class}
+        except Exception as exc:
+            return {"success": False, "component_query": component_query,
+                    "type_identifier": type_identifier, "exception_type": type(exc).__name__,
+                    "message": str(exc)}
+
+    @classmethod
+    def delete_equipment_type(
+        cls,
+        type_identifier: str,
+        type_class: str,
+        confirmation: str = "",
+        open_digsilent: bool = True,
+    ) -> dict[str, Any]:
+        """Delete one unreferenced project equipment type after confirmation."""
+        expected = str(type_class or "").strip()
+        requested = str(type_identifier or "").strip()
+        result = {"success": False, "deleted": False, "type_class": expected,
+                  "type_identifier": requested, "failure_stage": "validation"}
+        if expected not in {"TypLne", "TypTr2"}:
+            result["message"] = "type_class must be TypLne or TypTr2"
+            return result
+        if not requested:
+            result["message"] = "type_identifier is required"
+            return result
+        try:
+            app = cls._get_application(open_digsilent)
+            root = app.GetProjectFolder("equip")
+            if root is None:
+                raise RuntimeError("Equipment Type Library is unavailable")
+            result["failure_stage"] = "library_resolution"
+            matches = []
+            stack = [root]
+            visited = set()
+            while stack:
+                folder = stack.pop()
+                for obj in folder.GetContents("*", 1) or []:
+                    try:
+                        object_path = obj.GetFullName().casefold()
+                    except Exception:
+                        object_path = str(id(obj))
+                    if object_path in visited:
+                        continue
+                    visited.add(object_path)
+                    if obj.GetClassName() == expected and obj.GetFullName().casefold() == requested.casefold():
+                        matches.append(obj)
+                    try:
+                        if obj.GetContents("*", 1):
+                            stack.append(obj)
+                    except Exception:
+                        pass
+            if len(matches) != 1:
+                raise RuntimeError(f"Expected exactly one project {expected} at the supplied full path; found {len(matches)}")
+            target = matches[0]
+            references = []
+            result["failure_stage"] = "reference_check"
+            for query in ("*.ElmLne", "*.ElmTr2", "*.ElmSym", "*.ElmLod"):
+                for element in app.GetCalcRelevantObjects(query) or []:
+                    try:
+                        ref = element.GetAttribute("typ_id")
+                        if ref is not None and ref.GetFullName().casefold() == requested.casefold():
+                            references.append(element.GetFullName())
+                    except Exception:
+                        pass
+            result["references"] = references
+            if references:
+                raise RuntimeError("Type is referenced by existing equipment")
+            required = f"DELETE TYPE {target.GetFullName()}"
+            result["confirmation_required"] = required
+            if not confirmation:
+                result["success"] = True
+                result["message"] = "Preview only; no type was deleted"
+                return result
+            if confirmation != required:
+                raise RuntimeError(f"confirmation must exactly match: {required}")
+            result["failure_stage"] = "deletion"
+            target.Delete()
+            result.update(success=True, deleted=True, message=f"Deleted {expected}: {requested}")
+            return result
+        except Exception as exc:
+            result.update(exception_type=type(exc).__name__, message=str(exc))
+            return result
 
     @staticmethod
     def _set_and_verify_attributes(element, expected, component_label):
@@ -2159,8 +3046,11 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                 raise RuntimeError(f"{key} must be finite")
             return value
 
+        class_name = spec["class_name"]
+        template_identifier = None
+        failure_stage = "input_validation"
+        component_created = False
         try:
-            class_name = spec["class_name"]
             label = spec["label"]
             buses = tuple(
                 required_text(parameter)
@@ -2180,6 +3070,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
             if len(buses) == 2 and buses[0].casefold() == buses[1].casefold():
                 raise RuntimeError(f"{label} buses must be different")
 
+            failure_stage = "application_lookup"
             app = cls._get_application(open_digsilent)
             template_query = ""
             if spec["template"]:
@@ -2187,6 +3078,8 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                     spec["template"]
                 )
                 template_query = required_text(template_parameter)
+                template_identifier = template_query
+                failure_stage = "template_resolution"
                 attributes["typ_id"] = cls._get_template_type(
                     app,
                     template_query,
@@ -2195,6 +3088,7 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                     type_label,
                 )
 
+            failure_stage = "connected_element_creation"
             grid, _, created, actual = cls._create_connected_element(
                 app,
                 class_name,
@@ -2205,10 +3099,12 @@ class DIgSILENTAgent(EvEMTBenchMixin):
                 attributes=attributes,
                 connection_attributes=connections,
             )
+            component_created = True
 
             graphics_status = "not_requested"
 
             if update_graphics:
+                failure_stage = "graphics_update"
                 try:
                     cls._update_active_diagram(app, created)
                     graphics_status = "updated"
@@ -2261,7 +3157,25 @@ class DIgSILENTAgent(EvEMTBenchMixin):
             )
 
         except Exception as exc:
-            message = str(exc)
+            diagnostics = {
+                "component_class": class_name,
+                "component_type": kind,
+                "component_name": name,
+                "template_identifier": template_identifier,
+                "lookup_strategy": (
+                    "equipment-library/full-path-or-unique-name"
+                    if template_identifier
+                    else None
+                ),
+                "failure_stage": failure_stage,
+                "component_created_before_failure": component_created,
+                "exception_type": type(exc).__name__,
+                "exception": str(exc),
+            }
+            message = (
+                f"{kind.capitalize()} creation failed: "
+                f"{json.dumps(diagnostics, ensure_ascii=False)}"
+            )
             log.error(f"{kind.capitalize()} creation failed: {message}")
             return False, message
 
